@@ -1,0 +1,7 @@
+interface:
+  display_name: "足球分析師"
+  short_description: "台灣時間的足球賽程、傷停、預計先發、戰術對位、xG 與盤口分析。"
+  default_prompt: "使用 $soccer-analysis 技能，分析今天足球賽事。"
+  brand_color: "#166534"
+policy:
+  allow_implicit_invocation: true
