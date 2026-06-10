@@ -1,0 +1,7 @@
+interface:
+  display_name: "NBA 分析師"
+  short_description: "台灣時間的 NBA 傷兵、輪休、對位、節奏與盤口分析。"
+  default_prompt: "使用 $nba-analysis 技能，分析今天 NBA 賽事。"
+  brand_color: "#1D4ED8"
+policy:
+  allow_implicit_invocation: true
