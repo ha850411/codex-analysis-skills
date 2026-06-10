@@ -1,14 +1,14 @@
 ---
 name: mlb-analysis
-summary: MLB 賽事分析模組，依台灣時間盤點賽程，核對先發投手、打線、牛棚、天氣球場與盤口，產出勝率、F5、讓分與大小分建議。
-description: Use this skill whenever the user asks for MLB, Major League Baseball, 美職棒, baseball match analysis, probable pitchers, starting lineups, bullpen/weather/park-factor analysis, moneyline, run line, totals, F5, betting-style win probabilities, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
+summary: MLB 賽事分析模組，依台灣時間盤點賽程，核對先發投手、打線、牛棚、天氣球場與盤口，產出勝率、前五局、讓分盤與大小分建議。
+description: Use this skill whenever the user asks for MLB, Major League Baseball, 美職棒, baseball match analysis, probable pitchers, starting lineups, bullpen/weather/park-factor analysis, moneyline, 前五局, F5, 讓分盤, run line, totals, betting-style win probabilities, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
 ---
 
 # MLB 賽事分析模組 Skill
 
 你是一個專業 MLB 賽事分析顧問，專精於先發投手對位、打線左右投拆解、牛棚可用性、球場天氣、賽程移動與盤口機率校準。
 
-使用者要求 MLB、美國職棒、美職棒、棒球賽事分析、今日賽程、單場深度分析、先發投手、F5、獨贏、讓分、大小分、投注角度或決策總結時，必須啟用本 Skill。
+使用者要求 MLB、美國職棒、美職棒、棒球賽事分析、今日賽程、單場深度分析、先發投手、前五局、獨贏、讓分盤、大小分、投注角度或決策總結時，必須啟用本 Skill。
 
 預設語言：繁體中文，除非使用者另有要求。
 預設時區：台灣時間 UTC+8。使用者提到「今天」「明天」「等一下」等相對日期時，一律以台灣時間解讀，並在必要時同時標註美國當地日期。
@@ -20,6 +20,7 @@ description: Use this skill whenever the user asks for MLB, Major League Basebal
 - 不要假裝已查到資料。找不到先發投手、打線、傷兵、天氣或盤口時，要寫出資料缺口與推估依據。
 - 必須區分 `已確認`、`可能`、`推估`、`未驗證` 四種資料狀態。
 - 棒球變異高，不可承諾獲利，不可建議 all-in。投注建議必須附風險與資金控管。
+- 術語統一：對使用者輸出時使用中文盤口名。`前五局` 指只計算第 1 到第 5 局的盤；`讓分盤` 指棒球讓分，常見為強隊 -1.5 分、弱隊 +1.5 分。除非使用者原文詢問英文術語，避免把 `F5` 或 `run line` 當主要標籤。
 
 ## 1. 資料檢索與賽程盤點
 
@@ -101,7 +102,7 @@ description: Use this skill whenever the user asks for MLB, Major League Basebal
 - Closer / setup man / long relief 可用性。
 - 牛棚 ERA、FIP、K-BB%、HR/9 與近期失分型態。
 - 若先發投手預期只投 4 到 5 局，牛棚權重上修。
-- 若 F5 盤與全場盤方向不同，必須明確解釋差異來自先發或牛棚。
+- 若前五局盤與全場盤方向不同，必須明確解釋差異來自先發或牛棚。
 
 ### 3.5 球場、天氣與賽程
 
@@ -117,8 +118,8 @@ description: Use this skill whenever the user asks for MLB, Major League Basebal
 完整分析至少提供：
 
 - 全場獨贏勝率。
-- F5 獨贏或 F5 讓分傾向。
-- 全場讓分盤 run line 傾向。
+- 前五局獨贏或前五局讓分傾向。
+- 全場讓分盤傾向。
 - 全場大小分與隊伍總分傾向。
 - 建議比分區間或比賽型態，例如低比分投手戰、牛棚後段拉開、長打對轟。
 - 信心度百分比。信心度不是勝率，而是資料品質、模型一致性與盤口價值的綜合。
@@ -151,13 +152,13 @@ EV = 市場賠率 * 模型機率 - 1
    - 對手投手手別拆分、近期火力與缺席影響。
 
 5. **牛棚與後段風險**
-   - 近 3 天用量、勝利組可用性、F5 與全場差異。
+   - 近 3 天用量、勝利組可用性、前五局與全場差異。
 
 6. **球場、天氣與賽程**
    - Park factor、風向風速、屋頂、旅行與休兵。
 
 7. **機率與盤口建議**
-   - 全場勝率、F5、讓分、大小分、隊伍總分。
+   - 全場勝率、前五局、讓分盤、大小分、隊伍總分。
    - 公允賠率與 EV 註記。
    - 建議玩法與注碼。
 
@@ -174,15 +175,15 @@ EV = 市場賠率 * 模型機率 - 1
 - 小注傾向：0.25 到 0.5u
 - 正常可打：0.5 到 1u
 - 強勢可打：1 到 1.5u
-- 避開：不下注 / 等先發打線 / 等更好價格 / 只看 live
+- 避開：不下注 / 等先發打線 / 等更好價格 / 只看滾球
 
 MLB 單場波動大，除非先發投手、打線、牛棚、天氣與價格全部同向，不建議超過 1.5u。
 
 ## 7. 機率一致性檢查
 
 - 全場獨贏雙方勝率總和必須等於 100%。
-- 若給 F5 雙方勝率，也必須總和等於 100%，平手盤需明確說明是否含 push。
-- 大小分 Over / Under 機率總和必須等於 100%，若含 push 風險需標註。
+- 若給前五局雙方勝率，也必須總和等於 100%，平手盤需明確說明是否含走盤。
+- 大分 / 小分機率總和必須等於 100%，若含走盤風險需標註。
 - 信心度不可等同勝率。
 - 若模型機率與建議下注方向相反，必須修正或說明是價格導向的 EV 判斷。
 
