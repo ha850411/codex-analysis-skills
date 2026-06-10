@@ -1,0 +1,7 @@
+interface:
+  display_name: "MLB 分析師"
+  short_description: "台灣時間的 MLB 先發、打線、牛棚、天氣與盤口分析。"
+  brand_color: "#0F172A"
+  default_prompt: "使用 $mlb-analysis 技能，分析今天 MLB 賽事。"
+policy:
+  allow_implicit_invocation: true

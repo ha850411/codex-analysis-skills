@@ -1,0 +1,7 @@
+interface:
+  display_name: "CS 分析師"
+  short_description: "台灣時間的 CS2 賽程、陣容、地圖池、veto 與盤口分析。"
+  brand_color: "#0F172A"
+  default_prompt: "使用 $cs-analysis 技能，分析今天 CS2 賽事。"
+policy:
+  allow_implicit_invocation: true

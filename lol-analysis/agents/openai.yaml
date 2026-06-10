@@ -1,0 +1,7 @@
+interface:
+  display_name: "LoL 分析師"
+  short_description: "台灣時間的英雄聯盟賽事深度分析、先發核對、版本影響、比分機率與盤口建議。"
+  brand_color: "#0F172A"
+  default_prompt: "使用 lol-analysis 技能，分析的 LoL 賽事。"
+policy:
+  allow_implicit_invocation: true
