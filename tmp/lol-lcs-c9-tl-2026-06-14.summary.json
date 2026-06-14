@@ -1,0 +1,26 @@
+{
+  "title": "LCS 2026 Spring Playoffs：Cloud9 vs Team Liquid 賽前分析",
+  "sport": "LoL",
+  "module": "lol-analysis",
+  "event": "LCS 2026 Spring Playoffs Lower Final",
+  "startTime": "2026-06-14T04:00:00+08:00",
+  "bo": "BO5",
+  "prediction": "Team Liquid 3-2 Cloud9",
+  "winner": "Team Liquid",
+  "winProbability": "TL 51% / C9 49%",
+  "recommendation": "TL ML 2.05+ 小注；TL +1.5 地圖需 >1.40；精確比分 TL 3-2 小注",
+  "stake": "0.25-0.5u",
+  "confidence": "58%",
+  "risk": "Round 3 版本欄位 TBD、先發未到裁判提交層級確認、C9 常規賽與 H2H 優勢、C9 反彈、Fearless Draft 後段英雄池與選邊/賠率變動。",
+  "sourceStatus": "賽程/名單以 LoL Fandom 為主；版本以 LoL Fandom 26.11 假設但 Round 3 TBD；隊伍近期數據參考 GOL；Stake 即時盤未取得。",
+  "analysisType": "pre-match",
+  "tags": [
+    "LCS",
+    "LoL",
+    "pre-match",
+    "Cloud9",
+    "Team Liquid",
+    "BO5",
+    "2026-06-14"
+  ]
+}

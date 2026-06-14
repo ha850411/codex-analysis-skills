@@ -1,0 +1,27 @@
+{
+  "title": "LCK 2026 Road to MSI：T1 vs Gen.G 賽前深度分析",
+  "sport": "LoL",
+  "module": "lol-analysis",
+  "event": "LCK 2026 Road to MSI Round 4",
+  "startTime": "2026-06-14T14:00:00+08:00",
+  "bo": "BO5",
+  "prediction": "Gen.G 3-1 T1",
+  "winner": "Gen.G",
+  "winProbability": "Gen.G 63% / T1 37%",
+  "recommendation": "不追 Gen.G 低賠 ML；Over 3.5 maps 1.45+ 或 T1 +1.5 maps 1.85+ 優先；Gen.G ML 需 1.60+ 才有價值。",
+  "stake": "0.25-0.75u，依盤口；低價 Gen.G ML 避開",
+  "confidence": "63%",
+  "risk": "先發未到裁判提交層級、Gen.G 背靠背 BO5、T1 多一天準備且近期 H2H 贏過、26.11 高優先 BP 處理、選邊與即時盤變動。",
+  "sourceStatus": "賽程/版本/名單以 LoL Fandom 為主；近況用 Road to MSI Match History、Picks and Bans、Champion/Player Stats；Stake 即時盤未取得，公開盤口只作參考。",
+  "analysisType": "daily-summary",
+  "tags": [
+    "LCK",
+    "LoL",
+    "Road to MSI",
+    "T1",
+    "Gen.G",
+    "BO5",
+    "2026-06-14",
+    "pre-match"
+  ]
+}

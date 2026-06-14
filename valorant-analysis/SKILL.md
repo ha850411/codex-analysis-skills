@@ -1,7 +1,8 @@
 ---
 name: valorant-analysis
-summary: Valorant 賽事分析模組，依台灣時間盤點賽程，交叉查核 VLR/Liquipedia，分析先發、地圖池、BP、特務陣容與賽果機率。
-description: Use this skill whenever the user asks for Valorant / VALORANT / 特戰英豪 match analysis, VCT, Masters, Champions, Challengers, Game Changers, map veto prediction, roster/agent pool analysis, betting-style win probability, +1.5 maps / 至少一圖, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
+description: Use this skill whenever the user asks for Valorant / VALORANT / 特戰英豪 match analysis, VCT, Masters, Champions, Challengers, Game Changers, full map-by-map team analysis, map veto prediction, roster/agent pool analysis, betting-style win probability, +1.5 maps / 至少一圖, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
+metadata:
+  short-description: Valorant 賽事分析模組，依台灣時間盤點賽程，交叉查核 VLR/Liquipedia，分析先發、全地圖逐圖對位、BP、特務陣容與賽果機率。
 ---
 
 # Valorant 分析模組 Skill
@@ -102,6 +103,13 @@ site:liquipedia.net valorant <tournament> YYYY-MM-DD schedule
 
 若近期 Patch Note 有特務、武器或地圖改動，降低舊資料權重，並說明原因。
 
+Patch / Meta 衝擊校準：
+
+- 若核心特務、武器或地圖在當前 Patch 被明顯削弱、重做或禁用，舊版本地圖勝率、ACS/FK/FD 與戰術成功率權重下修 40–60%，除非同 Patch 已有至少 3 張有效地圖樣本。
+- 若隊伍近 5–8 張正式圖中，主 Duelist / 核心位超過 60% 依賴同一個被削弱特務，且尚未證明替代方案，該隊系列賽勝率下修 3–8 個百分點，預測信心度上限 62%。
+- 若一隊有同 Patch、同賽事 2 張以上近期地圖樣本，另一隊是直接進入淘汰賽或長休後首戰，優先採用同賽事樣本；休息與準備只能加分，不能直接抵銷實戰樣本缺口。
+- Patch 衝擊存在時，近期 H2H 不得單獨主導結論；必須重新檢查雙方在新 Patch 的特務池、地圖優先級與進攻/防守結構。
+
 ### 3.2 團隊層級指標
 
 盡量量化：
@@ -123,6 +131,16 @@ site:liquipedia.net valorant <tournament> YYYY-MM-DD schedule
 - KAST：交易、助攻、存活與團隊貢獻。
 - OP 使用壓力與一血轉化率。
 
+### 3.4 賽事節奏與反證檢核
+
+每場 BO3/BO5 必須加入下列反證檢核，避免被單一敘事或前次對戰錨定：
+
+- 同賽事狀態：比較雙方是否剛打過 Swiss / 小組賽 / 淘汰賽，以及是否已在相同 Patch、相同地圖池下展示可複製打法。
+- 熱手 vs 休息：若一方剛連勝且地圖內容穩定，另一方久未正式比賽，至少標註「熱手與舞台節奏」風險；不可只因休息時間較長就提高勝率。
+- H2H 錨定：最近一次交手若跨 Patch、跨賽制、跨地圖池或是一個月前以上，只能作為輔助資料，不得覆蓋近兩週與同賽事樣本。
+- 外部反向訊號：若可靠賠率、公開排名、VLR 社群預測或多家數據站與模型方向相反，需列為「反向訊號」。模型可維持不同看法，但要說明差異原因並下修信心度。
+- 2-0 風險：即使預測 2-1，也必須檢查落敗方在前兩張可能地圖是否都低於 45% 勝率；若是，輸出應改為 2-0 傾向或明確標註被橫掃風險。
+
 ## 4. 地圖禁選與系列賽邏輯
 
 必須做 Map Veto / Map Prediction。
@@ -135,7 +153,32 @@ site:liquipedia.net valorant <tournament> YYYY-MM-DD schedule
 - Side Selection：依地圖攻守傾向與隊伍攻守強弱推估開局優勢。
 - Patch / Map Pool：確認目前競技地圖池是否改動。
 
-### 4.2 BO3 推測流程
+### 4.2 全地圖逐圖分析（必做）
+
+完整單場分析時，必須先分析「當前賽事可用地圖池的每一張地圖」，再做 veto 預測；不得只分析預測會被 pick、ban 或 decider 的幾張圖。
+
+逐圖分析必須覆蓋兩隊，並至少包含：
+
+- 地圖名稱與目前狀態：可用 / 常 ban / 可能 pick / decider / 樣本不足。
+- [戰隊 A]：近期戰績與樣本數、攻守方表現、常用特務陣容、關鍵選手或主 Duelist/OP 影響。
+- [戰隊 B]：近期戰績與樣本數、攻守方表現、常用特務陣容、關鍵選手或主 Duelist/OP 影響。
+- 對位判斷：誰在控圖、進攻節奏、重奪、後期殘局或特務池上更有優勢。
+- 單圖預估：A/B 單圖勝率區間、信心度、資料缺口。
+- Veto 意義：此圖最可能是 A pick、B pick、A ban、B ban、decider 或被雙方避開。
+
+若某張地圖雙方近期樣本不足，仍必須列出該圖，標記 `樣本不足 / 推估`，並改用歷史地圖池、角色池、近期相近地圖風格或教練組偏好推估。不可因為樣本不足而省略該地圖。
+
+建議表格：
+
+```markdown
+**全地圖逐圖分析（當前 Map Pool，必做）：**
+
+| 地圖 | [戰隊 A] 狀態 | [戰隊 B] 狀態 | 對位重點 | 單圖傾向 | Veto 意義 |
+| --- | --- | --- | --- | --- | --- |
+| Bind | 近況/樣本/攻守/常用陣容 | 近況/樣本/攻守/常用陣容 | ... | A 54% / B 46%（中信心） | A pick / B ban / decider |
+```
+
+### 4.3 BO3 推測流程
 
 ```text
 1. A ban：最弱圖或對手最強圖
@@ -152,6 +195,7 @@ site:liquipedia.net valorant <tournament> YYYY-MM-DD schedule
 - 該圖勝率或樣本（若查不到，說明基於近期紀錄推估）
 - 關鍵特務或陣容剋制
 - 勝率判斷
+- 並明確引用「全地圖逐圖分析」中的理由，說明為何進入 pick/ban/decider 路徑。
 
 BO5 需要擴展至更深地圖池，並明確說明第 4/第 5 圖的體能、適應、教練組臨場與地圖深度影響。
 
@@ -179,8 +223,16 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 | 攻方表現 (Atk Win%) | ... | ... | ... |
 | 守方表現 (Def Win%) | ... | ... | ... |
 | 核心選手火力 (ACS/ADR) | ... | ... | ... |
+| 版本/Meta 適應 | ... | ... | ... |
+| 同 Patch / 同賽事樣本 | ... | ... | ... |
 
 **地圖禁選/系列賽推演（必做）：**
+
+**全地圖逐圖分析（當前 Map Pool，必做）：**
+
+| 地圖 | [戰隊 A] 狀態 | [戰隊 B] 狀態 | 對位重點 | 單圖傾向 | Veto 意義 |
+| --- | --- | --- | --- | --- | --- |
+| Map 1 | 近期戰績/樣本、攻守、常用陣容 | 近期戰績/樣本、攻守、常用陣容 | 控圖/重奪/一血/角色池 | A % / B %（信心） | A pick / B ban / decider / 避開 |
 
 - 預測 Ban/Pick 流程：
   1. A ban：...
@@ -196,6 +248,14 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 - 分析 OP 壓力、一血轉化、Duelist 進點品質。
 - 分析近期面對強隊的含金量與是否被弱隊刷數據。
 - 分析 Patch / Meta 對兩隊特務池的影響。
+
+**模型校準檢核（必做）：**
+
+- Patch/特務依賴：是否有核心特務 nerf、核心選手 agent pool 被限制、舊資料需下修。
+- 同賽事節奏：誰有同 Patch 實戰樣本、誰是長休或首戰、熱手是否可複製。
+- H2H 錨定風險：前次交手是否跨 Patch / 跨賽制 / 跨地圖池，是否不可過度加權。
+- 外部反向訊號：市場、排名或數據站若與模型相反，需列出原因與信心度修正。
+- 2-0 / 反掃風險：檢查前兩張可能地圖是否可能同向崩盤，避免把明顯 2-0 路徑硬寫成 2-1。
 
 **賽果預測模型：**
 
@@ -233,6 +293,14 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 - BO3 預測 2:1 時，雙方至少一圖都通常 >75%。
 - BO5 弱隊至少一圖通常高於 BO3，但要看地圖池深度。
 
+模型校準上限：
+
+- 若支持某隊的主要依據是最近一次 H2H，但對手在同 Patch / 同賽事有更近實戰樣本，該隊獨贏機率通常不得高於 56–58%，除非地圖池有明確兩圖以上優勢。
+- 若預測方向與可靠賠率、排名或多家數據站相反超過 8 個百分點，信心度上限 60%，除非逐圖勝率與 veto 路徑能清楚支持反向判斷。
+- 若核心特務或主 Duelist 受到 Patch 衝擊且沒有同 Patch 成功樣本，該隊信心度上限 62%，並必須在 Risk Factor 中列出。
+- BO3 預測 2:1 的條件：預測勝方至少有兩張可能地圖勝率 >=55%，且落敗方至少一圖勝率 >=55% 或破蛋機率 >=65%；否則應改成 2:0 傾向或降低信心。
+- 若前兩張預測地圖都對同一方有明顯優勢，不得為了保守而輸出 2:1；應直接給 2:0、或標註 2:0/2:1 分歧與關鍵觸發條件。
+
 ## 8. 可信度與資料缺口標註
 
 回答中必須自然標註來源與資料狀態：
@@ -243,3 +311,18 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 - `低信心`：近期樣本過少、Patch 剛改、替補不確定、跨區隊伍資料不足。
 
 若資料不足，不要硬填假數字；可使用「約」「區間」「樣本不足」並說明推估依據。
+
+## 9. Notion 匯出
+
+當使用者要求寫入 Notion，或環境變數 `NOTION_AUTO_PUBLISH=1` 時，完整分析完成後必須依 `../shared/notion/skill-instructions.md` 執行匯出。
+
+本模組 summary JSON 固定帶入：
+
+```json
+{
+  "module": "valorant-analysis",
+  "sport": "Valorant"
+}
+```
+
+單場深度分析以每場一筆 Notion page 為預設；今日多場決策總結則可用一筆 `analysisType: "daily-summary"` 保存整份總結。

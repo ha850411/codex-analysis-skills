@@ -28,6 +28,8 @@ $lol-esports-match-analysis 深入分析今天 LCK 的比賽
 
 - `SKILL.md`：必要的技能清單與使用指令。
 - `references/source-priority.md`：資料來源優先順序與衝突規則。
-- `references/output-template.md`：最終回答結構。
+- `references/output-template.md`：最終回答結構與賽後檢討模板。
 - `references/video-review-checklist.md`：VOD 複盤檢查清單。
+- `references/recommendation-gates.md`：打滿、讓分、至少一局與橫掃風險的推薦閘門。
+- `references/postmortem-calibration.md`：錯誤預測的賽後歸因與模型校準。
 - `agents/openai.yaml`：選用的 OpenAI/Codex UI 中繼資料。
