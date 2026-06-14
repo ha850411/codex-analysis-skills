@@ -1,6 +1,5 @@
 ---
 name: cs-analysis
-summary: Counter-Strike 賽事分析模組，依台灣時間盤點賽程，交叉查核 HLTV/Liquipedia，分析陣容、地圖池、veto、選手狀態與盤口機率。
 description: Use this skill whenever the user asks for Counter-Strike, CS2, CS:GO, CS 賽事分析, HLTV match analysis, map veto prediction, roster/stand-in analysis, betting-style win probability, +1.5 maps, total maps, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
 ---
 
@@ -23,6 +22,7 @@ description: Use this skill whenever the user asks for Counter-Strike, CS2, CS:G
 - 必須確認比賽是 BO1 / BO3 / BO5。BO1 不得輸出 +1.5 maps 預測，只能填 `N/A（BO1）`。
 - 必須查核當前 Active Duty map pool，不可假設舊地圖池仍有效。
 - 不可承諾獲利，不可建議 all-in。投注建議必須附風險與資金控管。
+- 報告中的任何賠率一律使用十進位（decimal odds，例如 `1.85`）。不得輸出美式、分數、香港盤、馬來盤、印尼盤或其他格式；若來源不是十進位，只能內部轉換後再比較。
 
 ## 1. 資料檢索與賽程盤點
 
@@ -192,12 +192,14 @@ BO1 只能分析單圖落點與 BO1 高變異，不做 +1.5 maps。
 - 信心度百分比。信心度不是勝率，而是資料品質、陣容確定性、地圖池清晰度、盤口價格與模型一致性。
 - 爆冷壓力測試：列出下狗最可能贏系列賽的 1 到 2 條路徑；若路徑具體且與 veto 相符，調降熱門隊獨贏與 2-0 機率。
 
-若有十進制賠率：
+市場賠率只可用十進位格式輸出：
 
 ```text
 公允賠率 = 1 / 模型機率
 EV = 市場賠率 * 模型機率 - 1
 ```
+
+若來源只有美式、分數、香港盤、馬來盤、印尼盤或其他格式，只能先在內部轉成十進位或隱含機率再比較；報告不得保留原格式。若無法可靠轉換，僅輸出模型機率、公允十進位賠率與價格門檻。
 
 若 Stake 無法存取或使用者沒有提供賠率，先給模型公允賠率，再請使用者提供即時盤口以精確比較 EV。
 
@@ -225,7 +227,7 @@ EV = 市場賠率 * 模型機率 - 1
    - 預測比分、獨贏機率、精確比分機率、至少一圖機率、信心度。
 
 7. **Stake / 盤口建議**
-   - 市場觀點、公允賠率、EV 註記、建議玩法與注碼。
+   - 市場觀點、公允賠率、市場賠率（十進位）、EV 註記、建議玩法與注碼。
 
 8. **潛在風險**
    - 陣容、stand-in、map pool、熱門隊收尾能力、BO1 變異、pistol、anti-eco、伺服器與賽程。

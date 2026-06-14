@@ -1,6 +1,5 @@
 ---
 name: mlb-analysis
-summary: MLB 賽事分析模組，依台灣時間盤點賽程，核對先發投手、打線、牛棚、天氣球場與盤口，產出勝率、前五局、讓分盤與大小分建議。
 description: Use this skill whenever the user asks for MLB, Major League Baseball, 美職棒, baseball match analysis, probable pitchers, starting lineups, bullpen/weather/park-factor analysis, moneyline, 前五局, F5, 讓分盤, run line, totals, betting-style win probabilities, or 今日賽事決策總結. The answer should be in Traditional Chinese unless the user asks otherwise.
 ---
 
@@ -20,6 +19,7 @@ description: Use this skill whenever the user asks for MLB, Major League Basebal
 - 不要假裝已查到資料。找不到先發投手、打線、傷兵、天氣或盤口時，要寫出資料缺口與推估依據。
 - 必須區分 `已確認`、`可能`、`推估`、`未驗證` 四種資料狀態。
 - 棒球變異高，不可承諾獲利，不可建議 all-in。投注建議必須附風險與資金控管。
+- 報告中的任何賠率一律使用十進位（decimal odds，例如 `1.85`）。不得輸出美式、分數、香港盤、馬來盤、印尼盤或其他格式；若來源不是十進位，只能內部轉換後再比較。
 - 術語統一：對使用者輸出時使用中文盤口名。`前五局` 指只計算第 1 到第 5 局的盤；`讓分盤` 指棒球讓分，常見為強隊 -1.5 分、弱隊 +1.5 分。除非使用者原文詢問英文術語，避免把 `F5` 或 `run line` 當主要標籤。
 
 ## 1. 資料檢索與賽程盤點
@@ -124,14 +124,14 @@ description: Use this skill whenever the user asks for MLB, Major League Basebal
 - 建議比分區間或比賽型態，例如低比分投手戰、牛棚後段拉開、長打對轟。
 - 信心度百分比。信心度不是勝率，而是資料品質、模型一致性與盤口價值的綜合。
 
-若有十進制賠率：
+市場賠率只可用十進位格式輸出：
 
 ```text
 公允賠率 = 1 / 模型機率
 EV = 市場賠率 * 模型機率 - 1
 ```
 
-若只有美式賠率，先轉換為隱含機率，再比較模型機率。不可把莊家隱含機率直接當成真實勝率。
+若來源只有美式、分數、香港盤、馬來盤、印尼盤或其他格式，只能先在內部轉成十進位或隱含機率再比較；報告不得保留原格式。若無法可靠轉換，僅輸出模型機率、公允十進位賠率與價格門檻。
 
 ## 5. 必要輸出結構
 
@@ -159,7 +159,7 @@ EV = 市場賠率 * 模型機率 - 1
 
 7. **機率與盤口建議**
    - 全場勝率、前五局、讓分盤、大小分、隊伍總分。
-   - 公允賠率與 EV 註記。
+   - 公允賠率、市場賠率（十進位）與 EV 註記。
    - 建議玩法與注碼。
 
 8. **潛在風險**

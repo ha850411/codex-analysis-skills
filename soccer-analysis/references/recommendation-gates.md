@@ -6,6 +6,8 @@
 
 先把市場賠率轉成 break-even probability：
 
+市場賠率必須先以十進位表示。來源若是美式、分數、香港盤、馬來盤、印尼盤或其他格式，只能內部轉換，不得在報告中輸出原格式。
+
 ```text
 break-even = 1 / decimal odds
 raw_edge = model_probability - break-even
