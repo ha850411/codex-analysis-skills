@@ -638,7 +638,7 @@ function summaryBlocks(record) {
     ["模組", record.module],
     ["項目", record.sport],
     ["賽事", record.event],
-    ["時間", record.startTime],
+    ["時間 (UTC+8)", record.startTime],
     ["賽制", record.bo],
     ["預測", record.prediction],
     ["勝方", record.winner],

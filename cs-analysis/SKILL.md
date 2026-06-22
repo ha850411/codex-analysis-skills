@@ -234,7 +234,7 @@ EV = 市場賠率 * 模型機率 - 1
    - 陣容、stand-in、map pool、熱門隊收尾能力、BO1 變異、pistol、anti-eco、伺服器與賽程。
 
 9. **決策總結表**
-   - 一張精簡表格收尾。
+   - 一張精簡表格收尾，必須包含 `時間 (UTC+8)` 欄位，填入分析的比賽時間。
 
 完整模板見 `references/output-template.md`。
 

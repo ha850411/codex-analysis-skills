@@ -73,6 +73,7 @@ export NOTION_PROPERTY_MAP='{"prediction":"預測比分","confidence":"信心度
 ## Summary JSON
 
 各模組在分析完成後產生一份 summary JSON，再交給 exporter。
+`startTime` 必須是分析的比賽時間，使用台灣時間 UTC+8，ISO-8601 格式需帶 `+08:00`。
 
 ```json
 {
