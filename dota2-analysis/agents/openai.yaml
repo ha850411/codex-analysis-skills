@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dota 2 分析師"
+  short_description: "Dota 2 賽程、陣容、版本、BP 與盤口分析。"
+  brand_color: "#0F172A"
+  default_prompt: "使用 $dota2-analysis 分析這場 Dota 2 賽事，並給出 BP、比分機率、盤口建議與風險。"
+policy:
+  allow_implicit_invocation: true
