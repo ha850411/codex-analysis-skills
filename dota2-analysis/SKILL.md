@@ -1,6 +1,6 @@
 ---
 name: dota2-analysis
-description: Use this skill whenever the user asks for Dota 2, DOTA2, Dota2, 刀塔, Dota 賽事分析, The International, TI, Riyadh Masters, DreamLeague, ESL One, PGL, BLAST, FISSURE, Dota 2 match analysis, draft/BP prediction, hero pool and patch/meta analysis, roster/stand-in checks, BO1/BO2/BO3/BO5 score probabilities, +1.5 maps, total maps, betting-style win probabilities, 今日賽事決策總結, post-match review, 賽後檢討, 失準檢討, or model calibration. The answer should be in Traditional Chinese unless the user asks otherwise.
+description: "分析 Dota 2 電競賽事的賽程、陣容、版本、英雄池、Draft／BP、分路、系列賽機率、盤口價值與賽後校準。用於 TI、Riyadh Masters、DreamLeague、ESL One、PGL、BLAST、FISSURE、BO1／BO2／BO3／BO5、至少一局與今日決策；不要用於遊戲安裝、一般玩法或非賽事問題。預設繁體中文與台灣時間。"
 ---
 
 # Dota 2 賽事分析模組 Skill
@@ -13,21 +13,17 @@ description: Use this skill whenever the user asks for Dota 2, DOTA2, Dota2, 刀
 
 ## 0. 全域規則
 
-- 必須使用目前可取得的最新資料。Dota 2 的 roster、stand-in、patch、英雄數值、賽制與賽程都可能快速變動。
-- 若工具或環境無法上網，必須明確說明「無法即時查核最新 Dota 2 資料」，並把結論標記為低信心或僅基於使用者提供資訊。
-- 不要假裝已查到資料。找不到賽程、版本、先發五人、stand-in、賽制、BP 紀錄或盤口時，要寫出資料缺口與推估依據。
+- 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、機率驗證與外部寫入規則以該文件為準。
+
 - 必須區分 `已交叉查核`、`Liquipedia 為主`、`官方來源為主`、`數據站輔助`、`推估`、`低信心`。
 - 必須先確認賽制是 BO1 / BO2 / BO3 / BO5。BO2 不可硬套獨贏二路盤；需輸出 2-0 / 1-1 / 0-2 機率。
 - 必須確認比賽 patch 與 tournament rules。若 patch 或 Captain's Mode hero pool 剛改，舊英雄勝率與舊 BP 權重要下修。
-- 絕對不能用賠率、盤口水位、隱含機率或賠率變動來分析勝負、賽果方向、反推勝率或校準勝負判斷。勝負與賽果機率只能由陣容、版本、英雄池、BP、分路、近期內容、賽制與賽程等賽事因素推導；賠率只能在模型完成後用於 EV、價格門檻與是否值得下注。
-- 報告中的任何賠率一律使用十進位（decimal odds，例如 `1.85`）。不得輸出美式、分數、香港盤、馬來盤、印尼盤或其他格式；若來源不是十進位，只能內部轉換後再比較。
-- 不可承諾獲利，不可建議 all-in。投注建議必須附風險與資金控管。
 - 使用者要求檢討失準、回測或改善模型時，切換到賽後檢討模式，先讀 `references/postmortem-calibration.md`。
 
 ## 1. Reference routing
 
 - 賽前完整分析前，必要時讀 `references/source-priority.md` 確認資料來源與衝突處理。
-- 輸出完整單場或今日決策總結時，可用 `references/output-template.md` 的骨架。
+- 輸出 `full` 或 `daily-summary` 時，讀 `references/output-template.md`。
 - 推薦獨贏、+1.5 maps、Over/Under maps、雙方各拿一局、BO2 不敗或精確比分前，先依 `references/recommendation-gates.md` 檢查。
 - 賽後檢討、預測失準、模型校準或回測時，先讀 `references/postmortem-calibration.md`。
 
@@ -173,50 +169,13 @@ Draft 推估要點：
   - BO5：3-0、3-1、3-2、2-3、1-3、0-3。
 - 雙方至少拿一局機率。BO1 填 `N/A（BO1）`；BO2 需另外列 `不敗機率` 或 `至少平手機率`。
 - +1.5 maps / -1.5 maps 或總局數 Over/Under 的模型方向。
-- 信心度百分比。信心度不是勝率，而是資料品質、patch 清晰度、名單確定性、BP 可預測性與市場價格一致性的綜合。
-
-市場賠率只可用十進位格式輸出：
-
-```text
-公允賠率 = 1 / 模型機率
-EV = 市場賠率 * 模型機率 - 1
-```
+- 模型信心度百分比。只反映資料品質、patch 清晰度、名單確定性、BP 可預測性與模型一致性；投注價值另列，不得混入信心度。
 
 若 Stake 無法存取或使用者沒有提供賠率，先給模型公允賠率，再請使用者提供即時盤口以精確比較 EV。
 
 ## 8. 必要輸出結構
 
-除非使用者要求簡版，所有完整分析必須依下列格式輸出。
-
-1. **賽事資訊**
-   - 賽事 / 階段 / 台灣時間 / BO / LAN 或 online / patch / 資料狀態。
-
-2. **預計先發名單**
-   - 戰隊 A：pos1-pos5、coach/captain、stand-in 狀態。
-   - 戰隊 B：pos1-pos5、coach/captain、stand-in 狀態。
-
-3. **數據對比矩陣**
-   - 近期勝率、同 patch 樣本、英雄池深度、分路、Roshan、高地、核心選手狀態。
-
-4. **Draft/BP 與系列賽推演**
-   - Ban/Pick 壓力、關鍵英雄、每局路徑、分路與單局勝率。
-
-5. **深度戰況分析**
-   - 分路、timing、Roshan、團戰、買活、高地、late game 與 throw/comeback 風險。
-
-6. **賽果預測模型**
-   - 預測比分、系列賽機率、精確比分機率、至少一局/不敗機率、信心度。
-
-7. **Stake / 盤口建議**
-   - 市場觀點、公允賠率、市場賠率（十進位）、EV 註記、建議玩法與注碼。
-
-8. **潛在風險**
-   - 名單、stand-in、patch、BP 陷阱、分路崩盤、Roshan、買活、高地、BO2 變異、賽程與盤口。
-
-9. **決策總結表**
-   - 一張精簡表格收尾，必須包含 `時間 (UTC+8)` 欄位，填入分析的比賽時間。
-
-完整模板見 `references/output-template.md`。
+依 `../shared/analysis-core.md` 選擇輸出模式。`full` 與 `daily-summary` 讀 `references/output-template.md`；`quick` 只保留結論、關鍵 BP／分路證據、主要風險與資料狀態。
 
 ## 9. 注碼語言
 
@@ -243,11 +202,11 @@ Dota 2 的 BO1、BO2、低 tier online、stand-in、剛改 patch 與已公布 dr
 - 直接、分析型、實用。
 - 使用台灣常見 Dota 2 與盤口術語。
 - 不要只列排名與近期勝敗，必須解釋 patch、英雄池、BP、分路與 Roshan/高地決策如何影響系列賽。
-- 當名單、patch、BP 或盤口資料不足時，降低信心度，不要硬給高把握。
+- 名單、patch 或 BP 資料不足時降低模型信心度；盤口不足只代表無法判定投注價值，不得改變模型信心度。
 
 ## 12. Notion 匯出
 
-當使用者要求寫入 Notion，或環境變數 `NOTION_AUTO_PUBLISH=1` 時，完整分析或賽後檢討完成後必須依 `../shared/notion/skill-instructions.md` 執行匯出。
+需要 Notion 匯出時，依 `../shared/notion/skill-instructions.md` 執行；只有當前請求明確授權才可發布，單獨的 `NOTION_AUTO_PUBLISH=1` 只可準備本地匯出檔。
 
 本模組 summary JSON 固定帶入：
 

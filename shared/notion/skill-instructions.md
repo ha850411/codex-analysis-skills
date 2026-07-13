@@ -1,6 +1,8 @@
 # Skill Notion export instructions
 
-當使用者要求「寫到 Notion」、「同步 Notion」、「跑完預測後上傳 Notion」，或環境變數 `NOTION_AUTO_PUBLISH=1` 時，完整分析完成後必須執行 Notion 匯出。
+使用者在當前請求明確要求「寫到 Notion」、「同步 Notion」或「跑完預測後上傳 Notion」時，完整分析完成後執行 Notion 匯出。
+
+若只有環境變數 `NOTION_AUTO_PUBLISH=1`、但當前請求未提及外部發布，先建立本地 Markdown 與 summary JSON，告知已準備完成並取得確認後才執行發布。賽後測試、回測與 skill 驗證不得因環境變數自動發布。遵循 `../analysis-core.md` 的外部寫入邊界。
 
 ## 流程
 

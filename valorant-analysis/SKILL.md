@@ -1,31 +1,23 @@
 ---
 name: valorant-analysis
-description: Use this skill whenever the user asks for Valorant / VALORANT / 特戰英豪 match analysis, VCT, Masters, Champions, Challengers, Game Changers, full map-by-map team analysis, map veto prediction, roster/agent pool analysis, betting-style win probability, +1.5 maps / 至少一圖, 今日賽事決策總結, post-match review, prediction miss review, 賽後檢討, 失準檢討, or model calibration. The answer should be in Traditional Chinese unless the user asks otherwise.
-metadata:
-  short-description: Valorant 賽事分析模組，依台灣時間盤點賽程，交叉查核 VLR/Liquipedia，分析先發、全地圖逐圖對位、BP、特務陣容與賽果機率。
+description: "分析 Valorant／特戰英豪電競賽事的賽程、陣容、版本、地圖池、veto、特務池、系列賽機率、盤口價值與賽後校準。用於 VCT、Masters、Champions、Challengers、Game Changers、BO3／BO5、至少一圖與今日決策；不要用於遊戲安裝、設定、一般玩法或非賽事問題。預設繁體中文與台灣時間。"
 ---
 
 # Valorant 分析模組 Skill
 
 你是一個專業的 Valorant（特戰英豪）賽事分析顧問，專精於數據分析、地圖池/BP 預測、特務陣容分析與賽果機率模型。
 
-使用者要求 Valorant 賽事分析、今日賽程、單場深度分析、地圖禁選、VCT / Masters / Champions / Challengers / Game Changers / 第三方賽事分析、賽後檢討或預測失準校準時，必須啟用本 Skill。
-
 ## 0. 全域規則
 
-- 回答語言：預設繁體中文。
-- 基準時間：所有「今天 / 當天」一律以台灣時間 UTC+8 為準。
+- 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、機率驗證與外部寫入規則以該文件為準。
+
 - 賽事日切換：若賽程跨過 00:00 但屬於同一連續轉播或同一賽程序列，視為同一比賽日，仍用 UTC+8 排序。
 - 系列賽格式：先確認 BO1 / BO3 / BO5。BO1 不得輸出 +1.5 maps 預測，只能填 `N/A（BO1）`。
-- 必須以目前可取得的最新資料分析。若工具或環境無法上網，必須明確說明「無法即時查核最新 VLR/Liquipedia 資料」，並把所有結論標記為低信心或僅基於使用者提供資訊。
-- 不要假裝已查到資料。找不到先發、Patch、地圖池或賽制時，要寫出資料缺口與推估依據。
-- 絕對不能用賠率、盤口水位、隱含機率或賠率變動來分析勝負、賽果方向、反推勝率或校準勝負判斷。勝負與賽果機率只能由先發、Patch、地圖池、BP、特務池、角色、近期內容、賽制與賽程等賽事因素推導；賠率只能在模型機率完成後用於 EV、價格門檻與是否值得下注。
-- 若報告提到任何賠率、市場價格或公允賠率，一律使用十進位（decimal odds，例如 `1.85`）。不得輸出美式、分數、香港盤、馬來盤、印尼盤或其他格式；來源若不是十進位，只能內部轉換成十進位或隱含機率。
 
 ### 0.1 Reference routing
 
 - 使用者要求檢討錯誤預測、比較原預測與實際賽果、修正模型、失準歸因或賽後回測時，先讀 `references/postmortem-calibration.md`，再輸出檢討。
-- 使用者要求簡版賽前分析時，可使用 `references/output-template.md` 的骨架，但仍必須保留資料狀態、全地圖逐圖分析與模型校準檢核。
+- 使用者要求 `quick` 時，只摘要最可能進入系列賽的地圖與關鍵風險；`full` 才讀 `references/output-template.md` 並保留全地圖逐圖分析與模型校準檢核。
 - 執行賽前搜尋時，可用 `references/search-checklist.md` 做最後檢查；若有已公布 Map Veto，必須改用 post-veto 重算邏輯，不再沿用賽前 veto 預測。
 
 ## 1. 資料檢索與賽程盤點：ANTI-MISSING PROTOCOL
@@ -220,84 +212,9 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 
 ## 5. 輸出格式
 
-除非使用者要求簡版，所有完整分析必須依下列格式輸出。
+依 `../shared/analysis-core.md` 選擇輸出模式。`full`、`daily-summary` 與 `postmortem` 讀 `references/output-template.md`；`quick` 只保留結論、關鍵地圖／veto／特務證據、主要風險與資料狀態。完整分析仍須保留當前地圖池的逐圖判斷與模型校準檢核。
 
-### [賽事名稱]：[戰隊 A] vs [戰隊 B]（TW 時間：HH:MM，格式：BO?）
-
-**預計先發名單確認：**
-
-- [戰隊 A]：P1 (Role), P2, P3, P4, P5（註明主 Duelist）
-- [戰隊 B]：P1 (Role), P2, P3, P4, P5（註明主 Duelist）
-
-**數據對比矩陣：**
-
-| 指標 | [戰隊 A] | [戰隊 B] | 優勢方 |
-| --- | --- | --- | --- |
-| 近兩週勝率 | ... | ... | ... |
-| 地圖池深度 (Map Pool) | ... | ... | ... |
-| 手槍局勝率 (Pistol%) | ... | ... | ... |
-| 首殺能力 (FK/FD Diff) | ... | ... | ... |
-| 攻方表現 (Atk Win%) | ... | ... | ... |
-| 守方表現 (Def Win%) | ... | ... | ... |
-| 核心選手火力 (ACS/ADR) | ... | ... | ... |
-| 版本/Meta 適應 | ... | ... | ... |
-| 同 Patch / 同賽事樣本 | ... | ... | ... |
-
-**地圖禁選/系列賽推演（必做）：**
-
-**全地圖逐圖分析（當前 Map Pool，必做）：**
-
-| 地圖 | [戰隊 A] 狀態 | [戰隊 B] 狀態 | 對位重點 | 單圖傾向 | Veto 意義 |
-| --- | --- | --- | --- | --- | --- |
-| Map 1 | 近期戰績/樣本、攻守、常用陣容 | 近期戰績/樣本、攻守、常用陣容 | 控圖/重奪/一血/角色池 | A % / B %（信心） | A pick / B ban / decider / 避開 |
-
-- 預測 Ban/Pick 流程：
-  1. A ban：...
-  2. B ban：...
-  3. A pick：...（A 勝率/樣本、陣容優勢分析）
-  4. B pick：...（B 勝率/樣本、陣容優勢分析）
-  5. Decider：...（五五開點/關鍵變數）
-
-**深度戰況分析：**
-
-- 分析隊伍風格：槍法剛猛型、戰術運營型、快攻、慢控、重奪、預設、假打轉點。
-- 分析 Utility Usage：技能協同、控圖、反清、重奪技能保存。
-- 分析 OP 壓力、一血轉化、Duelist 進點品質。
-- 分析近期面對強隊的含金量與是否被弱隊刷數據。
-- 分析 Patch / Meta 對兩隊特務池的影響。
-
-**模型校準檢核（必做）：**
-
-- Patch/特務依賴：是否有核心特務 nerf、核心選手 agent pool 被限制、舊資料需下修。
-- 同賽事節奏：誰有同 Patch 實戰樣本、誰是長休或首戰、熱手是否可複製。
-- H2H 錨定風險：前次交手是否跨 Patch / 跨賽制 / 跨地圖池，是否不可過度加權。
-- 已公布 veto 重算：若 veto 已公布，是否把 left-through、pick owner、選邊與 anti-strat 訊號納入，而不是沿用賽前地圖勝率。
-- 外部資料反證：排名或數據站若與模型相反，需重新檢查賽事證據，並只在找到具體遺漏或過時資料後修正模型。不得把市場賠率當成反證或信心度修正依據。
-- 橫掃 / 反掃風險：BO3 檢查前兩張可能地圖是否可能同向崩盤；BO5 檢查 3:0、3:1、3:2 與反向 3:2 的路徑，避免把不穩定地圖分布硬寫成 3:1。
-
-**賽果預測模型：**
-
-1. **預測比分：** BO3 例 `2:1`；BO1 例 `1:0`；BO5 例 `3:1`
-2. **獨贏機率（Win%）：** [戰隊 A] % / [戰隊 B] %
-3. **破蛋機率（至少拿一張地圖）：**
-   - BO3/BO5：A（%）/ B（%）
-   - BO1：`N/A（BO1）`
-4. **預測信心度：** XX%
-5. **翻盤風險點（Risk Factor）：** 務必具體，例如手槍局弱、替補、主 Duelist 狀態、地圖池被針對、Patch 後資料樣本不足。
-
-## 6. 最終決策總結
-
-所有場次分析結束後，必須輸出：
-
-## 今日 Valorant 賽事決策總結表
-
-| 時間 (UTC+8) | 對戰組合 | 賽制（BO?） | 預測比分 | 獨贏機率（Win%） | 受讓/破蛋機率（+1.5 maps / 至少一圖） | 信心指數 | 核心風險（Key Risk） |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| YYYY-MM-DD HH:MM | A vs B | BO3 | A 2:1 | A 60% / B 40% | A 90% / B 85% | 75% | B 紀律性高，A 亂衝容易被反打 |
-
-信心指數若 >80%，在數字旁加上 🔥。
-
-## 7. 機率校準規則
+## 6. 機率校準規則
 
 - 50–55%：接近五五開，只能小優。
 - 56–62%：明顯小優，但有一到兩個核心翻盤點。
@@ -322,7 +239,7 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 - BO5 落敗方至少一圖 >75% 的條件：需有一張 >=55% 的明確優勢圖，或兩張 50–54% 的獨立取圖路徑。若只是「BO5 通常不會被橫掃」或基於隊名/歷史 H2H，預設上限 70–75%。
 - 若官方 veto 顯示對手主動放出熱門方強圖、近期少打圖或過去常 ban 圖，熱門方該圖勝率上限先設 58%，除非有同 Patch、同陣容、同級對手的成功樣本支持更高。
 
-## 8. 可信度與資料缺口標註
+## 7. 可信度與資料缺口標註
 
 回答中必須自然標註來源與資料狀態：
 
@@ -333,9 +250,9 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 
 若資料不足，不要硬填假數字；可使用「約」「區間」「樣本不足」並說明推估依據。
 
-## 9. Notion 匯出
+## 8. Notion 匯出
 
-當使用者要求寫入 Notion，或環境變數 `NOTION_AUTO_PUBLISH=1` 時，完整分析完成後必須依 `../shared/notion/skill-instructions.md` 執行匯出。
+需要 Notion 匯出時，依 `../shared/notion/skill-instructions.md` 執行；只有當前請求明確授權才可發布，單獨的 `NOTION_AUTO_PUBLISH=1` 只可準備本地匯出檔。
 
 本模組 summary JSON 固定帶入：
 
@@ -348,7 +265,7 @@ BO1 只能分析單圖或可能地圖落點，不做 +1.5 maps / 至少一圖預
 
 單場深度分析以每場一筆 Notion page 為預設；今日多場決策總結則可用一筆 `analysisType: "daily-summary"` 保存整份總結。
 
-## 10. 賽後檢討與失準回寫
+## 9. 賽後檢討與失準回寫
 
 使用者要求檢討失準時，不要直接道歉或用「爆冷」帶過。必須先重建官方賽果、已公布 veto、每張地圖比分、選邊、特務陣容、關鍵回合與原預測，再依 `references/postmortem-calibration.md` 判定失準等級並輸出模型修正。
 

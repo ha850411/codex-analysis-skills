@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "cs-full",
+      "skill": "cs-analysis",
+      "prompt": "深入分析今晚 Vitality 對 Spirit 的 BO3，包含預計 veto、逐圖勝率與價格門檻。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["台灣時間", "當前地圖池", "精確比分總和 100%", "模型信心度不含市場價格"]
+    },
+    {
+      "id": "cs-daily",
+      "skill": "cs-analysis",
+      "prompt": "整理今天值得看的 CS2 比賽並給決策簡表。",
+      "shouldTrigger": true,
+      "mode": "daily-summary",
+      "invariants": ["先盤點完整賽程", "只展開入選場次"]
+    },
+    {
+      "id": "cs-boundary",
+      "skill": "cs-analysis",
+      "prompt": "CS2 要怎麼設定準心？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "dota-full",
+      "skill": "dota2-analysis",
+      "prompt": "分析這場 DreamLeague BO2 的版本、英雄池與 2-0／1-1／0-2 機率。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["確認 patch", "BO2 三項分布總和 100%", "不輸出二路獨贏"]
+    },
+    {
+      "id": "dota-postmortem",
+      "skill": "dota2-analysis",
+      "prompt": "檢討昨天 Dota 2 預測為什麼失準，重新看 draft 和分路。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["重建賽前資訊集", "區分模型錯誤與合理變異"]
+    },
+    {
+      "id": "dota-boundary",
+      "skill": "dota2-analysis",
+      "prompt": "Dota 2 新手適合玩哪個英雄？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "lol-full",
+      "skill": "lol-analysis",
+      "prompt": "分析 T1 對 Gen.G 的 BO5，查版本、先發、BP 與完整比分機率。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["查核版本與名單", "精確比分總和 100%", "至少一局與橫掃互補"]
+    },
+    {
+      "id": "lol-quick",
+      "skill": "lol-analysis",
+      "prompt": "只簡短說明這場 LPL 對戰最大的 BP 風險。",
+      "shouldTrigger": true,
+      "mode": "quick",
+      "invariants": ["不套完整模板", "保留資料狀態與核心風險"]
+    },
+    {
+      "id": "lol-boundary",
+      "skill": "lol-analysis",
+      "prompt": "英雄聯盟單排要怎麼控兵線？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "mlb-full",
+      "skill": "mlb-analysis",
+      "prompt": "分析洋基對紅襪，包含先發投手、預計打線、牛棚與整數總分 8 的機率。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["確認主客隊", "整數總分含 push", "模型信心度與投注價值分開"]
+    },
+    {
+      "id": "mlb-quick",
+      "skill": "mlb-analysis",
+      "prompt": "只回答這場前五局比全場更適合的原因。",
+      "shouldTrigger": true,
+      "mode": "quick",
+      "invariants": ["說明先發與牛棚差異", "不套完整模板"]
+    },
+    {
+      "id": "mlb-boundary",
+      "skill": "mlb-analysis",
+      "prompt": "日本職棒的指定打擊規則是什麼？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "nba-daily",
+      "skill": "nba-analysis",
+      "prompt": "整理今天 NBA 全部賽程，挑出傷兵資訊最完整的兩場。",
+      "shouldTrigger": true,
+      "mode": "daily-summary",
+      "invariants": ["先盤點全部賽程", "查核官方傷兵報告", "只展開兩場"]
+    },
+    {
+      "id": "nba-full",
+      "skill": "nba-analysis",
+      "prompt": "分析湖人對勇士，讓分是 -4、總分是 228，請把 push 納入整數盤機率。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["整數讓分與總分含 push", "傷兵與輪替", "模型信心度不受盤口影響"]
+    },
+    {
+      "id": "nba-boundary",
+      "skill": "nba-analysis",
+      "prompt": "大學籃球三分線和 NBA 有什麼不同？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "world-cup-full",
+      "skill": "soccer-analysis",
+      "prompt": "分析世界盃小組賽日本對德國，包含出線情境、90 分鐘三路盤與各隊至少一球。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["官方主客與場地", "三路盤總和 100%", "各隊至少一球不可混成雙方進球"]
+    },
+    {
+      "id": "world-cup-postmortem",
+      "skill": "soccer-analysis",
+      "prompt": "檢討上一場世界盃淘汰賽預測，區分 90 分鐘方向與晉級方向。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["分開 90 分鐘與晉級結算", "重建賽前資訊集"]
+    },
+    {
+      "id": "world-cup-boundary",
+      "skill": "soccer-analysis",
+      "prompt": "分析明天歐冠皇馬對曼城。",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    },
+    {
+      "id": "valorant-full",
+      "skill": "valorant-analysis",
+      "prompt": "分析 VCT Masters 的這場 BO5，確認已公布 veto 後逐圖重算。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["已公布 veto 不沿用預測", "全地圖逐圖分析", "精確比分總和 100%"]
+    },
+    {
+      "id": "valorant-quick",
+      "skill": "valorant-analysis",
+      "prompt": "簡短告訴我這場 Valorant BO3 最可能的 decider 與風險。",
+      "shouldTrigger": true,
+      "mode": "quick",
+      "invariants": ["只摘要最可能地圖", "不強制全地圖表格"]
+    },
+    {
+      "id": "valorant-boundary",
+      "skill": "valorant-analysis",
+      "prompt": "Valorant 靈敏度和 DPI 怎麼換算？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
+    }
+  ]
+}
