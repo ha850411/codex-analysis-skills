@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex 最終裁決",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "accepted_findings", "rejected_findings", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "prediction_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "const": "final"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "model": {"type": "string", "minLength": 1},
+    "reasoning_effort": {"type": ["string", "null"], "enum": [null, "minimal", "low", "medium", "high", "max"]},
+    "accepted_findings": {"type": "array", "items": {"type": "string"}},
+    "rejected_findings": {"type": "array", "items": {"type": "string"}},
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "before", "after", "reason", "finding_ids"],
+        "properties": {
+          "path": {"type": "string"},
+          "before": {"type": "string"},
+          "after": {"type": "string"},
+          "reason": {"type": "string"},
+          "finding_ids": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "thesis": {"type": "string", "minLength": 1},
+    "probability_groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "outcomes"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "label": {"type": "string", "minLength": 1},
+          "outcomes": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "label", "probability"],
+              "properties": {
+                "key": {"type": "string", "minLength": 1},
+                "label": {"type": "string", "minLength": 1},
+                "probability": {"type": "number", "minimum": 0, "maximum": 100}
+              }
+            }
+          }
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "rationale"],
+      "properties": {
+        "value": {"type": "number", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "key_factors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_ids", "impact", "reason"],
+        "properties": {
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "impact": {"enum": ["positive", "negative", "mixed", "uncertainty"]},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "missing_data": {"type": "array", "items": {"type": "string"}},
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headline", "executive_summary", "key_points", "disclaimer", "youtube"],
+      "properties": {
+        "headline": {"type": "string", "minLength": 1},
+        "executive_summary": {"type": "string", "minLength": 1},
+        "key_points": {"type": "array", "items": {"type": "string"}},
+        "disclaimer": {"type": "string"},
+        "youtube": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "hook", "sections", "closing"],
+          "properties": {
+            "title": {"type": "string", "minLength": 1},
+            "hook": {"type": "string", "minLength": 1},
+            "sections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["heading", "script"],
+                "properties": {
+                  "heading": {"type": "string"},
+                  "script": {"type": "string"}
+                }
+              }
+            },
+            "closing": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

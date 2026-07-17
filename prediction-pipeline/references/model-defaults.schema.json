@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "預測管線預設模型",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "description", "primary_prediction", "red_team", "final_adjudication", "confirmation_required"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "description": {"type": "string"},
+    "primary_prediction": {"$ref": "#/$defs/codex_stage"},
+    "red_team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent"],
+      "properties": {
+        "agent": {"type": "string", "minLength": 1}
+      }
+    },
+    "final_adjudication": {"$ref": "#/$defs/codex_stage"},
+    "confirmation_required": {"type": "boolean", "const": true}
+  },
+  "$defs": {
+    "codex_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "model", "reasoning_effort"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["current_session", "codex_cli"]},
+        "model": {"type": ["string", "null"]},
+        "reasoning_effort": {"type": ["string", "null"], "enum": [null, "minimal", "low", "medium", "high", "max"]}
+      }
+    }
+  }
+}

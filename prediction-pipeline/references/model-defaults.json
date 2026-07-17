@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "description": "agy 紅隊流程的預選模型；每次執行仍必須由使用者確認。",
+  "primary_prediction": {
+    "mode": "current_session",
+    "model": null,
+    "reasoning_effort": null
+  },
+  "red_team": {
+    "agent": " Gemini 3.5 Flash (High)"
+  },
+  "final_adjudication": {
+    "mode": "current_session",
+    "model": null,
+    "reasoning_effort": null
+  },
+  "confirmation_required": true
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex × agy 預測管線"
+  short_description: "只在紅隊觸發時先確認 agy 紅隊與 Codex 最終裁決模型"
+  default_prompt: "使用 $prediction-pipeline 分析指定賽事；觸發 agy 紅隊時先讓我確認紅隊與最終裁決模型。"

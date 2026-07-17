@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "預測管線標準輸入",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "prediction_id", "created_at", "as_of", "sport", "mode", "question", "event", "model_data", "market_data"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "prediction_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "sport": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["quick", "full", "daily-summary", "postmortem", "custom"]},
+    "question": {"type": "string", "minLength": 1},
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "competition", "start_time", "timezone", "format", "participants"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "competition": {"type": "string"},
+        "start_time": {"type": "string", "format": "date-time"},
+        "timezone": {"type": "string", "minLength": 1},
+        "format": {"type": "string", "minLength": 1},
+        "participants": {"type": "array", "minItems": 2, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "model_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_quality", "evidence", "notes"],
+      "properties": {
+        "data_quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completeness", "missing", "warnings"],
+          "properties": {
+            "completeness": {"type": "number", "minimum": 0, "maximum": 100},
+            "missing": {"type": "array", "items": {"type": "string"}},
+            "warnings": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "category", "claim", "status", "source"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "category": {"type": "string", "minLength": 1},
+              "claim": {"type": "string", "minLength": 1},
+              "status": {"enum": ["confirmed", "reported", "estimated", "unverified"]},
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title", "url", "published_at", "retrieved_at"],
+                "properties": {
+                  "title": {"type": "string"},
+                  "url": {"type": "string"},
+                  "published_at": {"type": ["string", "null"]},
+                  "retrieved_at": {"type": "string", "format": "date-time"}
+                }
+              }
+            }
+          }
+        },
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "market_data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome_key", "decimal_odds", "book", "retrieved_at"],
+        "properties": {
+          "outcome_key": {"type": "string", "minLength": 1},
+          "decimal_odds": {"type": "number", "exclusiveMinimum": 1},
+          "book": {"type": "string"},
+          "retrieved_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

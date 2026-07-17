@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agy 紅隊審查",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "reviewer", "verdict", "summary", "findings", "consistency_checks", "unresolved_questions"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "prediction_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "const": "red_team"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "agent"],
+      "properties": {
+        "tool": {"type": "string", "const": "agy"},
+        "agent": {"type": "string", "minLength": 1}
+      }
+    },
+    "verdict": {"enum": ["pass", "revise", "reject"]},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "category", "claim", "evidence_ids", "recommended_action"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "high", "medium", "low"]},
+          "category": {"enum": ["data", "reasoning", "probability", "confidence", "market_leakage", "arithmetic", "traceability", "presentation"]},
+          "claim": {"type": "string", "minLength": 1},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "recommended_action": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "consistency_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "details"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["pass", "fail", "not_applicable"]},
+          "details": {"type": "string"}
+        }
+      }
+    },
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}}
+  }
+}
