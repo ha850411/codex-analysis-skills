@@ -1,0 +1,33 @@
+{
+  "tolerance": 0.2,
+  "checks": [
+    {
+      "name": "bo3 exact-score distribution",
+      "type": "sum",
+      "values": [32, 28, 22, 18],
+      "expected": 100
+    },
+    {
+      "name": "quarter-line settlement EV",
+      "type": "settlement_ev",
+      "marketOdds": 2,
+      "fullWin": 40,
+      "halfWin": 10,
+      "push": 10,
+      "halfLoss": 10,
+      "ev": 0.1
+    },
+    {
+      "name": "weighted model confidence",
+      "type": "weighted_confidence",
+      "value": 74,
+      "components": {
+        "dataCompleteness": 80,
+        "freshness": 75,
+        "lineupCertainty": 70,
+        "regimeRelevance": 75,
+        "modelStability": 65
+      }
+    }
+  ]
+}

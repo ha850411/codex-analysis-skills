@@ -24,7 +24,7 @@
 
 - `model_data.evidence`：用於領域分析的事實。每項 claim 都要有穩定 ID、確認狀態、擷取時間與來源。
 - `model_data.data_quality`：0 到 100 的完整度，以及明列的資料缺口與警告。
-- `market_data`：選填的市場價格，以 outcome key 對應最終機率。沒有市場資料時使用空陣列。
+- `market_data`：選填的市場價格，以 outcome key 對應最終機率。`outcome_key` 代表全贏；整數盤或四分之一盤可另填 `push_outcome_key`、`half_win_outcome_key`、`half_loss_outcome_key`。沒有市場資料時使用空陣列。
 
 只要賽事、參賽者、問題或資料截止時間改變，就建立新的 `prediction_id`。大型或敏感的原始回應不要直接塞進標準輸入。
 
@@ -85,10 +85,14 @@
 
 ```text
 公允賠率 = 100 / 模型機率百分比
-EV = 市場十進位賠率 × 模型機率百分比 / 100 - 1
+無走盤 EV = 市場十進位賠率 × 模型機率百分比 / 100 - 1
+
+含結算狀態 EV = Σ[各狀態機率 × 該狀態每 1 單位本金的總返還] - 1
 ```
 
-不得讓模型覆寫這些計算結果。
+全贏總返還為十進位賠率、半贏為 `(賠率 + 1) / 2`、走盤為 `1`、半輸為 `0.5`、全輸為 `0`。不得讓模型覆寫這些計算結果。
+
+`confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
 
 ## 紅隊嚴重度與裁決
 

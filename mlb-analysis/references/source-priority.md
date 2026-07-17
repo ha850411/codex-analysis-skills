@@ -20,6 +20,8 @@ MLB.com 對延賽、補賽、雙重賽與 probable pitchers 通常優先。
 
 若顯示 TBD，不要自行指定，除非清楚標註為推估。
 
+Probable pitcher 改變、opener／bullpen game 公告或球數限制更新後，建立新版預測快照；不得把新投手資料混回原快照。
+
 ## 先發打線與傷兵
 
 1. MLB.com lineups / team official lineup card
@@ -28,6 +30,8 @@ MLB.com 對延賽、補賽、雙重賽與 probable pitchers 通常優先。
 4. ESPN / CBS / FantasyLabs 類來源
 
 若賽前打線未公布，可用最近打線推估，但必須標記 `推估`。
+
+正式 lineup card 公布後建立 post-lineup 快照，重新計算左右投、打序與球員可用性情境。
 
 ## 進階數據
 

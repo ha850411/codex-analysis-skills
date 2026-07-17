@@ -1,9 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "globalInvariants": [
     "所有賽事總表與簡表包含模型信心度欄",
     "模型信心度使用百分比；資料不足時填 N/A（原因）而不省略欄位",
-    "模型信心度與勝率及投注價值分欄"
+    "模型信心度與勝率及投注價值分欄",
+    "新預測記錄 as_of 與 pre/post-lineup、veto 或 draft 快照",
+    "相依市場由同一主分布推導而不是分別手填",
+    "模型信心度依五項組成加權且不含市場價格",
+    "巢狀近期時間窗不重複計權，小樣本使用收縮",
+    "賽後使用 Brier 或 log loss，不因單場結果機械改權重"
   ],
   "cases": [
     {
@@ -173,6 +178,38 @@
       "shouldTrigger": false,
       "mode": null,
       "invariants": []
+    },
+    {
+      "id": "cs-postmortem",
+      "skill": "cs-analysis",
+      "prompt": "檢討昨天 CS2 預測，重建 veto 並評估原本 2-0 機率。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["保留原預測快照", "獨贏與精確比分分開計分", "不以單場命中率硬設新上限"]
+    },
+    {
+      "id": "nba-postmortem",
+      "skill": "nba-analysis",
+      "prompt": "檢討上一場 NBA 讓分與大小分失準，考慮 late scratch。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["重建 Injury Report 版本", "保留 push 結算", "區分三分變異與流程錯誤"]
+    },
+    {
+      "id": "mlb-postmortem",
+      "skill": "mlb-analysis",
+      "prompt": "檢討昨天 MLB 前五局看對但全場看錯的原因。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["分開前五局與全場分布", "檢查牛棚情境", "不推翻正確的先發投手模型"]
+    },
+    {
+      "id": "pipeline-push-ev",
+      "skill": "prediction-pipeline",
+      "prompt": "驗證整數大小分含走盤的 EV 並輸出領域簡表。",
+      "shouldTrigger": true,
+      "mode": "custom",
+      "invariants": ["走盤不是全輸", "市場資料不進入機率階段", "summary_table 含模型信心度"]
     }
   ]
 }

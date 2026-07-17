@@ -75,7 +75,12 @@
         "additionalProperties": false,
         "required": ["outcome_key", "decimal_odds", "book", "retrieved_at"],
         "properties": {
+          "bet_id": {"type": "string", "minLength": 1},
+          "label": {"type": "string"},
           "outcome_key": {"type": "string", "minLength": 1},
+          "push_outcome_key": {"type": "string", "minLength": 1},
+          "half_win_outcome_key": {"type": "string", "minLength": 1},
+          "half_loss_outcome_key": {"type": "string", "minLength": 1},
           "decimal_odds": {"type": "number", "exclusiveMinimum": 1},
           "book": {"type": "string"},
           "retrieved_at": {"type": "string", "format": "date-time"}

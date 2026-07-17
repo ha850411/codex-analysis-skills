@@ -3,7 +3,7 @@
   "title": "Codex 最終裁決",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "accepted_findings", "rejected_findings", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "accepted_findings", "rejected_findings", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
   "properties": {
     "schema_version": {"type": "string", "const": "1.0"},
     "prediction_id": {"type": "string", "minLength": 1},
@@ -49,7 +49,7 @@
               "properties": {
                 "key": {"type": "string", "minLength": 1},
                 "label": {"type": "string", "minLength": 1},
-                "probability": {"type": "number", "minimum": 0, "maximum": 100}
+                "probability": {"type": "number", "minimum": 0, "maximum": 100, "multipleOf": 0.1}
               }
             }
           }
@@ -59,10 +59,22 @@
     "confidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["value", "rationale"],
+      "required": ["value", "rationale", "components"],
       "properties": {
-        "value": {"type": "number", "minimum": 0, "maximum": 100},
-        "rationale": {"type": "string", "minLength": 1}
+        "value": {"type": "integer", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string", "minLength": 1},
+        "components": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["data_completeness", "freshness", "lineup_certainty", "regime_relevance", "model_stability"],
+          "properties": {
+            "data_completeness": {"type": "number", "minimum": 0, "maximum": 100},
+            "freshness": {"type": "number", "minimum": 0, "maximum": 100},
+            "lineup_certainty": {"type": "number", "minimum": 0, "maximum": 100},
+            "regime_relevance": {"type": "number", "minimum": 0, "maximum": 100},
+            "model_stability": {"type": "number", "minimum": 0, "maximum": 100}
+          }
+        }
       }
     },
     "key_factors": {
@@ -83,12 +95,35 @@
     "presentation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["headline", "executive_summary", "key_points", "disclaimer", "youtube"],
+      "required": ["headline", "executive_summary", "key_points", "disclaimer", "summary_table", "youtube"],
       "properties": {
         "headline": {"type": "string", "minLength": 1},
         "executive_summary": {"type": "string", "minLength": 1},
         "key_points": {"type": "array", "items": {"type": "string"}},
         "disclaimer": {"type": "string"},
+        "summary_table": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["columns", "rows"],
+          "properties": {
+            "columns": {
+              "type": "array",
+              "minItems": 5,
+              "uniqueItems": true,
+              "contains": {"const": "模型信心度"},
+              "items": {"type": "string", "minLength": 1}
+            },
+            "rows": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 5,
+                "items": {"type": "string"}
+              }
+            }
+          }
+        },
         "youtube": {
           "type": "object",
           "additionalProperties": false,

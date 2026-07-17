@@ -3,7 +3,7 @@
   "title": "Codex 主預測",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data"],
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data"],
   "properties": {
     "schema_version": {"type": "string", "const": "1.0"},
     "prediction_id": {"type": "string", "minLength": 1},
@@ -51,7 +51,7 @@
               "properties": {
                 "key": {"type": "string", "minLength": 1},
                 "label": {"type": "string", "minLength": 1},
-                "probability": {"type": "number", "minimum": 0, "maximum": 100}
+                "probability": {"type": "number", "minimum": 0, "maximum": 100, "multipleOf": 0.1}
               }
             }
           }
@@ -61,10 +61,23 @@
     "confidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["value", "rationale"],
+      "required": ["value", "rationale", "components"],
       "properties": {
-        "value": {"type": "number", "minimum": 0, "maximum": 100},
-        "rationale": {"type": "string", "minLength": 1}
+        "value": {"type": "integer", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string", "minLength": 1},
+        "components": {"$ref": "#/$defs/confidence_components"}
+      }
+    },
+    "confidence_components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_completeness", "freshness", "lineup_certainty", "regime_relevance", "model_stability"],
+      "properties": {
+        "data_completeness": {"type": "number", "minimum": 0, "maximum": 100},
+        "freshness": {"type": "number", "minimum": 0, "maximum": 100},
+        "lineup_certainty": {"type": "number", "minimum": 0, "maximum": 100},
+        "regime_relevance": {"type": "number", "minimum": 0, "maximum": 100},
+        "model_stability": {"type": "number", "minimum": 0, "maximum": 100}
       }
     }
   }

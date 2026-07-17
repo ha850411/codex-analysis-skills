@@ -18,7 +18,7 @@ function requireNumbers(values, label) {
 
 function evaluate(check, globalTolerance) {
   const name = check.name || check.type || "unnamed check";
-  const defaultTolerance = check.type === "fair_odds" ? 0.005 : check.type === "ev" ? 0.001 : globalTolerance;
+  const defaultTolerance = check.type === "fair_odds" ? 0.005 : ["ev", "settlement_ev"].includes(check.type) ? 0.001 : globalTolerance;
   const tolerance = Number.isFinite(check.tolerance) ? check.tolerance : defaultTolerance;
   if (tolerance < 0) throw new Error(`${name}: tolerance must be non-negative`);
 
@@ -54,6 +54,53 @@ function evaluate(check, globalTolerance) {
     }
     const expected = check.marketOdds * (check.probability / 100) - 1;
     return { name, pass: closeEnough(check.ev, expected, tolerance), actual: check.ev, expected, tolerance };
+  }
+
+  if (check.type === "settlement_ev") {
+    if (!Number.isFinite(check.marketOdds) || check.marketOdds <= 1 || !Number.isFinite(check.ev)) {
+      throw new Error(`${name}: marketOdds must be greater than 1 and ev must be finite`);
+    }
+    const fields = ["fullWin", "halfWin", "push", "halfLoss"];
+    const values = Object.fromEntries(fields.map((field) => [field, Number.isFinite(check[field]) ? check[field] : 0]));
+    if (Object.values(values).some((value) => value < 0 || value > 100)) {
+      throw new Error(`${name}: settlement probabilities must be within [0, 100]`);
+    }
+    const settlementTotal = Object.values(values).reduce((total, value) => total + value, 0);
+    if (settlementTotal > 100) {
+      throw new Error(`${name}: settlement probabilities cannot exceed 100 in total`);
+    }
+    const expected = check.marketOdds * (values.fullWin / 100)
+      + ((check.marketOdds + 1) / 2) * (values.halfWin / 100)
+      + values.push / 100
+      + 0.5 * (values.halfLoss / 100)
+      - 1;
+    return { name, pass: closeEnough(check.ev, expected, tolerance), actual: check.ev, expected, tolerance };
+  }
+
+  if (check.type === "weighted_confidence") {
+    if (!Number.isInteger(check.value) || check.value < 0 || check.value > 100) {
+      throw new Error(`${name}: value must be an integer within [0, 100]`);
+    }
+    const weights = {
+      dataCompleteness: 0.25,
+      freshness: 0.20,
+      lineupCertainty: 0.25,
+      regimeRelevance: 0.20,
+      modelStability: 0.10,
+    };
+    if (!check.components || typeof check.components !== "object") {
+      throw new Error(`${name}: components must be an object`);
+    }
+    let expected = 0;
+    for (const [field, weight] of Object.entries(weights)) {
+      const value = check.components[field];
+      if (!Number.isFinite(value) || value < 0 || value > 100) {
+        throw new Error(`${name}: components.${field} must be within [0, 100]`);
+      }
+      expected += value * weight;
+    }
+    expected = Math.round(expected);
+    return { name, pass: check.value === expected, actual: check.value, expected, tolerance: 0 };
   }
 
   throw new Error(`${name}: unsupported check type ${JSON.stringify(check.type)}`);

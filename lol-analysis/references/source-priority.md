@@ -1,35 +1,37 @@
 # 資料來源優先順序與驗證規則
 
-## 絕對優先順序
+## 優先順序
 
-1. LoL Fandom 賽事頁
-   - 賽程
-   - 階段賽制
-   - 版本
-   - 隊伍名單
-   - 先發或比賽日名單註記
+1. 官方賽事與隊伍來源
+   - Riot／賽區官方賽程、賽制、版本與公告。
+   - 當場名單、隊伍公告、替補與臨時異動。
+   - 官方資訊對改期、賽制、版本與當場 roster 優先。
 
-2. 官方賽區頻道與比賽 VOD
+2. Leaguepedia 與 Liquipedia
+   - Leaguepedia（`lol.fandom.com`）與 Liquipedia League of Legends 用於賽程、階段、版本、名單、Fearless Draft 與歷史資料交叉查核。
+   - 兩者衝突時，不預設任一社群 wiki 永遠正確；比較更新時間並回到官方來源。
+
+3. 官方賽區頻道與比賽 VOD
    - LCK: https://www.youtube.com/@LCKglobal
    - LPL: https://space.bilibili.com/50329118
    - LCP: https://www.youtube.com/@lolesportstw/videos
    - LEC: https://www.youtube.com/@LEC
    - LCS: https://www.youtube.com/@LCS
 
-3. 數據與歷史比賽參考
+4. 數據與歷史比賽參考
    - https://esports.op.gg/schedules
    - 可取得時使用官方 LoL Esports 比賽頁
    - 有幫助時使用 Oracle's Elixir、Games of Legends、Leaguepedia 衍生數據與其他可信數據網站
    - 季後賽預測時，優先查看最近兩個系列賽、同版本或相近版本的 pick/ban、每局勝方、選邊、時長、前期經濟與物件紀錄。
 
-4. 賽後檢討資料
+5. 賽後檢討資料
    - 優先使用 LoL Fandom/Leaguepedia 的結果、版本、每局勝方、選邊與 VOD 連結。
    - 搭配官方 VOD 或官方精華確認 BP、局間調整、關鍵物件與團戰。
    - 可用 RFT.GG、Oracle's Elixir、Games of Legends、OP.GG Esports 等數據站補足每局時間、擊殺、選角與近期戰績，但不得取代主要來源。
 
 ## 衝突處理
 
-- 如果陣容或先發資料衝突，採用 LoL Fandom，並說明衝突。
+- 如果陣容或先發資料衝突，採用時間較新且更接近當場的官方公告；若只有社群 wiki，列出差異並降低信心度。
 - 如果賽程時間衝突，全部轉換為台灣時間，並說明採用的來源。
 - 如果版本資料缺失，只能謹慎根據賽事規則/日期推論，並標記為未確認。
 - 永遠不要捏造先發。必要時使用「尚未確認」或「LoL Fandom 未列明先發」。
