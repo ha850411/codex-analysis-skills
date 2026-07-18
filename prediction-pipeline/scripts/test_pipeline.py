@@ -101,6 +101,92 @@ class PipelineUnitTests(unittest.TestCase):
         self.assertIn("| 比賽 | 預測 | 機率 | 模型信心度 | 建議 |", lines)
         self.assertIn("A\\|B", lines[-1])
 
+    def test_detailed_analysis_sections_are_rendered_verbatim(self) -> None:
+        final = {"presentation": {"analysis_sections": [
+            {"heading": "A vs B 完整分析", "markdown": "**逐圖分析：**\n\n| 地圖 | 傾向 |\n| --- | --- |\n| Split | A 55% |"},
+            {"heading": "模型校準", "markdown": "- 已套用 agy 修正"},
+        ]}}
+        lines = pipeline.render_analysis_sections(final)
+        output = "\n".join(lines)
+        self.assertIn("## A vs B 完整分析", output)
+        self.assertIn("| Split | A 55% |", output)
+        self.assertIn("## 模型校準", output)
+
+    def test_markdown_includes_detailed_analysis_before_probability_tables(self) -> None:
+        input_data = {
+            "as_of": "2026-07-17T10:00:00+08:00",
+            "event": {
+                "competition": "Test League",
+                "participants": ["A", "B"],
+                "start_time": "2026-07-17T12:00:00+08:00",
+                "timezone": "Asia/Taipei",
+            },
+            "model_data": {"evidence": []},
+        }
+        final = {
+            "model": "test-model",
+            "reasoning_effort": "high",
+            "accepted_findings": [],
+            "rejected_findings": [],
+            "changes": [],
+            "probability_groups": [{
+                "id": "winner",
+                "label": "勝負",
+                "outcomes": [
+                    {"key": "a", "label": "A", "probability": 60},
+                    {"key": "b", "label": "B", "probability": 40},
+                ],
+            }],
+            "confidence": {
+                "value": 74,
+                "rationale": "test",
+                "components": {
+                    "data_completeness": 80,
+                    "freshness": 75,
+                    "lineup_certainty": 70,
+                    "regime_relevance": 75,
+                    "model_stability": 65,
+                },
+            },
+            "risks": [],
+            "missing_data": [],
+            "presentation": {
+                "headline": "headline",
+                "executive_summary": "summary",
+                "analysis_sections": [{"heading": "完整逐場分析", "markdown": "逐圖與 veto 正文"}],
+                "key_points": [],
+                "disclaimer": "",
+                "summary_table": {
+                    "columns": ["比賽", "預測", "機率", "模型信心度", "建議"],
+                    "rows": [["A vs B", "A", "60%", "74%", "觀望"]],
+                },
+            },
+        }
+        review = {"verdict": "pass", "summary": "ok"}
+        output = pipeline.render_markdown(input_data, final, review, [])
+        self.assertLess(output.index("## 完整逐場分析"), output.index("## 最終機率"))
+        self.assertEqual(output.count("## 簡表總結"), 1)
+        self.assertTrue(output.endswith("預測使用模型：test-model high"))
+
+    def test_final_validation_rejects_missing_or_reserved_analysis_sections(self) -> None:
+        presentation = {
+            "headline": "headline",
+            "executive_summary": "summary",
+            "analysis_sections": [],
+            "key_points": [],
+            "disclaimer": "",
+            "summary_table": {
+                "columns": ["比賽", "預測", "機率", "模型信心度", "建議"],
+                "rows": [["A vs B", "A", "60%", "74%", "觀望"]],
+            },
+            "youtube": {"title": "title", "hook": "hook", "sections": [], "closing": "closing"},
+        }
+        errors = pipeline.validate_prediction({"presentation": presentation}, "final")
+        self.assertTrue(any("analysis_sections must be a non-empty array" in error for error in errors))
+        presentation["analysis_sections"] = [{"heading": "完整分析", "markdown": "## 簡表總結"}]
+        errors = pipeline.validate_prediction({"presentation": presentation}, "final")
+        self.assertTrue(any("reserved final-output content" in error for error in errors))
+
     def test_youtube_output_ends_with_summary_table_and_model(self) -> None:
         input_data = {"as_of": "2026-07-17T10:00:00+08:00"}
         final = {

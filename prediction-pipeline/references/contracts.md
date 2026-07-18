@@ -94,6 +94,8 @@
 
 `confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
 
+`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字、`簡表總結` 與模型揭露由匯出器統一附加，不得放入章節正文。
+
 ## 紅隊嚴重度與裁決
 
 - `critical`：預測無效，例如賽事或對手錯誤、已證實市場資訊洩漏。

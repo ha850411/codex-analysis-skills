@@ -1,0 +1,772 @@
+{
+  "schema_version": "1.0",
+  "prediction_id": "valorant-vct-emea-stage2-2026-07-17-tw",
+  "as_of": "2026-07-17T23:06:04+08:00",
+  "event": {
+    "event_id": "vct-2026-emea-stage2-week1-day3",
+    "competition": "VCT 2026 EMEA Stage 2 - Group Stage Week 1 Day 3",
+    "start_time": "2026-07-17T23:00:00+08:00",
+    "timezone": "Asia/Taipei",
+    "format": "Two BO3 matches",
+    "participants": [
+      "Karmine Corp",
+      "Eternal Fire",
+      "Team Vitality",
+      "Natus Vincere"
+    ]
+  },
+  "final_prediction": {
+    "schema_version": "1.0",
+    "prediction_id": "valorant-vct-emea-stage2-2026-07-17-tw",
+    "stage": "final",
+    "generated_at": "2026-07-17T23:25:11+08:00",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "accepted_findings": [
+      "f1",
+      "f3"
+    ],
+    "rejected_findings": [
+      "f2"
+    ],
+    "changes": [
+      {
+        "path": "thesis",
+        "before": "市場盲、Patch 13.01、pre-veto 快照。KC–EF 偏向 EF 2:1、EF 58%；VIT–NAVI 偏向 Vitality 2:1、Vitality 56%。",
+        "after": "市場盲、Patch 13.01 快照。KC–EF 維持 EF 2:1、58%，但資料截止已晚於原定開賽時間，只能視為失效中的 pre-veto 歷史快照，不可作即時判斷；VIT–NAVI 維持 Vitality 2:1、56%。",
+        "reason": "接受 f1 的時序缺陷：第一場資料截止與產生時間均晚於原定開賽時間。輸入未證實實際 veto 內容，因此不以未知的 post-veto 資訊重寫機率，只明確限制快照用途。",
+        "finding_ids": [
+          "f1"
+        ]
+      },
+      {
+        "path": "confidence.components.freshness",
+        "before": "95",
+        "after": "85",
+        "reason": "第一場已進入原定開賽窗口，pre-veto 資訊可能在數分鐘內失效；第二場資料仍屬賽前新鮮資料。",
+        "finding_ids": [
+          "f1"
+        ]
+      },
+      {
+        "path": "confidence.components.regime_relevance",
+        "before": "55",
+        "after": "50",
+        "reason": "Patch 13.01 樣本極少，KC、Vitality 尚無同版本 Stage 2 正式地圖樣本，且缺少近期 pistol%、thrifty% 與 clutch% 聚合。",
+        "finding_ids": [
+          "f3"
+        ]
+      },
+      {
+        "path": "confidence.components.model_stability",
+        "before": "63",
+        "after": "55",
+        "reason": "兩場均對未公布 veto 敏感，Sunset 可能成為決勝圖且有效樣本近乎空白；Summit 放行時的準備差異亦不可觀測。",
+        "finding_ids": [
+          "f3"
+        ]
+      },
+      {
+        "path": "confidence.value",
+        "before": "77",
+        "after": "73",
+        "reason": "依五項固定權重重算：0.25×82 + 0.20×85 + 0.25×80 + 0.20×50 + 0.10×55 = 73。",
+        "finding_ids": [
+          "f1",
+          "f3"
+        ]
+      }
+    ],
+    "thesis": "市場盲、Patch 13.01 快照。KC–EF 的精確比分主峰仍為 Eternal Fire 2:1（30%），系列勝率 EF 58%；但資料截止已晚於 23:00 原定開賽時間，只能保留為失效中的 pre-veto 歷史快照，不可作即時判斷。翌日 02:00 的 VIT–NAVI 主峰為 Team Vitality 2:1（34%），系列勝率 Vitality 56%；其優勢高度依賴禁用 NAVI 的 Split。所有機率均未接觸市場價格，僅表達模型方向。",
+    "probability_groups": [
+      {
+        "id": "kc_ef_ascent_conditional",
+        "label": "KC–EF：Ascent 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_ascent_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 52
+          },
+          {
+            "key": "kc_ef_ascent_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 48
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_breeze_conditional",
+        "label": "KC–EF：Breeze 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_breeze_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 45
+          },
+          {
+            "key": "kc_ef_breeze_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 55
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_haven_conditional",
+        "label": "KC–EF：Haven 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_haven_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 55
+          },
+          {
+            "key": "kc_ef_haven_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 45
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_lotus_conditional",
+        "label": "KC–EF：Lotus 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_lotus_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 36
+          },
+          {
+            "key": "kc_ef_lotus_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 64
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_split_conditional",
+        "label": "KC–EF：Split 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_split_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 35
+          },
+          {
+            "key": "kc_ef_split_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 65
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_sunset_conditional",
+        "label": "KC–EF：Sunset 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_sunset_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 44
+          },
+          {
+            "key": "kc_ef_sunset_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 56
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_summit_conditional",
+        "label": "KC–EF：Summit 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "kc_ef_summit_kc_map_win",
+            "label": "Karmine Corp 勝圖",
+            "probability": 50
+          },
+          {
+            "key": "kc_ef_summit_ef_map_win",
+            "label": "Eternal Fire 勝圖",
+            "probability": 50
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_exact_score",
+        "label": "KC–EF：BO3 精確比分主分布",
+        "outcomes": [
+          {
+            "key": "kc_ef_score_kc_2_0",
+            "label": "Karmine Corp 2:0",
+            "probability": 18
+          },
+          {
+            "key": "kc_ef_score_kc_2_1",
+            "label": "Karmine Corp 2:1",
+            "probability": 24
+          },
+          {
+            "key": "kc_ef_score_ef_2_0",
+            "label": "Eternal Fire 2:0",
+            "probability": 28
+          },
+          {
+            "key": "kc_ef_score_ef_2_1",
+            "label": "Eternal Fire 2:1",
+            "probability": 30
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_series_winner",
+        "label": "KC–EF：系列賽勝率",
+        "outcomes": [
+          {
+            "key": "kc_ef_series_kc_win",
+            "label": "Karmine Corp 勝",
+            "probability": 42
+          },
+          {
+            "key": "kc_ef_series_ef_win",
+            "label": "Eternal Fire 勝",
+            "probability": 58
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_kc_at_least_one_group",
+        "label": "KC–EF：Karmine Corp 至少一圖",
+        "outcomes": [
+          {
+            "key": "kc_ef_kc_at_least_one",
+            "label": "Karmine Corp 至少取得一圖",
+            "probability": 72
+          },
+          {
+            "key": "kc_ef_kc_swept",
+            "label": "Karmine Corp 被 0:2 橫掃",
+            "probability": 28
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_ef_at_least_one_group",
+        "label": "KC–EF：Eternal Fire 至少一圖",
+        "outcomes": [
+          {
+            "key": "kc_ef_ef_at_least_one",
+            "label": "Eternal Fire 至少取得一圖",
+            "probability": 82
+          },
+          {
+            "key": "kc_ef_ef_swept",
+            "label": "Eternal Fire 被 0:2 橫掃",
+            "probability": 18
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_sweep_state",
+        "label": "KC–EF：橫掃狀態",
+        "outcomes": [
+          {
+            "key": "kc_ef_kc_swept_state",
+            "label": "Karmine Corp 被橫掃",
+            "probability": 28
+          },
+          {
+            "key": "kc_ef_ef_swept_state",
+            "label": "Eternal Fire 被橫掃",
+            "probability": 18
+          },
+          {
+            "key": "kc_ef_no_sweep",
+            "label": "無橫掃、系列賽打滿",
+            "probability": 54
+          }
+        ]
+      },
+      {
+        "id": "kc_ef_total_maps",
+        "label": "KC–EF：總地圖數",
+        "outcomes": [
+          {
+            "key": "kc_ef_two_maps",
+            "label": "兩圖結束",
+            "probability": 46
+          },
+          {
+            "key": "kc_ef_three_maps",
+            "label": "三圖打滿",
+            "probability": 54
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_ascent_conditional",
+        "label": "VIT–NAVI：Ascent 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_ascent_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 55
+          },
+          {
+            "key": "vit_navi_ascent_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 45
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_breeze_conditional",
+        "label": "VIT–NAVI：Breeze 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_breeze_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 52
+          },
+          {
+            "key": "vit_navi_breeze_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 48
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_haven_conditional",
+        "label": "VIT–NAVI：Haven 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_haven_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 58
+          },
+          {
+            "key": "vit_navi_haven_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 42
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_lotus_conditional",
+        "label": "VIT–NAVI：Lotus 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_lotus_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 54
+          },
+          {
+            "key": "vit_navi_lotus_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 46
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_split_conditional",
+        "label": "VIT–NAVI：Split 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_split_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 40
+          },
+          {
+            "key": "vit_navi_split_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 60
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_sunset_conditional",
+        "label": "VIT–NAVI：Sunset 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_sunset_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 52
+          },
+          {
+            "key": "vit_navi_sunset_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 48
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_summit_conditional",
+        "label": "VIT–NAVI：Summit 條件式單圖勝率（若進入系列賽）",
+        "outcomes": [
+          {
+            "key": "vit_navi_summit_vit_map_win",
+            "label": "Team Vitality 勝圖",
+            "probability": 50
+          },
+          {
+            "key": "vit_navi_summit_navi_map_win",
+            "label": "Natus Vincere 勝圖",
+            "probability": 50
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_exact_score",
+        "label": "VIT–NAVI：BO3 精確比分主分布",
+        "outcomes": [
+          {
+            "key": "vit_navi_score_vit_2_0",
+            "label": "Team Vitality 2:0",
+            "probability": 22
+          },
+          {
+            "key": "vit_navi_score_vit_2_1",
+            "label": "Team Vitality 2:1",
+            "probability": 34
+          },
+          {
+            "key": "vit_navi_score_navi_2_0",
+            "label": "Natus Vincere 2:0",
+            "probability": 18
+          },
+          {
+            "key": "vit_navi_score_navi_2_1",
+            "label": "Natus Vincere 2:1",
+            "probability": 26
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_series_winner",
+        "label": "VIT–NAVI：系列賽勝率",
+        "outcomes": [
+          {
+            "key": "vit_navi_series_vit_win",
+            "label": "Team Vitality 勝",
+            "probability": 56
+          },
+          {
+            "key": "vit_navi_series_navi_win",
+            "label": "Natus Vincere 勝",
+            "probability": 44
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_vit_at_least_one_group",
+        "label": "VIT–NAVI：Team Vitality 至少一圖",
+        "outcomes": [
+          {
+            "key": "vit_navi_vit_at_least_one",
+            "label": "Team Vitality 至少取得一圖",
+            "probability": 82
+          },
+          {
+            "key": "vit_navi_vit_swept",
+            "label": "Team Vitality 被 0:2 橫掃",
+            "probability": 18
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_navi_at_least_one_group",
+        "label": "VIT–NAVI：Natus Vincere 至少一圖",
+        "outcomes": [
+          {
+            "key": "vit_navi_navi_at_least_one",
+            "label": "Natus Vincere 至少取得一圖",
+            "probability": 78
+          },
+          {
+            "key": "vit_navi_navi_swept",
+            "label": "Natus Vincere 被 0:2 橫掃",
+            "probability": 22
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_sweep_state",
+        "label": "VIT–NAVI：橫掃狀態",
+        "outcomes": [
+          {
+            "key": "vit_navi_vit_swept_state",
+            "label": "Team Vitality 被橫掃",
+            "probability": 18
+          },
+          {
+            "key": "vit_navi_navi_swept_state",
+            "label": "Natus Vincere 被橫掃",
+            "probability": 22
+          },
+          {
+            "key": "vit_navi_no_sweep",
+            "label": "無橫掃、系列賽打滿",
+            "probability": 60
+          }
+        ]
+      },
+      {
+        "id": "vit_navi_total_maps",
+        "label": "VIT–NAVI：總地圖數",
+        "outcomes": [
+          {
+            "key": "vit_navi_two_maps",
+            "label": "兩圖結束",
+            "probability": 40
+          },
+          {
+            "key": "vit_navi_three_maps",
+            "label": "三圖打滿",
+            "probability": 60
+          }
+        ]
+      }
+    ],
+    "confidence": {
+      "value": 73,
+      "rationale": "五項加權為 0.25×82 + 0.20×85 + 0.25×80 + 0.20×50 + 0.10×55 = 73。名單與來源接近資料截止時間，但第一場已進入原定開賽窗口；兩場正式 veto、選邊與部分 caller 分工未確認。Patch 13.01 樣本稀少，KC、Vitality 尚無同版本 Stage 2 正式地圖樣本，Sunset 與 Summit 的可用資料尤其薄弱。",
+      "components": {
+        "data_completeness": 82,
+        "freshness": 85,
+        "lineup_certainty": 80,
+        "regime_relevance": 50,
+        "model_stability": 55
+      }
+    },
+    "key_factors": [
+      {
+        "evidence_ids": [
+          "schedule_official_format",
+          "schedule_vlr_day3",
+          "patch_1301_stage2",
+          "map_pool_1300"
+        ],
+        "impact": "uncertainty",
+        "reason": "今日目標賽程為 23:00 KC–EF 與翌日 02:00 VIT–NAVI，皆為 BO3、Patch 13.01、七圖池 Ascent、Breeze、Haven、Lotus、Split、Sunset、Summit。第一場資料截止已晚於原定開賽時間。"
+      },
+      {
+        "evidence_ids": [
+          "schedule_vlr_day3"
+        ],
+        "impact": "uncertainty",
+        "reason": "接受 f1 的核心時序問題：KC–EF 的 pre-veto 快照在原定開賽後建立，不能作即時判斷。但輸入未提供實際 veto 或證實 veto 當時已公布，因此不以未知資訊重算系列機率。"
+      },
+      {
+        "evidence_ids": [
+          "map_pool_1300",
+          "rankings_context"
+        ],
+        "impact": "mixed",
+        "reason": "否決 f2：Summit 已使用 50%–50% 中性先驗；Sunset 的小幅偏向來自整體基準強度與角色結構，而非虛構地圖樣本。缺少樣本應降低穩定性與擴大敏感範圍，沒有方向性證據時不應機械地改寫平均勝率。"
+      },
+      {
+        "evidence_ids": [
+          "kc_ef_match_rosters",
+          "kc_roles",
+          "ef_agent_structure"
+        ],
+        "impact": "mixed",
+        "reason": "兩隊五人名單均無 stand-in。EF 已在 13.01 展示穩定角色結構；KC 的雙 Duelist 分工仍缺同版本正式驗證。"
+      },
+      {
+        "evidence_ids": [
+          "ef_stage2_result",
+          "ef_stage2_players",
+          "kc_recent_form",
+          "rankings_context"
+        ],
+        "impact": "positive",
+        "reason": "EF 同版本以 Split 13:6、Lotus 13:2 擊敗 Liquid，五人 K/D 均高於 1。小樣本收縮後仍支持 EF 58%，但不構成壓倒性優勢。"
+      },
+      {
+        "evidence_ids": [
+          "kc_recent_form",
+          "kc_ef_h2h"
+        ],
+        "impact": "mixed",
+        "reason": "KC–EF 七圖判斷：KC 微優 Ascent 52%與 Haven 55%；EF 優於 Breeze 55%、Lotus 64%、Split 65%、Sunset 56%；Summit 50%–50%。舊 H2H 跨 Patch 且兩張地圖已退出，只作弱先驗。"
+      },
+      {
+        "evidence_ids": [
+          "ef_stage2_result",
+          "kc_recent_form",
+          "map_pool_1300"
+        ],
+        "impact": "mixed",
+        "reason": "KC–EF 預測 veto 為 KC ban Split、EF ban Summit、KC pick Haven、EF pick Lotus、KC ban Breeze、EF ban Ascent、Sunset decider。若實際 veto 不同，必須建立 post-veto 新快照。"
+      },
+      {
+        "evidence_ids": [
+          "vit_navi_match_rosters",
+          "vit_roles",
+          "navi_agent_structure"
+        ],
+        "impact": "mixed",
+        "reason": "Vitality 擁有 Derke 的單點上限與較深跨地圖基準；NAVI 已在同版本展示 ExiT、hiro、Ruxic 等人的完整角色結構。"
+      },
+      {
+        "evidence_ids": [
+          "navi_stage2_result",
+          "navi_stage2_players",
+          "vit_recent_form",
+          "rankings_context"
+        ],
+        "impact": "mixed",
+        "reason": "Vitality 的基準強度支持 56% 小優；NAVI 同版本 2:0 FUT，且 Split、Ascent 已獲驗證，使系列賽仍有 60% 機率打滿三圖。"
+      },
+      {
+        "evidence_ids": [
+          "vit_recent_form",
+          "navi_stage2_result",
+          "map_pool_1300"
+        ],
+        "impact": "mixed",
+        "reason": "VIT–NAVI 七圖判斷：Vitality 優於 Ascent 55%、Breeze 52%、Haven 58%、Lotus 54%、Sunset 52%；NAVI 在 Split 60%占優；Summit 50%–50%。Sunset 與 Summit 均屬低信心。"
+      },
+      {
+        "evidence_ids": [
+          "navi_stage2_result",
+          "vit_recent_form",
+          "map_pool_1300"
+        ],
+        "impact": "mixed",
+        "reason": "VIT–NAVI 預測 veto 為 Vitality ban Split、NAVI ban Haven、Vitality pick Ascent、NAVI pick Breeze、Vitality ban Summit、NAVI ban Lotus、Sunset decider。Vitality 若放出 Split，NAVI 至少一圖與系列翻轉機率均會上升。"
+      },
+      {
+        "evidence_ids": [
+          "ef_stage2_result",
+          "kc_recent_form",
+          "navi_stage2_result",
+          "vit_recent_form"
+        ],
+        "impact": "mixed",
+        "reason": "所有系列勝率、至少一圖、橫掃狀態及總地圖數均由各場四項精確比分主分布確定性推導；兩場分布均互斥、完備且合計 100%。"
+      }
+    ],
+    "risks": [
+      "KC–EF 的資料截止時間為 23:06，晚於 23:00 原定開賽時間；若正式 veto、選邊或比賽內容已出現，本快照已失效，不能作即時建議。",
+      "Patch 13.01 樣本極少；EF 與 NAVI 的同版本證據各僅兩張正式地圖，存在顯著小樣本與對手情境偏差。",
+      "Summit 為新圖，四隊均無可用的頂級正式賽樣本；若意外放行，50% 中性先驗可能快速失效。",
+      "Sunset 在四隊近期有效樣本中同樣近乎空白，卻可能成為兩場預測 veto 的決勝圖，增加比分分布的不穩定性。",
+      "KC 與 Vitality 尚無 Patch 13.01／Stage 2 正式地圖內容，跨賽事基準可能高估版本適應速度。",
+      "VIT–NAVI 對 veto 特別敏感；Vitality 放出 Split 是 NAVI 翻轉系列方向的主要條件。",
+      "全程未使用或推測市場價格，因此不能評估價格價值、EV 或注碼。"
+    ],
+    "missing_data": [
+      "兩場正式 map veto、地圖順序、pick owner 與選邊。",
+      "KC–EF 在資料截止時是否已實際開始，以及 veto 是否已正式公布。",
+      "Karmine Corp 與 Team Vitality 的 Patch 13.01／Stage 2 正式地圖樣本。",
+      "四隊在 Summit 的頂級正式賽樣本，以及 Sunset 的充分近期樣本。",
+      "可交叉查核的近期 pistol%、thrifty%、clutch% 與 KAST 聚合。",
+      "部分隊伍經當日官方確認的 IGL／caller 分工。"
+    ],
+    "presentation": {
+      "analysis_sections": [
+        {
+          "heading": "今日 Valorant 賽程盤點（TW，UTC+8）",
+          "markdown": "| 時間 | 賽事 | 對戰 | BO | 資料狀態 |\n| --- | --- | --- | --- | --- |\n| 2026-07-17 23:00 | VCT 2026 EMEA Stage 2 | Karmine Corp vs Eternal Fire | BO3 | 官方賽制與 VLR 賽程已確認；資料截止 23:06，已超過原定開賽時間，僅保留為失效中的歷史 pre-veto 快照 |\n| 2026-07-18 02:00 | VCT 2026 EMEA Stage 2 | Team Vitality vs Natus Vincere | BO3 | 官方賽制與 VLR 賽程已確認；截至 23:06 為 pre-veto，正式 veto、地圖順序與選邊未知 |\n\n兩場皆以 Patch 13.01 與 Ascent、Breeze、Haven、Lotus、Split、Sunset、Summit 七圖池建模。這是原資料截止時間的裁決後報告，不混入其後的實際賽果或盤口。"
+        },
+        {
+          "heading": "Karmine Corp vs Eternal Fire 完整分析",
+          "markdown": "- 預測快照：pre-veto 歷史快照；因資料截止晚於原定開賽時間，已失去即時決策效力。\n- 資料截止：2026-07-17 23:06:04（UTC+8）。\n- 最終方向：Eternal Fire 58%，預測 EF 2:1；此方向僅供模型稽核，不建議追單。\n\n### 預計先發名單確認\n\n- Karmine Corp：Avez（Initiator）、SUYGETSU（Sentinel）、dos9（Controller）、LewN（Raze／Duelist）、N4RRATE（Jett／Phoenix／Duelist）。無 stand-in 標示；雙 Duelist 分工尚未在 Patch 13.01 正式驗證。\n- Eternal Fire：Izzy（Neon／主 Duelist）、audaz（Omen／Controller）、Favian（Veto／Sentinel）、echo（Viper）、nekky（Fade／Sova／Initiator）。無 stand-in 標示；同版本首戰兩圖角色結構穩定。\n\n### 數據對比矩陣\n\n| 指標 | Karmine Corp | Eternal Fire | 優勢方 |\n| --- | --- | --- | --- |\n| 近期狀態 | 最近三場 0:2 Vitality、2:1 Paper Rex、1:2 NRG | Patch 13.01 首戰 2:0 Liquid，Split 13:6、Lotus 13:2 | EF |\n| 地圖池深度 | Haven／Ascent 有取圖路徑；Split、Lotus 模型較弱 | Split、Lotus 有同版本實戰；Breeze／Sunset小優 | EF |\n| 手槍局勝率 | N/A（缺少可交叉查核聚合） | N/A（缺少可交叉查核聚合） | 無法判定 |\n| 首殺能力 | 缺少同版本 FK/FD 聚合 | Favian 7/4、Izzy 7/2，但僅兩圖小樣本 | EF 小樣本 |\n| 攻方表現 | N/A（缺少同版本攻方拆分） | N/A（缺少同版本攻方拆分） | 無法判定 |\n| 守方表現 | N/A（缺少同版本守方拆分） | N/A（缺少同版本守方拆分） | 無法判定 |\n| 核心火力 | N4RRATE／LewN 分擔 Duelist，缺少 13.01 正式數據 | Favian 321 ACS、1.82 K/D；Izzy 236 ACS、1.82 K/D | EF（需強收縮） |\n| 版本／Meta 適應 | 尚無 Stage 2／13.01 正式地圖 | 已用 Neon、Omen、Veto、Viper、Fade／Sova 完成 2:0 | EF |\n| 同 Patch／同賽事樣本 | 0 張正式地圖 | 2 張正式地圖 | EF，但樣本極小 |\n\n### 全地圖逐圖分析\n\n| 地圖 | KC 狀態 | EF 狀態 | 對位重點 | 單圖傾向 | Veto 意義 |\n| --- | --- | --- | --- | --- | --- |\n| Ascent | 5 月 H2H 曾 13:10 取勝，但跨 Patch；同版本樣本不足 | 13.01 正式樣本不足，整體熱度較佳 | KC 舊有控圖基礎對 EF 當前火力；舊 H2H 僅弱先驗 | KC 52% / EF 48%（低至中信心） | KC 替代 pick；EF 後續 ban 候選 |\n| Breeze | 對 NRG 6:13；近期防守與進攻拆分缺資料 | 對 Liquid veto 中後續 ban，未出賽 | KC 近期內容偏弱，EF 僅以整體狀態補強 | KC 45% / EF 55%（低信心） | KC 後續 ban 候選 |\n| Haven | 對 NRG 7:13，但歷史基礎仍是 KC 現行池較深路徑 | 對 Liquid 為未使用 decider，近期正式樣本不足 | KC 的熟悉度對 EF 未驗證同版本準備 | KC 55% / EF 45%（中低信心） | KC 最合理 pick |\n| Lotus | KC 近期有效樣本不足，原模型基準偏弱 | 13.01 以 13:2 擊敗 Liquid，角色結構已驗證 | EF 的 Viper／Initiator 結構與重奪樣本明顯較完整 | KC 36% / EF 64%（中信心） | EF 首選圖 |\n| Split | KC 同版本樣本不足 | 13.01 以 13:6 擊敗 Liquid；Favian、Izzy開局火力突出 | EF 有現成攻防與角色證據，KC 缺乏反證 | KC 35% / EF 65%（中信心） | KC 首 ban |\n| Sunset | 雙方近期有效正式樣本近乎空白 | 雙方近期有效正式樣本近乎空白 | 僅按整體強度與角色結構做收縮，不能視為實證圖 | KC 44% / EF 56%（低信心） | 預測 decider |\n| Summit | 新圖，無頂級正式樣本 | 新圖，無頂級正式樣本 | 無方向性證據，採中性先驗 | KC 50% / EF 50%（極低信心） | EF 預測首 ban；若放行須重算 |\n\n### 預測 Ban/Pick 流程\n\n1. KC ban Split：EF 已有 13.01 的 13:6 實戰，而 KC 缺少同版本反證。\n2. EF ban Summit：新圖準備完全不可觀測，模型主情境假設 EF 移除最大方差。\n3. KC pick Haven：KC 最可驗證的取圖路徑，單圖約 55%。\n4. EF pick Lotus：EF 剛以 13:2 驗證角色結構，單圖約 64%。\n5. KC ban Breeze：降低 EF 以整體熱度擴張第二條取圖路徑。\n6. EF ban Ascent：移除 KC 舊 H2H 仍保留的小幅優勢。\n7. Sunset decider：EF 約 56%，但樣本近乎空白，屬低信心決勝圖。\n\n### 深度戰況分析\n\n- KC 的系列賽生存條件是先拿 Haven，並讓 Ascent 留在後段；若實際 veto 同時失去這兩條路徑，EF 2:0 機率會上升。\n- EF 的優勢集中在已展示的 Split／Lotus，而不是全面碾壓。首戰兩圖數據必須強收縮，不能直接外推為穩定 65% 以上系列優勢。\n- EF 的同版本角色結構較完整；KC 的 LewN／N4RRATE 雙 Duelist 配置在新 Patch 的分工與 caller 配合仍是主要未知。\n- 第一場在資料截止時已跨過原定開賽時間；任何正式 veto、選邊或首回合資訊都會使這份 pre-veto 分布失效。\n\n### 模型校準檢核\n\n- Patch／特務依賴：EF 有兩圖 13.01 證據，KC 沒有；已提高 EF 的近期權重，但因樣本僅兩圖而強收縮。\n- 同賽事節奏：EF 已完成 Stage 2 首戰且內容強勢；KC 尚未展示同版本內容，熱手差異列為 EF 優勢。\n- H2H 錨定風險：KC 2:1 EF 的舊 H2H 跨 Patch，且 Fracture、Pearl 已退出，只保留 Ascent 弱先驗。\n- 已公布 veto 重算：輸入未包含實際 veto，因此沒有假裝使用 post-veto 資訊；正式 veto 出現後必須建立新版快照。\n- 外部資料反證：VLR 區域排名偏向 EF；只作基準收縮，不覆蓋逐圖與同版本證據。\n- 橫掃風險：KC 被 0:2 機率 28%，EF 被 0:2 機率 18%；打滿三圖 54%。\n- agy 修正：接受時序失效與信心偏高批評；新圖 Summit 維持 50/50，Sunset 保留低信心方向，不用不存在的樣本硬改平均勝率。\n\n### 賽果預測模型\n\n| 勝方 | 直落二 | 打滿 |\n| --- | ---: | ---: |\n| Karmine Corp | 2:0 · 18% | 2:1 · 24% |\n| Eternal Fire | 2:0 · 28% | 2:1 · 30% |\n\n- 預測比分：Eternal Fire 2:1。\n- 獨贏機率：KC 42% / EF 58%。\n- 至少一圖：KC 72% / EF 82%。\n- 模型信心度：73%（兩場共用的裁決後五項加權信心；本場另受時效失效限制）。\n- 核心風險：實際 veto 與比賽狀態未知；不能作即時投注或賽況建議。"
+        },
+        {
+          "heading": "Team Vitality vs Natus Vincere 完整分析",
+          "markdown": "- 預測快照：截至原資料截止時間的 pre-veto 歷史快照。\n- 資料截止：2026-07-17 23:06:04（UTC+8）；原定開賽為 2026-07-18 02:00。\n- 最終方向：Team Vitality 56%，預測 Vitality 2:1；正式 veto 與即時價格缺失，因此只屬模型方向。\n\n### 預計先發名單確認\n\n- Team Vitality：Derke（Jett／主 Duelist）、Sayonara（Phoenix／Raze／Sova 彈性位）、Chronicle（Sentinel／Viper）、Jamppi（Initiator）、PROFEK（Controller）。無 stand-in 標示。\n- Natus Vincere：Ruxic（Omen／Controller）、hiro（Viper／Vyse）、chloric（Skye／Sova／Initiator）、ExiT（Waylay／Yoru／主 Duelist）、CyvOph（Sage）。無 stand-in 標示；同版本首戰角色結構已確認。\n\n### 數據對比矩陣\n\n| 指標 | Team Vitality | Natus Vincere | 優勢方 |\n| --- | --- | --- | --- |\n| 近期狀態 | 最近五場 2:0 FUT、0:2 Leviatan、2:0 KC、2:1 NRG、1:2 Nongshim | Patch 13.01 首戰 2:0 FUT，Split 13:6、Ascent 13:9 | NAVI 熱手；Vitality 長窗較穩 |\n| 地圖池深度 | Ascent、Haven、Lotus有小優基準；Split近期偏弱 | Split已有同版本驗證；Ascent也完成13:9 | Vitality深度 / NAVI Split |\n| 手槍局勝率 | N/A（缺少可交叉查核聚合） | N/A（缺少可交叉查核聚合） | 無法判定 |\n| 首殺能力 | 缺少 13.01 FK/FD 聚合 | ExiT 10/7，但僅兩圖小樣本 | NAVI 小樣本 |\n| 攻方表現 | N/A（缺少同版本攻方拆分） | N/A（缺少同版本攻方拆分） | 無法判定 |\n| 守方表現 | N/A（缺少同版本守方拆分） | N/A（缺少同版本守方拆分） | 無法判定 |\n| 核心火力 | Derke 提供單點上限；尚無 Stage 2 數據 | hiro 280 ACS、1.68 K/D；ExiT 260 ACS | NAVI 當前樣本 / Vitality 長窗 |\n| 版本／Meta 適應 | 尚無 Stage 2／13.01 正式地圖 | Waylay／Yoru、Omen、Viper／Vyse、Skye／Sova 已完成 2:0 | NAVI |\n| 同 Patch／同賽事樣本 | 0 張正式地圖 | 2 張正式地圖 | NAVI，但樣本極小 |\n\n### 全地圖逐圖分析\n\n| 地圖 | Vitality 狀態 | NAVI 狀態 | 對位重點 | 單圖傾向 | Veto 意義 |\n| --- | --- | --- | --- | --- | --- |\n| Ascent | 最近一場自選圖 13:10，長窗基準較穩 | 13.01 在 FUT 自選圖以 13:9 取勝 | Vitality 基準深度對 NAVI 同版本熱度 | Vitality 55% / NAVI 45%（中低信心） | Vitality 預測 pick |\n| Breeze | 長窗基準尚可，但最近曾 2:13 落敗 | 前場首輪被 FUT ban，近期實戰不足 | Vitality 波動大，NAVI 可作針對性選圖 | Vitality 52% / NAVI 48%（低信心） | NAVI 預測 pick |\n| Haven | Vitality 有可用歷史基礎 | NAVI 前場首 ban，近期正式樣本不足 | Vitality 熟悉度較佳，NAVI可能直接移除 | Vitality 58% / NAVI 42%（中低信心） | NAVI 首 ban |\n| Lotus | Vitality 長窗深度略佳但近期走弱 | NAVI 前場後續 ban，沒有同版本實戰 | 雙方都缺當前版本證據，Vitality僅基準小優 | Vitality 54% / NAVI 46%（低信心） | NAVI 後續 ban 候選 |\n| Split | 最近一場 7:13，內容偏弱 | 13.01 自選圖 13:6，角色與火力已驗證 | NAVI 的 ExiT／hiro熱度對 Vitality近期弱點 | Vitality 40% / NAVI 60%（中信心） | Vitality 必須優先 ban |\n| Sunset | 雙方正式樣本不足；只按整體基準微調 | 前場僅成為未使用 decider | 缺乏方向性實證，臨場 BP 與選邊影響大 | Vitality 52% / NAVI 48%（低信心） | 預測 decider |\n| Summit | 新圖，無頂級正式樣本 | 新圖，無頂級正式樣本 | 無方向性證據，採中性先驗 | Vitality 50% / NAVI 50%（極低信心） | Vitality 後續 ban；若放行須重算 |\n\n### 預測 Ban/Pick 流程\n\n1. Vitality ban Split：NAVI 已在同版本以 13:6 驗證，而 Vitality 最近以 7:13 落敗。\n2. NAVI ban Haven：NAVI 前場即採首 ban，且 Vitality 在此圖有較深基準。\n3. Vitality pick Ascent：Vitality 最近自選圖 13:10，模型約 55%。\n4. NAVI pick Breeze：以 Vitality 最近 2:13 的波動作為針對點；模型仍接近五五開。\n5. Vitality ban Summit：移除新圖不可觀測方差。\n6. NAVI ban Lotus：延續前場移除傾向，避免 Vitality 長窗小優。\n7. Sunset decider：Vitality 約 52%，但屬低信心圖。\n\n### 深度戰況分析\n\n- Vitality 的 56% 小優主要來自較高的區域基準與 Ascent／Haven／Lotus 三條可執行路徑，不是當前 Patch 熱度。\n- NAVI 的翻轉核心是 Split。若 Vitality沒有首 ban Split，NAVI 的取圖、至少一圖與系列爆冷機率都應上修，原 56/44 方向可能接近翻轉。\n- NAVI 已用 ExiT、hiro、Ruxic 的同版本角色結構完成 2:0；Vitality雖有 Derke上限與多角色彈性，但尚未在 Stage 2 驗證。\n- Breeze 與 Sunset 都接近五五開，因此系列分布將三圖機率放到 60%，不把 Vitality小優誤寫成穩定橫掃。\n\n### 模型校準檢核\n\n- Patch／特務依賴：NAVI 有兩圖 13.01 證據，Vitality沒有；已納入熱手情境並對兩圖小樣本強收縮。\n- 同賽事節奏：NAVI 2:0 FUT 的內容支持當前即戰力；Vitality的休息與長窗基準不能直接抵銷實戰缺口。\n- H2H 錨定風險：本場沒有用舊 H2H 主導方向，主要依逐圖路徑與同版本樣本。\n- 已公布 veto 重算：原輸入尚未含正式 veto；正式地圖順序出現後必須建立新快照，尤其檢查 Split 是否被放行。\n- 外部資料反證：VLR 區域排名偏向 Vitality；只作基準先驗，未覆蓋 NAVI 的同版本 Split／Ascent 表現。\n- 橫掃／反掃風險：Vitality被 0:2 為 18%，NAVI被 0:2 為 22%；打滿三圖 60%。\n- agy 修正：整體信心由 77% 降為 73%；Sunset與Summit列為低／極低信心，Summit維持50/50中性先驗。\n\n### 賽果預測模型\n\n| 勝方 | 直落二 | 打滿 |\n| --- | ---: | ---: |\n| Team Vitality | 2:0 · 22% | 2:1 · 34% |\n| Natus Vincere | 2:0 · 18% | 2:1 · 26% |\n\n- 預測比分：Team Vitality 2:1。\n- 獨贏機率：Vitality 56% / NAVI 44%。\n- 至少一圖：Vitality 82% / NAVI 78%。\n- 打滿三圖：60%，公允賠率 1.67。\n- Vitality獨贏公允賠率：1.79。\n- 模型信心度：73%（裁決後五項加權）。\n- 核心風險：Vitality若放出 Split，NAVI取圖與系列翻轉機率會明顯上升；沒有即時盤價，不能確認 EV。"
+        }
+      ],
+      "headline": "EF 58%、Vitality 56%；第一場僅保留為已過時效的 pre-veto 快照",
+      "executive_summary": "獨立裁決維持兩場主分布：KC–EF 偏向 Eternal Fire 2:1，VIT–NAVI 偏向 Team Vitality 2:1。第一場的資料截止已晚於原定開賽時間，因此即使機率數學一致，也不可當成即時判斷。信心度因時序、Patch 13.01 小樣本、未公布 veto 及 Sunset／Summit 資料不足，由 77% 下修至 73%。",
+      "key_points": [
+        "KC–EF：EF 58%、KC 42%；EF 2:1 為單一最高比分結果 30%，KC 被橫掃機率 28%。",
+        "VIT–NAVI：Vitality 56%、NAVI 44%；Vitality 2:1 為單一最高比分結果 34%，三圖機率 60%。",
+        "KC 最清楚的取圖路徑是 Haven；EF 的主要優勢圖為 Lotus 與 Split。",
+        "Vitality 必須優先處理 NAVI 的 Split；若放行，系列賽可能接近翻轉。",
+        "Summit 採中性先驗；Sunset 的小幅傾向只代表基準估計，兩圖均需視為低信心。"
+      ],
+      "disclaimer": "本裁決是市場盲模型輸出，不含市場價格、EV、賠率門檻或注碼。KC–EF 已超過原定開賽時間，不能作即時投注或賽況建議；VIT–NAVI 亦須在正式 veto 公布後建立新快照。",
+      "summary_table": {
+        "columns": [
+          "時間 (UTC+8)",
+          "對戰組合",
+          "賽制（BO?）",
+          "預測比分",
+          "獨贏機率（Win%）",
+          "受讓/破蛋機率（+1.5 maps / 至少一圖）",
+          "推薦",
+          "模型信心度",
+          "核心風險（Key Risk）"
+        ],
+        "rows": [
+          [
+            "2026-07-17 23:00",
+            "Karmine Corp vs Eternal Fire",
+            "BO3",
+            "Eternal Fire 2:1",
+            "KC 42% / EF 58%",
+            "KC 72% / EF 82%",
+            "不下注",
+            "73%（整體；該場時效較低）",
+            "資料截止晚於原定開賽時間；實際 veto 未知"
+          ],
+          [
+            "2026-07-18 02:00",
+            "Team Vitality vs Natus Vincere",
+            "BO3",
+            "Team Vitality 2:1",
+            "Vitality 56% / NAVI 44%",
+            "Vitality 82% / NAVI 78%",
+            "模型傾向：Team Vitality；待即時價格",
+            "73%",
+            "Vitality 若放出 Split，NAVI 可明顯提高取圖與翻盤機率"
+          ]
+        ]
+      },
+      "youtube": {
+        "title": "VCT EMEA Stage 2 裁決：EF 小優、Vitality 險勝，第一場時效警報",
+        "hook": "兩場都是 BO3 小優格局，但真正需要先看的不是隊名，而是時間與 veto：KC 對 EF 的 pre-veto 快照已跨過原定開賽時間。",
+        "sections": [
+          {
+            "heading": "今日賽程與裁決結論",
+            "script": "台灣時間 23 點是 Karmine Corp 對 Eternal Fire，凌晨 2 點是 Team Vitality 對 NAVI。模型維持 EF 58%、Vitality 56%，但整體信心由 77% 下修至 73%。"
+          },
+          {
+            "heading": "Karmine Corp 對 Eternal Fire",
+            "script": "EF 的同版本 Split 與 Lotus 表現提供主要優勢，精確比分主峰是 EF 2 比 1、30%。KC 最有機會從 Haven 取圖。不過這份資料在原定開賽後才截止，因此只能當歷史 pre-veto 快照，不能作即時決策。"
+          },
+          {
+            "heading": "Vitality 對 NAVI",
+            "script": "Vitality 的基準強度與 Ascent、Haven 路徑形成 56% 小優；NAVI 則握有 Split 優勢與同版本熱手樣本。若 Vitality 禁掉 Split，主情境偏向 2 比 1；若放行，系列方向可能接近翻轉。"
+          },
+          {
+            "heading": "新圖與樣本風險",
+            "script": "Summit 沒有四隊的頂級正式樣本，因此維持五五開。Sunset 也缺乏充分近期資料，若成為決勝圖，模型不確定性會明顯增加。"
+          },
+          {
+            "heading": "最終提醒",
+            "script": "所有機率都沒有接觸市場價格。這裡只能談模型方向，不能談 EV、注碼或投注價值；正式 veto 公布後必須重新建立快照。"
+          }
+        ],
+        "closing": "最終模型方向是 EF 58%、Vitality 56%；第一場不作即時使用，第二場則等待正式 veto 與即時價格。"
+      }
+    }
+  },
+  "red_team": {
+    "reviewer": {
+      "tool": "agy",
+      "agent": "Gemini 3.5 Flash (High)"
+    },
+    "verdict": "revise",
+    "summary": "The primary prediction is internally consistent and the probability math is coherent. However, there is a temporal misalignment: the prediction was generated 19 minutes after the scheduled start time of the first match (Karmine Corp vs Eternal Fire), meaning it relies on a pre-veto simulation when real-time vetoes were already available. Additionally, the win rate models for the new maps Sunset and Summit introduce high uncertainty due to a total lack of historical data, which is not fully reflected in the final confidence score."
+  },
+  "derived_markets": [],
+  "artifacts": {
+    "primary": "primary_prediction.json",
+    "review": "red_team_review.json",
+    "final": "final_prediction.json"
+  }
+}

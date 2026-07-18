@@ -402,10 +402,31 @@ def validate_prediction(data: Any, stage: str) -> list[str]:
         if not isinstance(presentation, dict):
             errors.append("final.presentation must be an object")
         else:
-            need(presentation, ["headline", "executive_summary", "key_points", "disclaimer", "summary_table", "youtube"], "final.presentation", errors)
+            need(presentation, ["headline", "executive_summary", "analysis_sections", "key_points", "disclaimer", "summary_table", "youtube"], "final.presentation", errors)
             for field in ("headline", "executive_summary", "disclaimer"):
                 if not isinstance(presentation.get(field), str):
                     errors.append(f"final.presentation.{field} must be a string")
+            analysis_sections = presentation.get("analysis_sections")
+            if not isinstance(analysis_sections, list) or not analysis_sections:
+                errors.append("final.presentation.analysis_sections must be a non-empty array")
+            else:
+                headings: set[str] = set()
+                for i, section in enumerate(analysis_sections):
+                    if not isinstance(section, dict):
+                        errors.append(f"final.presentation.analysis_sections[{i}] must be an object")
+                        continue
+                    heading = section.get("heading")
+                    markdown = section.get("markdown")
+                    if not isinstance(heading, str) or not heading.strip():
+                        errors.append(f"final.presentation.analysis_sections[{i}].heading must be a non-empty string")
+                    elif heading.strip() in headings:
+                        errors.append(f"final.presentation.analysis_sections has duplicate heading: {heading.strip()}")
+                    else:
+                        headings.add(heading.strip())
+                    if not isinstance(markdown, str) or not markdown.strip():
+                        errors.append(f"final.presentation.analysis_sections[{i}].markdown must be a non-empty string")
+                    elif re.search(r"(?m)^#{1,6}\s*簡表總結\s*$|^預測使用模型：", markdown):
+                        errors.append(f"final.presentation.analysis_sections[{i}].markdown contains reserved final-output content")
             if not isinstance(presentation.get("key_points"), list) or any(not isinstance(item, str) for item in presentation.get("key_points", [])):
                 errors.append("final.presentation.key_points must be an array of strings")
             summary = presentation.get("summary_table")
@@ -705,6 +726,9 @@ Hard rules:
 - Market prices are withheld and cannot affect this adjudication. Do not calculate fair odds or EV; the exporter does that deterministically afterward.
 - Keep probability groups mutually exclusive, exhaustive, and total 100%.
 - Use whole percentages by default and at most one decimal. Recompute confidence from the five weighted components.
+- Build presentation.analysis_sections as the complete, reader-facing, post-adjudication report required by the domain skill and input mode. Preserve every still-valid detailed roster, matchup, map/draft/veto, calibration, and scenario explanation from the primary prediction; do not compress them into key_points.
+- For daily-summary or multi-match requests that explicitly ask for deep/full analysis, include the schedule inventory and a separate fully expanded section for every selected match. Every number and limitation in analysis_sections must reflect the final adjudication, including accepted agy corrections, never stale primary values.
+- Each analysis_sections item needs a unique heading and a Markdown body. Do not put sources, disclaimer, 簡表總結, or 預測使用模型 in these bodies; the exporter appends those deterministically.
 - Fill presentation.summary_table from the domain skill template. It must include 模型信心度 and every row must match the column count.
 - Because prices are withheld, recommendation cells may only state 模型傾向／待即時價格／不下注; never invent a market price, EV, or stake.
 - Produce Traditional Chinese presentation fields unless the original question requests another language.
@@ -809,10 +833,19 @@ def render_summary_table(final: dict[str, Any]) -> list[str]:
     return lines
 
 
+def render_analysis_sections(final: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for section in final["presentation"]["analysis_sections"]:
+        lines.extend([f"## {section['heading'].strip()}", "", section["markdown"].strip(), ""])
+    return lines
+
+
 def render_markdown(input_data: dict[str, Any], final: dict[str, Any], review: dict[str, Any], market_rows: list[dict[str, Any]]) -> str:
     p = final["presentation"]
     event = input_data["event"]
-    lines = [f"# {p['headline']}", "", "## 最終結論", "", p["executive_summary"], "", "## 賽事與資料狀態", "", f"- 賽事：{event['competition']}｜{' vs '.join(event['participants'])}", f"- 開始時間：{event['start_time']}（{event['timezone']}）", f"- 資料截止：{input_data['as_of']}", f"- 模型信心度：{final['confidence']['value']}% — {final['confidence']['rationale']}", "", "| 信心度組成 | 分數 |", "| --- | ---: |"]
+    participants = event["participants"]
+    participant_label = " vs ".join(participants) if len(participants) == 2 else f"參賽隊伍：{'、'.join(participants)}"
+    lines = [f"# {p['headline']}", "", "## 最終結論", "", p["executive_summary"], "", "## 賽事與資料狀態", "", f"- 賽事：{event['competition']}｜{participant_label}", f"- 開始時間：{event['start_time']}（{event['timezone']}）", f"- 資料截止：{input_data['as_of']}", f"- 模型信心度：{final['confidence']['value']}% — {final['confidence']['rationale']}", "", "| 信心度組成 | 分數 |", "| --- | ---: |"]
     component_labels = {
         "data_completeness": "資料完整度",
         "freshness": "資料新鮮度",
@@ -822,7 +855,9 @@ def render_markdown(input_data: dict[str, Any], final: dict[str, Any], review: d
     }
     for key in CONFIDENCE_WEIGHTS:
         lines.append(f"| {component_labels[key]} | {float(final['confidence']['components'][key]):g}% |")
-    lines.extend(["", "## 最終機率", ""])
+    lines.append("")
+    lines.extend(render_analysis_sections(final))
+    lines.extend(["## 最終機率", ""])
     for group in final["probability_groups"]:
         lines.extend([f"### {group['label']}", "", "| 結果 | 機率 | 公允賠率 |", "| --- | ---: | ---: |"])
         for outcome in group["outcomes"]:

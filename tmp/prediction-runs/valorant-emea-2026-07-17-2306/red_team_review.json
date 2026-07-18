@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "prediction_id": "valorant-vct-emea-stage2-2026-07-17-tw",
+  "stage": "red_team",
+  "generated_at": "2026-07-17T23:19:55+08:00",
+  "reviewer": {
+    "tool": "agy",
+    "agent": "Gemini 3.5 Flash (High)"
+  },
+  "verdict": "revise",
+  "summary": "The primary prediction is internally consistent and the probability math is coherent. However, there is a temporal misalignment: the prediction was generated 19 minutes after the scheduled start time of the first match (Karmine Corp vs Eternal Fire), meaning it relies on a pre-veto simulation when real-time vetoes were already available. Additionally, the win rate models for the new maps Sunset and Summit introduce high uncertainty due to a total lack of historical data, which is not fully reflected in the final confidence score.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "category": "traceability",
+      "claim": "The prediction is presented as a pre-veto snapshot but was generated after the match start time, ignoring available live map veto and selection data.",
+      "evidence_ids": [
+        "schedule_vlr_day3",
+        "kc_ef_match_rosters"
+      ],
+      "recommended_action": "Check the system time against the match start time. If the start time has passed, pivot the prediction pipeline to retrieve and utilize the actual live map vetoes instead of running a pre-veto simulation."
+    },
+    {
+      "id": "f2",
+      "severity": "medium",
+      "category": "reasoning",
+      "claim": "The model simulates map outcomes and assigns specific win rates on new maps (Summit and Sunset) where the teams have zero top-level matches, relying on unsupported baseline assumptions.",
+      "evidence_ids": [
+        "map_pool_1300"
+      ],
+      "recommended_action": "For new maps with zero historical data, explicitly apply a wider variance penalty or increase the error margins in the series score distribution, rather than assuming standard team rating differences apply."
+    },
+    {
+      "id": "f3",
+      "severity": "low",
+      "category": "confidence",
+      "claim": "The confidence score remains high at 77 despite significant missing sub-map metrics (pistol%, thrifty%, clutch% aggregates) on a brand new patch.",
+      "evidence_ids": [
+        "patch_1301_stage2"
+      ],
+      "recommended_action": "Lower the weight or score of the 'regime_relevance' or 'data_completeness' components when crucial game-state statistics are unavailable."
+    }
+  ],
+  "consistency_checks": [
+    {
+      "name": "Probability Group Sum Check (KC-EF)",
+      "status": "pass",
+      "details": "The sum of the exact score probabilities (18 + 24 + 28 + 30) is exactly 100%."
+    },
+    {
+      "name": "Derived Probability Consistency Check (KC-EF)",
+      "status": "pass",
+      "details": "Derived probabilities match the primary distribution perfectly: series win (42% KC, 58% EF), two maps (46%), three maps (54%), and sweep states (28% KC swept, 18% EF swept, 54% no sweep)."
+    },
+    {
+      "name": "Probability Group Sum Check (VIT-NAVI)",
+      "status": "pass",
+      "details": "The sum of the exact score probabilities (22 + 34 + 18 + 26) is exactly 100%."
+    },
+    {
+      "name": "Derived Probability Consistency Check (VIT-NAVI)",
+      "status": "pass",
+      "details": "Derived probabilities match the primary distribution perfectly: series win (56% VIT, 44% NAVI), two maps (40%), three maps (60%), and sweep states (18% VIT swept, 22% NAVI swept, 60% no sweep)."
+    },
+    {
+      "name": "Confidence Score Arithmetic Check",
+      "status": "pass",
+      "details": "Weighted sum verification: 0.25*82 + 0.20*95 + 0.25*80 + 0.20*55 + 0.10*63 = 76.8, which rounds up to 77 as published."
+    },
+    {
+      "name": "Event Temporal Status Check",
+      "status": "fail",
+      "details": "The generated_at time (23:19:33) is past the event start_time (23:00:00) for the first match, indicating a violation of the pre-veto model regime."
+    }
+  ],
+  "unresolved_questions": [
+    "What were the actual map vetoes for Karmine Corp vs Eternal Fire at 23:00?",
+    "How does the model handle the lack of caller/IGL division for Karmine Corp and Team Vitality?"
+  ]
+}
