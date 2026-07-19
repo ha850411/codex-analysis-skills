@@ -107,7 +107,7 @@
 
 最終結果必須列出接受與否決的 finding ID。每個 finding 不分嚴重度都必須且只能出現在其中一邊，並在 `finding_adjudications` 逐項保存裁決、理由與最終處置。接受 finding 並修改數字時，還要在 `changes` 記錄修改前後值與理由。agy 的每個 `unresolved_questions` 都必須依原順序出現在 `question_resolutions`；可標示仍未解，但必須說明缺少的證據與對預測的影響。
 
-`prediction.md` 必須完整渲染上述 findings、九項一致性稽核、逐條裁決與問題回覆。`prediction.json.red_team` 保存完整 review，不得只保留 verdict／summary。
+`prediction.md` 只渲染紅隊 verdict／summary、接受與否決數量、九項一致性稽核、問題回覆及實際修改紀錄；不得展開 `Findings 與逐條裁決`。`prediction.json.red_team` 與 `prediction.json.adjudication` 必須保存完整 review、逐條裁決、理由與處置，不得只保留 verdict／summary。
 
 ## 退出碼與修復方式
 

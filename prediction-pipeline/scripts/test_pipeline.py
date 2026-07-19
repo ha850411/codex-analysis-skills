@@ -226,8 +226,10 @@ class PipelineUnitTests(unittest.TestCase):
         review = self.complete_review()
         output = pipeline.render_markdown(input_data, final, review, [])
         self.assertLess(output.index("## 完整逐場分析"), output.index("## 最終機率"))
-        self.assertIn("#### f1｜low｜presentation", output)
-        self.assertIn("agy 疑問／主張：缺少一項說明。", output)
+        self.assertNotIn("### Findings 與逐條裁決", output)
+        self.assertNotIn("#### f1｜low｜presentation", output)
+        self.assertNotIn("agy 疑問／主張：缺少一項說明。", output)
+        self.assertIn("Codex 裁決摘要：接受 1 項、否決 0 項", output)
         self.assertIn("#### Q1. 這項缺口會如何影響信心度？", output)
         self.assertIn("Codex 回覆：已反映在信心說明。", output)
         self.assertEqual(output.count("## 簡表總結"), 1)
@@ -310,7 +312,7 @@ class PipelineUnitTests(unittest.TestCase):
         final["presentation"]["analysis_sections"][0]["markdown"] = "甲" * 70
         self.assertEqual(pipeline.cross_validate(input_data, primary, review, final), [])
 
-    def test_export_preserves_full_red_team_review_and_questions(self) -> None:
+    def test_export_keeps_full_red_team_review_in_json_and_compacts_markdown(self) -> None:
         confidence = {
             "value": 74,
             "rationale": "測試信心度",
@@ -407,9 +409,12 @@ class PipelineUnitTests(unittest.TestCase):
             pipeline.export_run(run_dir)
             markdown = (run_dir / "prediction.md").read_text(encoding="utf-8")
             bundle = pipeline.load_json(run_dir / "prediction.json")
-            self.assertIn("agy 疑問／主張：缺少一項說明。", markdown)
+            self.assertNotIn("### Findings 與逐條裁決", markdown)
+            self.assertNotIn("agy 疑問／主張：缺少一項說明。", markdown)
+            self.assertIn("Codex 裁決摘要：接受 1 項、否決 0 項", markdown)
             self.assertIn("Codex 回覆：已回答。", markdown)
             self.assertEqual(bundle["red_team"]["findings"][0]["id"], "f1")
+            self.assertEqual(bundle["adjudication"]["finding_adjudications"][0]["finding_id"], "f1")
             self.assertEqual(bundle["adjudication"]["question_resolutions"][0]["status"], "resolved")
 
     def test_youtube_output_ends_with_summary_table(self) -> None:

@@ -972,39 +972,17 @@ def render_analysis_sections(final: dict[str, Any]) -> list[str]:
 
 
 def render_red_team_review(review: dict[str, Any], final: dict[str, Any]) -> list[str]:
+    accepted_count = len(final.get("accepted_findings", []))
+    rejected_count = len(final.get("rejected_findings", []))
     lines = [
-        "## agy 紅隊完整審查與 Codex 最終裁決",
+        "## agy 紅隊審查摘要與 Codex 最終裁決",
         "",
         f"- 審查模型：{review['reviewer']['agent']}",
         f"- agy 結論：{review['verdict']}",
         f"- agy 總結：{review['summary']}",
+        f"- Codex 裁決摘要：接受 {accepted_count} 項、否決 {rejected_count} 項；逐條 finding 與裁決細節保留於 prediction.json。",
     ]
-    adjudications = {
-        item["finding_id"]: item
-        for item in final.get("finding_adjudications", [])
-        if isinstance(item, dict) and isinstance(item.get("finding_id"), str)
-    }
-    lines.extend(["", "### Findings 與逐條裁決", ""])
-    if not review.get("findings"):
-        lines.append("agy 未提出 finding。")
-    for finding in review.get("findings", []):
-        adjudication = adjudications[finding["id"]]
-        decision = "接受" if adjudication["decision"] == "accept" else "否決"
-        evidence = "、".join(finding["evidence_ids"]) or "無直接 evidence ID"
-        lines.extend(
-            [
-                f"#### {finding['id']}｜{finding['severity']}｜{finding['category']}",
-                "",
-                f"- agy 疑問／主張：{finding['claim']}",
-                f"- 證據 ID：{evidence}",
-                f"- agy 建議：{finding['recommended_action']}",
-                f"- Codex 裁決：{decision}",
-                f"- 裁決理由：{adjudication['rationale']}",
-                f"- 最終處置：{adjudication['resulting_action']}",
-                "",
-            ]
-        )
-    lines.extend(["### 完整一致性檢查", "", "| 稽核面向 | 檢查 | 狀態 | 詳情 |", "| --- | --- | --- | --- |"])
+    lines.extend(["", "### 完整一致性檢查", "", "| 稽核面向 | 檢查 | 狀態 | 詳情 |", "| --- | --- | --- | --- |"])
     for check in review.get("consistency_checks", []):
         cells = [check["audit_area"], check["name"], check["status"], check["details"]]
         escaped = [str(cell).replace("|", "\\|").replace("\n", " ") for cell in cells]
