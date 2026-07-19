@@ -48,6 +48,13 @@ AUDIT_AREAS = {
     "market_leakage",
     "presentation_integrity",
 }
+REVIEW_CORE_KEYS = {
+    "verdict",
+    "summary",
+    "findings",
+    "consistency_checks",
+    "unresolved_questions",
+}
 
 
 class PipelineError(Exception):
@@ -76,10 +83,12 @@ def load_model_defaults(path: Path) -> dict[str, Any]:
     if data.get("confirmation_required") is not False:
         errors.append("model defaults.confirmation_required must remain false")
     red_team = data.get("red_team")
-    if not isinstance(red_team, dict) or not isinstance(red_team.get("agent"), str) or not red_team.get("agent", "").strip():
-        errors.append("model defaults.red_team.agent must be a non-empty string")
-    elif red_team["agent"] != red_team["agent"].strip():
-        errors.append("model defaults.red_team.agent must not contain leading or trailing whitespace")
+    if isinstance(red_team, dict) and "model" not in red_team and "agent" in red_team:
+        red_team["model"] = red_team["agent"]
+    if not isinstance(red_team, dict) or not isinstance(red_team.get("model"), str) or not red_team.get("model", "").strip():
+        errors.append("model defaults.red_team.model must be a non-empty string")
+    elif red_team["model"] != red_team["model"].strip():
+        errors.append("model defaults.red_team.model must not contain leading or trailing whitespace")
     for stage_name in ("primary_prediction", "final_adjudication"):
         stage = data.get(stage_name)
         if not isinstance(stage, dict):
@@ -533,8 +542,11 @@ def validate_review(data: Any) -> list[str]:
     if not isinstance(data.get("summary"), str) or not data.get("summary", "").strip():
         errors.append("review.summary must be a non-empty string")
     reviewer = data.get("reviewer")
-    if not isinstance(reviewer, dict) or reviewer.get("tool") != "agy" or not isinstance(reviewer.get("agent"), str) or not reviewer.get("agent"):
-        errors.append("review.reviewer must identify a non-empty agy agent")
+    reviewer_model = reviewer.get("model") if isinstance(reviewer, dict) else None
+    if reviewer_model is None and isinstance(reviewer, dict):
+        reviewer_model = reviewer.get("agent")
+    if not isinstance(reviewer, dict) or reviewer.get("tool") != "agy" or not isinstance(reviewer_model, str) or not reviewer_model:
+        errors.append("review.reviewer must identify a non-empty agy model")
     findings = data.get("findings")
     ids: set[str] = set()
     if not isinstance(findings, list):
@@ -732,22 +744,39 @@ def prepare(input_data: dict[str, Any], run_dir: Path) -> None:
 
 
 def extract_json(text: str) -> Any:
+    candidates = extract_json_objects(text)
+    if candidates:
+        return candidates[0]
+    raise PipelineError("model output did not contain a valid JSON object", EXIT_EXTERNAL)
+
+
+def extract_json_objects(text: str) -> list[dict[str, Any]]:
+    """Return every decodable JSON object, including objects inside wrappers/fences."""
     cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text).strip()
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL | re.IGNORECASE)
-    candidates = [fenced.group(1)] if fenced else []
-    candidates.append(cleaned)
     decoder = json.JSONDecoder()
-    for candidate in candidates:
+    decoded: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    fenced = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL | re.IGNORECASE)
+    sources = fenced + [cleaned]
+    for candidate in sources:
         try:
-            return json.loads(candidate)
+            values = [json.loads(candidate)]
         except json.JSONDecodeError:
+            values = []
             for match in re.finditer(r"\{", candidate):
                 try:
                     value, _ = decoder.raw_decode(candidate[match.start():])
-                    return value
+                    values.append(value)
                 except json.JSONDecodeError:
                     continue
-    raise PipelineError("model output did not contain a valid JSON object", EXIT_EXTERNAL)
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            fingerprint = json.dumps(value, ensure_ascii=False, sort_keys=True)
+            if fingerprint not in seen:
+                seen.add(fingerprint)
+                decoded.append(value)
+    return decoded
 
 
 def run_process(command: list[str], *, prompt: str | None = None, cwd: Path | None = None, timeout: int = 600) -> subprocess.CompletedProcess[str]:
@@ -811,7 +840,7 @@ MODEL INPUT:
 """
 
 
-def review_prompt(input_data: dict[str, Any], primary: dict[str, Any], agent_label: str, domain_skill: str | None = None) -> str:
+def review_prompt(input_data: dict[str, Any], primary: dict[str, Any], model_label: str, domain_skill: str | None = None) -> str:
     schema = (REFS / "review.schema.json").read_text(encoding="utf-8")
     return f"""Act as an independent adversarial red-team reviewer. Return one JSON object matching REVIEW SCHEMA exactly.
 
@@ -824,8 +853,9 @@ Rules:
 - Be specific and evidence-bound. Do not produce a replacement final prediction.
 - Put every concern in findings, including medium/low presentation or traceability issues; do not hide concerns only in summary. Put every genuine unanswered question in unresolved_questions, even when it does not change the main probability.
 - Return exactly one consistency_checks entry for each audit_area: event_identity, temporal_freshness, source_traceability, evidence_sufficiency, domain_report_coverage, probability_coherence, confidence_calibration, market_leakage, and presentation_integrity. Each details field must state what was checked and why it passed, failed, or was not applicable.
-- Use stage=red_team, reviewer.tool=agy, reviewer.agent={json.dumps(agent_label)}, and preserve prediction_id.
+- Use stage=red_team, reviewer.tool=agy, reviewer.model={json.dumps(model_label)}, and preserve prediction_id.
 - Assign stable finding IDs f1, f2, ... and return JSON only, without markdown fences.
+- Before answering, verify that the top-level object contains schema_version, prediction_id, stage, generated_at, reviewer, verdict, summary, findings, consistency_checks, and unresolved_questions. Never return an empty object.
 
 REVIEW SCHEMA:
 {schema}
@@ -900,14 +930,106 @@ def invoke_codex(prompt: str, schema: Path, output: Path, workspace: Path, model
     return value
 
 
-def invoke_agy(prompt: str, output: Path, agent: str | None, timeout: int) -> dict[str, Any]:
+def available_agy_models(timeout: int = 30) -> list[str]:
+    result = run_process(["agy", "models"], timeout=timeout)
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def require_agy_model(model: str, timeout: int = 30) -> None:
+    models = available_agy_models(timeout)
+    if model not in models:
+        raise PipelineError(
+            f"agy model is unavailable: {model}; available models: {', '.join(models) or '(none)'}",
+            EXIT_EXTERNAL,
+        )
+
+
+def invoke_agy(prompt: str, output: Path, model: str, timeout: int, attempt: int = 1) -> str:
     command = ["agy", "--print", prompt, "--print-timeout", f"{timeout}s", "--sandbox"]
-    if agent:
-        command.extend(["--agent", agent])
+    command.extend(["--model", model])
     result = run_process(command, cwd=output.parent, timeout=timeout + 15)
-    value = extract_json(result.stdout)
-    atomic_json(output, value)
-    return value
+    stem = f"red-team-attempt-{attempt}"
+    atomic_text(output.parent / f"{stem}-raw.txt", result.stdout)
+    if result.stderr.strip():
+        atomic_text(output.parent / f"{stem}-stderr.txt", result.stderr)
+    return result.stdout
+
+
+def normalize_review(candidate: dict[str, Any], prediction_id: str, model: str) -> dict[str, Any]:
+    review = copy.deepcopy(candidate)
+    review["schema_version"] = "1.0"
+    review["prediction_id"] = prediction_id
+    review["stage"] = "red_team"
+    review["generated_at"] = now_iso()
+    review["reviewer"] = {"tool": "agy", "model": model}
+    return review
+
+
+def select_review(
+    raw: str,
+    input_data: dict[str, Any],
+    primary: dict[str, Any],
+    model: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    candidates = extract_json_objects(raw)
+    if not candidates:
+        return None, ["agy output did not contain a valid JSON object"]
+    candidates.sort(key=lambda item: len(REVIEW_CORE_KEYS.intersection(item)), reverse=True)
+    best_review: dict[str, Any] | None = None
+    best_errors: list[str] | None = None
+    for candidate in candidates:
+        review = normalize_review(candidate, input_data["prediction_id"], model)
+        errors = validate_review(review) + cross_validate(input_data, primary, review)
+        if not errors:
+            return review, []
+        if best_errors is None or len(errors) < len(best_errors):
+            best_review, best_errors = review, errors
+    return best_review, best_errors or ["agy output did not match the review contract"]
+
+
+def review_repair_prompt(original_prompt: str, raw: str, errors: list[str]) -> str:
+    diagnostics = "\n".join(f"- {error}" for error in errors)
+    prior = raw[-20000:]
+    return f"""{original_prompt}
+
+CORRECTION PASS (one and only retry):
+Your previous response failed deterministic validation. Return the complete corrected review object, not a patch and not an explanation.
+
+VALIDATION ERRORS:
+{diagnostics}
+
+PREVIOUS RAW RESPONSE:
+{prior}
+"""
+
+
+def create_red_team_review(
+    prompt: str,
+    output: Path,
+    input_data: dict[str, Any],
+    primary: dict[str, Any],
+    model: str,
+    timeout: int,
+) -> dict[str, Any]:
+    require_agy_model(model)
+    last_errors: list[str] = []
+    current_prompt = prompt
+    for attempt in (1, 2):
+        raw = invoke_agy(current_prompt, output, model, timeout, attempt)
+        review, errors = select_review(raw, input_data, primary, model)
+        if review is not None and not errors:
+            atomic_json(output, review)
+            return review
+        last_errors = errors
+        if review is not None:
+            atomic_json(output.parent / f"red-team-attempt-{attempt}-invalid.json", review)
+        atomic_text(output.parent / f"red-team-attempt-{attempt}-errors.txt", "\n".join(errors))
+        if attempt == 1:
+            current_prompt = review_repair_prompt(prompt, raw, errors)
+    raise PipelineError(
+        "agy review failed validation after one correction retry:\n- " + "\n- ".join(last_errors),
+        EXIT_VALIDATION,
+    )
 
 
 def derived_markets(input_data: dict[str, Any], final: dict[str, Any]) -> list[dict[str, Any]]:
@@ -977,7 +1099,7 @@ def render_red_team_review(review: dict[str, Any], final: dict[str, Any]) -> lis
     lines = [
         "## agy 紅隊審查摘要與 Codex 最終裁決",
         "",
-        f"- 審查模型：{review['reviewer']['agent']}",
+        f"- 審查模型：{review['reviewer'].get('model') or review['reviewer'].get('agent')}",
         f"- agy 結論：{review['verdict']}",
         f"- agy 總結：{review['summary']}",
         f"- Codex 裁決摘要：接受 {accepted_count} 項、否決 {rejected_count} 項；逐條 finding 與裁決細節保留於 prediction.json。",
@@ -1156,35 +1278,36 @@ def command_red_team(args: argparse.Namespace) -> None:
     primary = load_json(args.run_dir / "primary_prediction.json")
     fail_on(validate_input(input_data) + validate_model_input(input_data, model_input) + validate_prediction(primary, "primary") + cross_validate(input_data, primary))
     defaults = load_model_defaults(args.model_defaults)
-    agent_label = args.agy_agent or defaults["red_team"]["agent"]
-    print(f"模型執行階段 - agy 紅隊審查：{agent_label}")
-    prompt = review_prompt(input_data, primary, agent_label, args.domain_skill)
+    model_label = args.agy_model or defaults["red_team"]["model"]
+    print(f"模型執行階段 - agy 紅隊審查：{model_label}")
+    prompt = review_prompt(input_data, primary, model_label, args.domain_skill)
     if args.dry_run:
         atomic_text(args.run_dir / "red-team-prompt.txt", prompt)
-        print("dry-run: wrote red-team-prompt.txt; would invoke agy --print ... --sandbox")
+        print("dry-run: wrote red-team-prompt.txt; would invoke agy --print ... --model ... --sandbox")
         return
-    review = invoke_agy(prompt, args.run_dir / "red_team_review.json", agent_label, args.timeout)
-    review["prediction_id"] = input_data["prediction_id"]
-    review["stage"] = "red_team"
-    review["generated_at"] = now_iso()
-    review["reviewer"] = {"tool": "agy", "agent": agent_label}
-    atomic_json(args.run_dir / "red_team_review.json", review)
-    fail_on(validate_review(review) + cross_validate(input_data, primary, review))
+    create_red_team_review(
+        prompt,
+        args.run_dir / "red_team_review.json",
+        input_data,
+        primary,
+        model_label,
+        args.timeout,
+    )
 
 
 def command_export(args: argparse.Namespace) -> None:
     export_run(args.run_dir)
 
 
-def print_model_plan(primary_model: str | None, primary_effort: str | None, agy_agent: str | None, final_model: str | None, final_effort: str | None) -> None:
+def print_model_plan(primary_model: str | None, primary_effort: str | None, agy_model: str | None, final_model: str | None, final_effort: str | None) -> None:
     print("模型執行計畫")
     print(f"- Codex 主預測：{primary_model or 'Codex CLI 設定／預設模型'}（推理強度：{primary_effort or '沿用設定'}）")
-    print(f"- agy 紅隊審查：{agy_agent or 'agy 預設 agent'}")
+    print(f"- agy 紅隊審查：{agy_model or 'agy 預設模型'}")
     print(f"- Codex 最終裁決：{final_model or 'Codex CLI 設定／預設模型'}（推理強度：{final_effort or '沿用設定'}）")
 
 
-def notify_model_plan(primary_model: str | None, primary_effort: str | None, agy_agent: str, final_model: str | None, final_effort: str | None) -> None:
-    print_model_plan(primary_model, primary_effort, agy_agent, final_model, final_effort)
+def notify_model_plan(primary_model: str | None, primary_effort: str | None, agy_model: str, final_model: str | None, final_effort: str | None) -> None:
+    print_model_plan(primary_model, primary_effort, agy_model, final_model, final_effort)
     print("已告知模型計畫，現在自動開始執行。")
 
 
@@ -1229,10 +1352,10 @@ def command_run(args: argparse.Namespace) -> None:
     primary_p = primary_prompt(model_input, args.domain_skill)
     primary_model = args.primary_codex_model or args.codex_model or primary_defaults["model"]
     primary_effort = args.primary_reasoning_effort or args.codex_reasoning_effort or primary_defaults["reasoning_effort"]
-    agy_agent = args.agy_agent or defaults["red_team"]["agent"]
+    agy_model = args.agy_model or defaults["red_team"]["model"]
     final_model = args.final_codex_model or args.codex_model or final_defaults["model"]
     final_effort = args.final_reasoning_effort or args.codex_reasoning_effort or final_defaults["reasoning_effort"]
-    notify_model_plan(primary_model, primary_effort, agy_agent, final_model, final_effort)
+    notify_model_plan(primary_model, primary_effort, agy_model, final_model, final_effort)
     if args.dry_run:
         atomic_text(run_dir / "primary-prompt.txt", primary_p)
         atomic_text(run_dir / "red-team-prompt.template.txt", "Requires primary_prediction.json. Run the red-team subcommand with --dry-run after creating it.")
@@ -1242,14 +1365,14 @@ def command_run(args: argparse.Namespace) -> None:
     workspace = Path(args.workspace or os.getcwd()).resolve()
     primary = invoke_codex(primary_p, REFS / "prediction.schema.json", run_dir / "primary_prediction.json", workspace, primary_model, primary_effort, args.timeout)
     fail_on(validate_prediction(primary, "primary") + cross_validate(input_data, primary))
-    agent_label = agy_agent
-    review = invoke_agy(review_prompt(input_data, primary, agent_label, args.domain_skill), run_dir / "red_team_review.json", agy_agent, args.timeout)
-    review["prediction_id"] = input_data["prediction_id"]
-    review["stage"] = "red_team"
-    review["generated_at"] = now_iso()
-    review["reviewer"] = {"tool": "agy", "agent": agent_label}
-    atomic_json(run_dir / "red_team_review.json", review)
-    fail_on(validate_review(review) + cross_validate(input_data, primary, review))
+    review = create_red_team_review(
+        review_prompt(input_data, primary, agy_model, args.domain_skill),
+        run_dir / "red_team_review.json",
+        input_data,
+        primary,
+        agy_model,
+        args.timeout,
+    )
     final = invoke_codex(final_prompt(input_data, primary, review, args.domain_skill), REFS / "final.schema.json", run_dir / "final_prediction.json", workspace, final_model, final_effort, args.timeout)
     fail_on(validate_prediction(final, "final") + cross_validate(input_data, primary, review, final))
     export_run(run_dir)
@@ -1278,7 +1401,7 @@ def parser() -> argparse.ArgumentParser:
 
     red = sub.add_parser("red-team", help="invoke agy on an existing primary prediction")
     red.add_argument("--run-dir", type=Path, required=True)
-    red.add_argument("--agy-agent")
+    red.add_argument("--agy-model", "--agy-agent", dest="agy_model", help="agy model label; --agy-agent is a deprecated compatibility alias")
     red.add_argument("--model-defaults", type=Path, default=DEFAULT_MODEL_DEFAULTS)
     red.add_argument("--domain-skill", required=True, help="path to the active domain SKILL.md for report-coverage review")
     red.add_argument("--timeout", type=int, default=600)
@@ -1313,7 +1436,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--primary-reasoning-effort", choices=["minimal", "low", "medium", "high", "max"])
     run.add_argument("--final-codex-model")
     run.add_argument("--final-reasoning-effort", choices=["minimal", "low", "medium", "high", "max"])
-    run.add_argument("--agy-agent")
+    run.add_argument("--agy-model", "--agy-agent", dest="agy_model", help="agy model label; --agy-agent is a deprecated compatibility alias")
     run.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)
     run.add_argument("--timeout", type=int, default=600)
     run.add_argument("--dry-run", action="store_true")

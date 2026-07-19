@@ -16,7 +16,7 @@
 
 所有檔案使用 UTF-8 JSON、ISO 8601 時間、十進位賠率；機率使用 0 到 100 的百分比數字。
 
-`model-defaults.json` 必須符合 `model-defaults.schema.json`，且 `confirmation_required` 永遠為 `false`。提示詞臨時指定的模型優先於設定檔；每次觸發 agy 紅隊都要先顯示實際模型計畫，然後直接執行，不等待使用者確認。
+`model-defaults.json` 必須符合 `model-defaults.schema.json`，且 `confirmation_required` 永遠為 `false`。`red_team.model` 必須是 `agy models` 的完整模型名稱，並以 `agy --model` 傳入；不得把模型名稱傳給 `--agent`。提示詞臨時指定的模型優先於設定檔；每次觸發 agy 紅隊都要先顯示實際模型計畫，然後直接執行，不等待使用者確認。
 
 ## 標準輸入
 
@@ -95,6 +95,8 @@
 `confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
 
 `primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。裁決後正文的非空白字元不得少於主報告的 70%，避免修訂階段把全文壓成簡報式摘要。
+
+agy 每次 stdout 都保存為 `red-team-attempt-<n>-raw.txt`；stderr 非空時另存。解析器必須檢查所有候選 JSON，拒絕 `{}` 或缺少紅隊核心欄位的物件，且正式 `red_team_review.json` 只能在完整 schema 與跨檔驗證通過後原子寫入。第一次失敗可用同一模型做一次契約修復，第二次失敗即停止並保留 `invalid.json` 與 `errors.txt` 診斷檔。
 
 執行 red-team 時必須傳入本次使用的 `--domain-skill <.../SKILL.md>`。管線會將該技能與存在時的 `references/output-template.md` 直接嵌入 agy 的可信審查契約；因此 `domain_report_coverage` 不是只依通用印象檢查，而是能核對各運動的實際必要欄位。
 

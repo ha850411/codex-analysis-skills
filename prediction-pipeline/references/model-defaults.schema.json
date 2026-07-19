@@ -11,10 +11,14 @@
     "red_team": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["agent"],
       "properties": {
-        "agent": {"type": "string", "minLength": 1}
-      }
+        "model": {"type": "string", "minLength": 1},
+        "agent": {"type": "string", "minLength": 1, "deprecated": true}
+      },
+      "oneOf": [
+        {"required": ["model"], "not": {"required": ["agent"]}},
+        {"required": ["agent"], "not": {"required": ["model"]}}
+      ]
     },
     "final_adjudication": {"$ref": "#/$defs/codex_stage"},
     "confirmation_required": {"type": "boolean", "const": false}

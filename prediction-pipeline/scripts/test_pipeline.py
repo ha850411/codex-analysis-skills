@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import io
+import subprocess
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pipeline
 
@@ -16,7 +18,7 @@ class PipelineUnitTests(unittest.TestCase):
             "prediction_id": "p1",
             "stage": "red_team",
             "generated_at": "2026-07-17T10:01:00+08:00",
-            "reviewer": {"tool": "agy", "agent": "test-agent"},
+            "reviewer": {"tool": "agy", "model": "test-model"},
             "verdict": "revise",
             "summary": "發現一項需裁決問題。",
             "findings": [{
@@ -44,6 +46,7 @@ class PipelineUnitTests(unittest.TestCase):
     def test_red_team_defaults_disable_confirmation(self) -> None:
         defaults = pipeline.load_model_defaults(pipeline.DEFAULT_MODEL_DEFAULTS)
         self.assertIs(defaults["confirmation_required"], False)
+        self.assertEqual(defaults["red_team"]["model"], "Gemini 3.5 Flash (High)")
 
     def test_model_plan_is_notification_only(self) -> None:
         output = io.StringIO()
@@ -259,6 +262,80 @@ class PipelineUnitTests(unittest.TestCase):
         self.assertEqual(pipeline.validate_review(review), [])
         review["consistency_checks"].pop()
         self.assertTrue(any("missing audit areas" in error for error in pipeline.validate_review(review)))
+
+    def test_legacy_reviewer_agent_field_remains_readable(self) -> None:
+        review = self.complete_review()
+        review["reviewer"] = {"tool": "agy", "agent": "legacy-model-label"}
+        self.assertEqual(pipeline.validate_review(review), [])
+
+    def test_review_selector_skips_empty_json_object(self) -> None:
+        input_data = {"prediction_id": "p1", "model_data": {"evidence": []}, "market_data": []}
+        primary = {
+            "prediction_id": "p1",
+            "analysis_sections": [],
+            "thesis": "A",
+            "confidence": {"value": 50, "components": {}},
+            "probability_groups": [],
+            "key_factors": [],
+        }
+        raw = "noise {} more-noise " + pipeline.json.dumps(self.complete_review(), ensure_ascii=False)
+        review, errors = pipeline.select_review(raw, input_data, primary, "Gemini 3.5 Flash (High)")
+        self.assertEqual(errors, [])
+        self.assertIsNotNone(review)
+        self.assertEqual(review["verdict"], "revise")
+        self.assertEqual(review["reviewer"]["model"], "Gemini 3.5 Flash (High)")
+
+    def test_invoke_agy_uses_model_flag_and_persists_raw_output(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"verdict":"pass"}', stderr="")
+        with TemporaryDirectory() as temp_dir, patch.object(pipeline, "run_process", return_value=completed) as mocked:
+            output = Path(temp_dir) / "red_team_review.json"
+            raw = pipeline.invoke_agy("prompt", output, "Gemini 3.5 Flash (High)", 60)
+            command = mocked.call_args.args[0]
+            self.assertIn("--model", command)
+            self.assertNotIn("--agent", command)
+            self.assertEqual(command[command.index("--model") + 1], "Gemini 3.5 Flash (High)")
+            self.assertEqual(raw, completed.stdout)
+            self.assertEqual((Path(temp_dir) / "red-team-attempt-1-raw.txt").read_text(encoding="utf-8").strip(), completed.stdout)
+
+    def test_red_team_retries_once_then_writes_only_valid_review(self) -> None:
+        input_data = {"prediction_id": "p1", "model_data": {"evidence": []}, "market_data": []}
+        primary = {
+            "prediction_id": "p1",
+            "analysis_sections": [],
+            "thesis": "A",
+            "confidence": {"value": 50, "components": {}},
+            "probability_groups": [],
+            "key_factors": [],
+        }
+        valid_raw = pipeline.json.dumps(self.complete_review(), ensure_ascii=False)
+        with TemporaryDirectory() as temp_dir, \
+                patch.object(pipeline, "require_agy_model"), \
+                patch.object(pipeline, "invoke_agy", side_effect=["{}", valid_raw]) as mocked:
+            output = Path(temp_dir) / "red_team_review.json"
+            review = pipeline.create_red_team_review("prompt", output, input_data, primary, "test-model", 60)
+            self.assertEqual(mocked.call_count, 2)
+            self.assertEqual(review["verdict"], "revise")
+            self.assertEqual(pipeline.load_json(output)["reviewer"]["model"], "test-model")
+            self.assertTrue((Path(temp_dir) / "red-team-attempt-1-errors.txt").is_file())
+
+    def test_red_team_does_not_write_official_artifact_after_two_invalid_responses(self) -> None:
+        input_data = {"prediction_id": "p1", "model_data": {"evidence": []}, "market_data": []}
+        primary = {
+            "prediction_id": "p1",
+            "analysis_sections": [],
+            "thesis": "A",
+            "confidence": {"value": 50, "components": {}},
+            "probability_groups": [],
+            "key_factors": [],
+        }
+        with TemporaryDirectory() as temp_dir, \
+                patch.object(pipeline, "require_agy_model"), \
+                patch.object(pipeline, "invoke_agy", side_effect=["{}", "{}"]):
+            output = Path(temp_dir) / "red_team_review.json"
+            with self.assertRaises(pipeline.PipelineError):
+                pipeline.create_red_team_review("prompt", output, input_data, primary, "test-model", 60)
+            self.assertFalse(output.exists())
+            self.assertTrue((Path(temp_dir) / "red-team-attempt-2-errors.txt").is_file())
 
     def test_red_team_prompt_embeds_domain_skill_and_output_template(self) -> None:
         skill_path = pipeline.ROOT.parent / "lol-analysis" / "SKILL.md"

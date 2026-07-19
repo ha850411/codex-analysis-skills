@@ -12,11 +12,16 @@
     "reviewer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tool", "agent"],
+      "required": ["tool"],
       "properties": {
         "tool": {"type": "string", "const": "agy"},
-        "agent": {"type": "string", "minLength": 1}
-      }
+        "model": {"type": "string", "minLength": 1},
+        "agent": {"type": "string", "minLength": 1, "deprecated": true}
+      },
+      "oneOf": [
+        {"required": ["model"], "not": {"required": ["agent"]}},
+        {"required": ["agent"], "not": {"required": ["model"]}}
+      ]
     },
     "verdict": {"enum": ["pass", "revise", "reject"]},
     "summary": {"type": "string", "minLength": 1},

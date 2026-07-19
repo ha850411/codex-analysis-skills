@@ -7,7 +7,7 @@
     "reasoning_effort": null
   },
   "red_team": {
-    "agent": "Gemini 3.5 Flash (High)"
+    "model": "Gemini 3.5 Flash (High)"
   },
   "final_adjudication": {
     "mode": "current_session",
