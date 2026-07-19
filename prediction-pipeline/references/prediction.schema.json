@@ -3,7 +3,7 @@
   "title": "Codex 主預測",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data"],
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "thesis", "analysis_sections", "probability_groups", "confidence", "key_factors", "risks", "missing_data"],
   "properties": {
     "schema_version": {"type": "string", "const": "1.0"},
     "prediction_id": {"type": "string", "minLength": 1},
@@ -12,6 +12,19 @@
     "model": {"type": "string", "minLength": 1},
     "reasoning_effort": {"type": ["string", "null"], "enum": [null, "minimal", "low", "medium", "high", "max"]},
     "thesis": {"type": "string", "minLength": 1},
+    "analysis_sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["heading", "markdown"],
+        "properties": {
+          "heading": {"type": "string", "minLength": 1},
+          "markdown": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "probability_groups": {"$ref": "#/$defs/probability_groups"},
     "confidence": {"$ref": "#/$defs/confidence"},
     "key_factors": {

@@ -38,11 +38,25 @@
     },
     "consistency_checks": {
       "type": "array",
+      "minItems": 9,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "status", "details"],
+        "required": ["audit_area", "name", "status", "details"],
         "properties": {
+          "audit_area": {
+            "enum": [
+              "event_identity",
+              "temporal_freshness",
+              "source_traceability",
+              "evidence_sufficiency",
+              "domain_report_coverage",
+              "probability_coherence",
+              "confidence_calibration",
+              "market_leakage",
+              "presentation_integrity"
+            ]
+          },
           "name": {"type": "string"},
           "status": {"enum": ["pass", "fail", "not_applicable"]},
           "details": {"type": "string"}

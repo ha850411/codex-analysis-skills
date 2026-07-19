@@ -4,10 +4,10 @@
 
 | 檔案 | 產生者 | 使用者 | 用途 |
 | --- | --- | --- | --- |
-| `model-defaults.json` | 使用者 | 模型預檢／管線 | agy 與 Codex 各階段的預選模型；不能跳過確認 |
+| `model-defaults.json` | 使用者 | 模型告知／管線 | agy 與 Codex 各階段的預選模型；告知後自動執行 |
 | `input.json` | 資料收集器／Codex | 管線 | 含來源與完整資料的標準輸入 |
 | `model-input.json` | 管線 | 主預測 Codex | 實體移除 `market_data` 的模型輸入 |
-| `primary_prediction.json` | 主預測 Codex | agy、最終 Codex | 尚未接觸市場資訊的初始預測 |
+| `primary_prediction.json` | 主預測 Codex | agy、最終 Codex | 尚未接觸市場資訊、含完整分析正文的初始預測 |
 | `red_team_review.json` | agy | 最終 Codex | 獨立審查意見，不是替代預測 |
 | `final_prediction.json` | 最終 Codex | 驗證器／匯出器 | 已逐項裁決的最終預測 |
 | `prediction.json` | 匯出器 | 下游程式 | 含確定性市場計算的驗證結果 |
@@ -16,7 +16,7 @@
 
 所有檔案使用 UTF-8 JSON、ISO 8601 時間、十進位賠率；機率使用 0 到 100 的百分比數字。
 
-`model-defaults.json` 必須符合 `model-defaults.schema.json`，且 `confirmation_required` 永遠為 `true`。提示詞臨時指定的模型優先於設定檔，但每次觸發 agy 紅隊仍要顯示有效模型計畫並等待使用者確認。
+`model-defaults.json` 必須符合 `model-defaults.schema.json`，且 `confirmation_required` 永遠為 `false`。提示詞臨時指定的模型優先於設定檔；每次觸發 agy 紅隊都要先顯示實際模型計畫，然後直接執行，不等待使用者確認。
 
 ## 標準輸入
 
@@ -94,7 +94,9 @@
 
 `confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
 
-`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字、`簡表總結` 與模型揭露由匯出器統一附加，不得放入章節正文。
+`primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。裁決後正文的非空白字元不得少於主報告的 70%，避免修訂階段把全文壓成簡報式摘要。
+
+執行 red-team 時必須傳入本次使用的 `--domain-skill <.../SKILL.md>`。管線會將該技能與存在時的 `references/output-template.md` 直接嵌入 agy 的可信審查契約；因此 `domain_report_coverage` 不是只依通用印象檢查，而是能核對各運動的實際必要欄位。
 
 ## 紅隊嚴重度與裁決
 
@@ -103,7 +105,9 @@
 - `medium`：可能影響解讀的重要限制。
 - `low`：措辭、追溯性或輕微精度問題。
 
-最終結果必須列出接受與否決的 finding ID。每個 `critical` 和 `high` finding 必須且只能出現在其中一邊。接受 finding 並修改數字時，還要在 `changes` 記錄修改前後值與理由。
+最終結果必須列出接受與否決的 finding ID。每個 finding 不分嚴重度都必須且只能出現在其中一邊，並在 `finding_adjudications` 逐項保存裁決、理由與最終處置。接受 finding 並修改數字時，還要在 `changes` 記錄修改前後值與理由。agy 的每個 `unresolved_questions` 都必須依原順序出現在 `question_resolutions`；可標示仍未解，但必須說明缺少的證據與對預測的影響。
+
+`prediction.md` 必須完整渲染上述 findings、九項一致性稽核、逐條裁決與問題回覆。`prediction.json.red_team` 保存完整 review，不得只保留 verdict／summary。
 
 ## 退出碼與修復方式
 

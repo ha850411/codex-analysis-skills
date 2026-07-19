@@ -3,7 +3,7 @@
   "title": "Codex 最終裁決",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "accepted_findings", "rejected_findings", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "accepted_findings", "rejected_findings", "finding_adjudications", "question_resolutions", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
   "properties": {
     "schema_version": {"type": "string", "const": "1.0"},
     "prediction_id": {"type": "string", "minLength": 1},
@@ -13,6 +13,34 @@
     "reasoning_effort": {"type": ["string", "null"], "enum": [null, "minimal", "low", "medium", "high", "max"]},
     "accepted_findings": {"type": "array", "items": {"type": "string"}},
     "rejected_findings": {"type": "array", "items": {"type": "string"}},
+    "finding_adjudications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "decision", "rationale", "resulting_action"],
+        "properties": {
+          "finding_id": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["accept", "reject"]},
+          "rationale": {"type": "string", "minLength": 1},
+          "resulting_action": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "question_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "status", "response", "impact"],
+        "properties": {
+          "question": {"type": "string", "minLength": 1},
+          "status": {"enum": ["resolved", "unresolved", "not_applicable"]},
+          "response": {"type": "string", "minLength": 1},
+          "impact": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "changes": {
       "type": "array",
       "items": {

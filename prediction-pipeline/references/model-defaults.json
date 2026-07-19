@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "description": "agy 紅隊流程的預選模型；每次執行仍必須由使用者確認。",
+  "description": "agy 紅隊流程的預選模型；每次執行先告知模型計畫後自動開始。",
   "primary_prediction": {
     "mode": "current_session",
     "model": null,
@@ -14,5 +14,5 @@
     "model": null,
     "reasoning_effort": null
   },
-  "confirmation_required": true
+  "confirmation_required": false
 }

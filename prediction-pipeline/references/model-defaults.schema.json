@@ -17,7 +17,7 @@
       }
     },
     "final_adjudication": {"$ref": "#/$defs/codex_stage"},
-    "confirmation_required": {"type": "boolean", "const": true}
+    "confirmation_required": {"type": "boolean", "const": false}
   },
   "$defs": {
     "codex_stage": {
