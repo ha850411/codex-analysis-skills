@@ -54,6 +54,20 @@ FORECAST_FIELDS = {
     "home_runs_mean",
     "home_win_prob",
     "model_confidence",
+    "sources",
+}
+
+UNMODELED_FORECAST_FIELDS = {
+    "game_id",
+    "predicted_at",
+    "first_pitch",
+    "snapshot",
+    "model_version",
+    "away_team",
+    "home_team",
+    "status",
+    "missing_data",
+    "sources",
 }
 
 
@@ -123,6 +137,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
 要求：
 1. 使用即時網路來源先盤點該台灣日期的全部比賽，處理雙重賽、延賽、TBD 先發及美國跨日。
 2. 嚴格先鎖定模型機率，再查市場；資料不足時保留 N/A／等待條件，不硬造數字。
+   零場可建模時仍必須完成並交付 degraded 報告；報告失去數值不等於排程失敗。
 3. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 4. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的輸出契約，且全文最後只有一個「簡表總結」。
 5. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
@@ -130,6 +145,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
    away_f5_runs_mean, home_f5_runs_mean, away_late_runs_mean, home_late_runs_mean,
    away_runs_mean, home_runs_mean, home_win_prob（0..1）, model_confidence（0..1）, sources。
    若比賽存在但無法可靠建模，仍保留紀錄並以 status 與 missing_data 說明；不得捏造缺失值。
+   這類紀錄仍須保存 game_id、時間、快照、模型狀態、主客隊、來源與非空 missing_data，數值欄位可為 null。
    若官方確認當天完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
 6. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
@@ -142,7 +158,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
 """
 
 
-def validate_forecasts(path: Path) -> None:
+def validate_forecasts(path: Path) -> dict[str, object]:
     records = load_jsonl(path)
     no_games = [record for record in records if record.get("status") == "no-games"]
     if no_games:
@@ -151,15 +167,59 @@ def validate_forecasts(path: Path) -> None:
         record = no_games[0]
         if not record.get("date") or not record.get("sources"):
             raise JobError("forecasts.jsonl no-games record requires date and sources")
-        return
+        if not isinstance(record["sources"], list) or not all(
+            isinstance(value, str) and value.strip() for value in record["sources"]
+        ):
+            raise JobError("forecasts.jsonl no-games sources must be non-empty strings")
+        return {
+            "record_count": 1,
+            "modeled_count": 0,
+            "unmodeled_count": 0,
+            "report_quality": "no-games",
+        }
 
     modeled_count = 0
+    unmodeled_count = 0
     for index, record in enumerate(records, 1):
         if record.get("status") == "no-games":
             raise AssertionError("no-games records were handled above")
         if record.get("status", "modeled") != "modeled":
-            if not record.get("missing_data"):
-                raise JobError(f"forecasts.jsonl record {index} is unmodeled without missing_data")
+            unmodeled_count += 1
+            missing = sorted(UNMODELED_FORECAST_FIELDS - record.keys())
+            if missing:
+                raise JobError(
+                    f"forecasts.jsonl unmodeled record {index} missing: {', '.join(missing)}"
+                )
+            if not isinstance(record.get("missing_data"), list) or not record["missing_data"]:
+                raise JobError(
+                    f"forecasts.jsonl record {index} is unmodeled without non-empty missing_data"
+                )
+            if not all(
+                isinstance(value, str) and value.strip() for value in record["missing_data"]
+            ):
+                raise JobError(
+                    f"forecasts.jsonl record {index} missing_data values must be non-empty strings"
+                )
+            if not isinstance(record.get("sources"), list) or not record["sources"]:
+                raise JobError(
+                    f"forecasts.jsonl record {index} is unmodeled without non-empty sources"
+                )
+            if not all(isinstance(value, str) and value.strip() for value in record["sources"]):
+                raise JobError(
+                    f"forecasts.jsonl record {index} sources must be non-empty strings"
+                )
+            if isinstance(record["game_id"], bool) or not isinstance(
+                record["game_id"], (str, int)
+            ) or not str(record["game_id"]).strip():
+                raise JobError(f"forecasts.jsonl record {index} has invalid game_id")
+            for field in (
+                "predicted_at", "first_pitch", "snapshot", "model_version",
+                "away_team", "home_team", "status",
+            ):
+                if not isinstance(record[field], str) or not record[field].strip():
+                    raise JobError(
+                        f"forecasts.jsonl unmodeled record {index}: {field} must be non-empty"
+                    )
             continue
         modeled_count += 1
         missing = sorted(FORECAST_FIELDS - record.keys())
@@ -180,11 +240,17 @@ def validate_forecasts(path: Path) -> None:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
                 raise JobError(f"forecasts.jsonl record {index}: {field} must be 0..1")
 
+    report_quality = "modeled"
     if modeled_count == 0:
-        raise JobError(
-            "MLB schedule contains games but forecasts.jsonl has zero modeled forecasts; "
-            "refusing to publish an all-N/A report"
-        )
+        report_quality = "degraded"
+    elif unmodeled_count:
+        report_quality = "partial"
+    return {
+        "record_count": len(records),
+        "modeled_count": modeled_count,
+        "unmodeled_count": unmodeled_count,
+        "report_quality": report_quality,
+    }
 
 
 def validate_notion_summary(path: Path) -> dict[str, object]:
@@ -243,20 +309,26 @@ def publish_to_notion(output_dir: Path) -> str:
     return str(published["url"])
 
 
-def notify_by_email(output_dir: Path, date: str, notion_url: str) -> None:
+def notify_by_email(
+    output_dir: Path,
+    date: str,
+    notion_url: str,
+    report_quality: str = "modeled",
+) -> None:
     receipt = output_dir / "email-notification.json"
     if receipt.is_file():
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         if saved.get("sent") is True and saved.get("notion_url") == notion_url:
             return
     recipients = send_email(
-        f"MLB 預測報告已完成｜{date}",
+        f"MLB 預測報告已完成｜{date}｜{report_quality}",
         "\n".join(
             [
                 f"{date}（台灣時間）的 MLB 預測報告已完成。",
                 "",
                 f"Notion：{notion_url}",
                 f"本地報告：{output_dir / 'prediction.md'}",
+                f"報告品質：{report_quality}",
                 "",
                 "此信由 MLB 自動排程寄出。",
             ]
@@ -269,6 +341,7 @@ def notify_by_email(output_dir: Path, date: str, notion_url: str) -> None:
             "sent_at": datetime.now(TAIPEI).isoformat(),
             "recipients": recipients,
             "notion_url": notion_url,
+            "report_quality": report_quality,
         },
     )
 
@@ -279,11 +352,12 @@ def finalize_prediction(output_dir: Path, date: str) -> str:
     assert_nonempty(prediction)
     assert_nonempty(forecasts)
     assert_nonempty(output_dir / "probability-checks.json")
-    validate_forecasts(forecasts)
+    validation = validate_forecasts(forecasts)
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
     notion_url = publish_to_notion(output_dir)
-    notify_by_email(output_dir, date, notion_url)
+    report_quality = str(validation["report_quality"])
+    notify_by_email(output_dir, date, notion_url, report_quality)
     write_status(
         output_dir,
         "prediction",
@@ -291,6 +365,9 @@ def finalize_prediction(output_dir: Path, date: str) -> str:
         target_date=date,
         notion_url=notion_url,
         email_notified=True,
+        report_quality=report_quality,
+        modeled_forecasts=validation["modeled_count"],
+        unmodeled_forecasts=validation["unmodeled_count"],
     )
     return notion_url
 

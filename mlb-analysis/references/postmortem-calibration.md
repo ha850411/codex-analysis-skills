@@ -13,6 +13,8 @@
 
 找不到原紀錄時，明確標註「無法做正式校準」；只能做流程稽核，不得憑先前文字摘要重建假精準機率。
 
+原紀錄若標記為 `unmodeled`、`insufficient-model-input` 或其他 degraded 狀態，仍須保留並加入資料可用率稽核。統計各狀態、缺失欄位、來源失敗與受影響場數；不可在賽後補造賽前勝率。只有原本 `modeled` 且數值完整的紀錄可進入 Brier、log loss、得分誤差與 calibration 計算。
+
 ## 2. 重建當時可知的快照
 
 - 核對當時 probable／正式先發、球數或局數限制、正式打線、守位與捕手、牛棚近三日球數、天氣、屋頂、旅行與 ABS 是否適用。
@@ -38,6 +40,7 @@ python mlb-analysis/scripts/evaluate_forecasts.py forecasts.jsonl --compare old-
 
 主要指標：
 
+- 預測可用率：總場數、可評分 modeled 場數、unmodeled 場數、各缺失欄位頻率與 snapshot 分布。
 - 全場獨贏：Brier 與 log loss；directional accuracy 只作診斷。
 - 得分：客／主隊 run MAE、總分 MAE、客／主／總分 bias。
 - 分布：80% 區間 coverage 與寬度、calibration bins；不能靠把區間無限放寬取得 coverage。

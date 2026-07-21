@@ -14,10 +14,20 @@ from unittest import mock
 AUTOMATION_DIR = Path(__file__).resolve().parents[1]
 if str(AUTOMATION_DIR) not in sys.path:
     sys.path.insert(0, str(AUTOMATION_DIR))
+MLB_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "mlb-analysis" / "scripts"
+if str(MLB_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(MLB_SCRIPTS_DIR))
 os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
-from predict_next_day import extract_taipei_games, main as prediction_main, validate_forecasts, validate_notion_summary
+from evaluate_forecasts import _read_records, availability_audit
+from predict_next_day import (
+    extract_taipei_games,
+    finalize_prediction,
+    main as prediction_main,
+    validate_forecasts,
+    validate_notion_summary,
+)
 from review_today import is_recent_report, safe_date, validate_skill_frontmatter
 
 
@@ -97,7 +107,27 @@ class AutomationTests(unittest.TestCase):
             )
             validate_forecasts(path)
 
-    def test_all_unmodeled_forecasts_are_rejected(self) -> None:
+    def test_all_unmodeled_forecasts_are_valid_degraded_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecasts.jsonl"
+            path.write_text(json.dumps({
+                "game_id": 1,
+                "predicted_at": "2026-07-21T21:00:00+08:00",
+                "first_pitch": "2026-07-22T07:00:00+08:00",
+                "snapshot": "pre-lineup",
+                "model_version": "N/A-no-production-model",
+                "away_team": "Away",
+                "home_team": "Home",
+                "status": "insufficient-model-data",
+                "missing_data": ["production model"],
+                "sources": ["MLB"],
+            }) + "\n", encoding="utf-8")
+            result = validate_forecasts(path)
+            self.assertEqual(result["report_quality"], "degraded")
+            self.assertEqual(result["modeled_count"], 0)
+            self.assertEqual(result["unmodeled_count"], 1)
+
+    def test_unmodeled_forecast_requires_auditable_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "forecasts.jsonl"
             path.write_text(json.dumps({
@@ -105,7 +135,7 @@ class AutomationTests(unittest.TestCase):
                 "status": "insufficient-model-data",
                 "missing_data": ["production model"],
             }) + "\n", encoding="utf-8")
-            with self.assertRaisesRegex(JobError, "zero modeled forecasts"):
+            with self.assertRaisesRegex(JobError, "unmodeled record 1 missing"):
                 validate_forecasts(path)
 
     def test_no_games_cannot_be_mixed_with_forecasts(self) -> None:
@@ -146,6 +176,80 @@ class AutomationTests(unittest.TestCase):
             path.write_text(json.dumps(invalid_mean) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(JobError, "away_runs_mean"):
                 validate_forecasts(path)
+
+    def test_finalize_publishes_degraded_report_and_records_quality(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            (output_dir / "prediction.md").write_text("# degraded report\n", encoding="utf-8")
+            (output_dir / "forecasts.jsonl").write_text(json.dumps({
+                "game_id": 1,
+                "predicted_at": "2026-07-21T21:00:00+08:00",
+                "first_pitch": "2026-07-22T07:00:00+08:00",
+                "snapshot": "pre-lineup",
+                "model_version": "N/A-no-production-model",
+                "away_team": "Away",
+                "home_team": "Home",
+                "status": "insufficient-model-data",
+                "missing_data": ["production model"],
+                "sources": ["MLB"],
+            }) + "\n", encoding="utf-8")
+            (output_dir / "probability-checks.json").write_text(
+                json.dumps({"checks": []}) + "\n", encoding="utf-8"
+            )
+            (output_dir / "notion-summary.json").write_text(json.dumps({
+                "title": "MLB 2026-07-22", "sport": "MLB", "module": "mlb-analysis",
+                "event": "MLB", "startTime": "2026-07-22T07:00:00+08:00",
+                "prediction": "N/A", "winner": "N/A", "winProbability": "N/A",
+                "recommendation": "觀望", "stake": "0u", "confidence": "N/A",
+                "risk": "production model missing", "sourceStatus": "schedule checked",
+                "analysisType": "daily-summary", "tags": ["MLB", "degraded"],
+            }) + "\n", encoding="utf-8")
+
+            with (
+                mock.patch("predict_next_day.run"),
+                mock.patch(
+                    "predict_next_day.publish_to_notion",
+                    return_value="https://notion.example/degraded",
+                ),
+                mock.patch("predict_next_day.notify_by_email") as notify_mock,
+            ):
+                url = finalize_prediction(output_dir, "2026-07-22")
+
+            self.assertEqual(url, "https://notion.example/degraded")
+            notify_mock.assert_called_once_with(
+                output_dir,
+                "2026-07-22",
+                "https://notion.example/degraded",
+                "degraded",
+            )
+            status = json.loads((output_dir / "status.json").read_text(encoding="utf-8"))
+            self.assertEqual(status["status"], "complete")
+            self.assertEqual(status["report_quality"], "degraded")
+            self.assertEqual(status["modeled_forecasts"], 0)
+            self.assertEqual(status["unmodeled_forecasts"], 1)
+
+    def test_evaluator_audits_unmodeled_records_without_scoring_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evaluated.jsonl"
+            path.write_text(json.dumps({
+                "game_id": 822787,
+                "predicted_at": "2026-07-21T21:00:00+08:00",
+                "first_pitch": "2026-07-22T07:07:00+08:00",
+                "snapshot": "pre-lineup",
+                "model_version": "N/A-no-production-model",
+                "status": "insufficient-model-input",
+                "missing_data": ["production model", "weather"],
+                "actual_away_runs": 3,
+                "actual_home_runs": 5,
+            }) + "\n", encoding="utf-8")
+
+            records = _read_records(str(path))
+            audit = availability_audit(records)
+            self.assertFalse(records[0]["_scorable"])
+            self.assertEqual(records[0]["game_id"], "822787")
+            self.assertEqual(audit["model_coverage"], 0.0)
+            self.assertEqual(audit["unscored_records"], 1)
+            self.assertEqual(audit["missing_data_counts"]["production model"], 1)
 
     def test_invalid_date_is_rejected(self) -> None:
         with self.assertRaises(JobError):

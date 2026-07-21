@@ -2,7 +2,7 @@
 
 本目錄包含兩個供 macOS `crontab` 使用、以台灣時區解讀的工作：
 
-- `predict_next_day.py`：21:00 先在不啟動 Codex 的情況下查詢 MLB 賽程；下一個台灣日曆日有比賽時，才預測全部賽事。
+- `predict_next_day.py`：21:00 先在不啟動 Codex 的情況下查詢 MLB 賽程；下一個台灣日曆日有比賽時，才預測全部賽事。若資料或生產模型不足，仍發布逐場缺口完整的 `degraded` 報告，不把 N/A 冒充模型預測。
 - `review_today.py`：15:00 檢查當日預測產物是否在 24 小時內；評分不可覆寫的原始預測，只套用有證據支持的 `mlb-analysis` 修正，並在合理時建立 GitHub PR。
 
 執行報告與 Log 位於 `.automation-state/mlb/`，且已由 Git 忽略。賽後檢討在隔離的 worktree 中修改，因此不會碰觸使用者目前分支或尚未提交的變更。

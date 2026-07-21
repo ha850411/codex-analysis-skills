@@ -61,7 +61,7 @@ def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path
 要求：
 1. 使用 MLB 官方 box score／Gameday 等即時來源查核每場最終結果與實際事件；保留當時可知資訊和賽後資訊的時間邊界。
 2. 將含 actual_away_runs、actual_home_runs 的完整紀錄寫到 {review_dir / 'evaluated-forecasts.jsonl'}，保留原預測欄位，不覆寫原檔。
-3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。
+3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。若原紀錄未建模，保留原 N/A，不得賽後補造機率；改做 modeled coverage、status 與 missing_data 頻率稽核。
 4. 單場冷門、BABIP、單次全壘打等合理變異不得觸發 skill 修改。只有確認可重複的流程錯誤，或批次 paired walk-forward 證據通過升版門檻時，才可修改 {worktree / 'mlb-analysis'}。
 5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測。不得自行 commit、push 或建立 PR；外層程式會處理。
 6. 若修改 skill，保持最小差異，實際驗證所有受影響腳本；在 postmortem.md 記錄證據、修改、測試、回退方式與仍未解問題。

@@ -8,7 +8,7 @@ import json
 import math
 import random
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -21,6 +21,16 @@ REQUIRED_FIELDS = {
     "home_win_prob",
     "away_runs_mean",
     "home_runs_mean",
+    "actual_away_runs",
+    "actual_home_runs",
+}
+
+UNMODELED_REQUIRED_FIELDS = {
+    "game_id",
+    "snapshot",
+    "model_version",
+    "status",
+    "missing_data",
     "actual_away_runs",
     "actual_home_runs",
 }
@@ -56,18 +66,42 @@ def _parse_time(value: Any, key: str) -> datetime:
 def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     if not isinstance(record, dict):
         raise ValueError(f"record {line_number} must be an object")
-    missing = sorted(REQUIRED_FIELDS - record.keys())
+    status = record.get("status", "modeled")
+    if not isinstance(status, str) or not status.strip():
+        raise ValueError(f"record {line_number}: status must be non-empty")
+    status = status.strip()
+    scorable = status == "modeled"
+    required = REQUIRED_FIELDS if scorable else UNMODELED_REQUIRED_FIELDS
+    missing = sorted(required - record.keys())
     if missing:
         raise ValueError(f"record {line_number} missing: {', '.join(missing)}")
 
     cleaned = dict(record)
-    for key in ("game_id", "snapshot", "model_version"):
+    cleaned["status"] = status
+    cleaned["_scorable"] = scorable
+    game_id = cleaned["game_id"]
+    if isinstance(game_id, bool) or not isinstance(game_id, (str, int)) or not str(game_id).strip():
+        raise ValueError(f"record {line_number}: game_id must be a non-empty string or integer")
+    cleaned["game_id"] = str(game_id).strip()
+    for key in ("snapshot", "model_version"):
         if not isinstance(cleaned[key], str) or not cleaned[key].strip():
             raise ValueError(f"record {line_number}: {key} must be non-empty")
         cleaned[key] = cleaned[key].strip()
 
-    cleaned["home_win_prob"] = _probability(cleaned, "home_win_prob")
-    for key in ("away_runs_mean", "home_runs_mean", "actual_away_runs", "actual_home_runs"):
+    if scorable:
+        cleaned["home_win_prob"] = _probability(cleaned, "home_win_prob")
+        for key in ("away_runs_mean", "home_runs_mean"):
+            cleaned[key] = _number(cleaned, key)
+            if cleaned[key] < 0:
+                raise ValueError(f"record {line_number}: {key} cannot be negative")
+    else:
+        missing_data = cleaned.get("missing_data")
+        if not isinstance(missing_data, list) or not missing_data:
+            raise ValueError(f"record {line_number}: unmodeled record needs non-empty missing_data")
+        if not all(isinstance(value, str) and value.strip() for value in missing_data):
+            raise ValueError(f"record {line_number}: missing_data values must be non-empty strings")
+
+    for key in ("actual_away_runs", "actual_home_runs"):
         cleaned[key] = _number(cleaned, key)
         if cleaned[key] < 0:
             raise ValueError(f"record {line_number}: {key} cannot be negative")
@@ -78,7 +112,7 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     if cleaned["actual_away_runs"] == cleaned["actual_home_runs"]:
         raise ValueError(f"record {line_number}: settled MLB games cannot end tied")
 
-    if "market_home_prob_no_vig" in cleaned and cleaned["market_home_prob_no_vig"] is not None:
+    if scorable and "market_home_prob_no_vig" in cleaned and cleaned["market_home_prob_no_vig"] is not None:
         cleaned["market_home_prob_no_vig"] = _probability(cleaned, "market_home_prob_no_vig")
 
     interval_groups = (
@@ -87,7 +121,7 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
         ("total_runs_p10", "total_runs_p90"),
     )
     for lower_key, upper_key in interval_groups:
-        present = lower_key in cleaned or upper_key in cleaned
+        present = scorable and (lower_key in cleaned or upper_key in cleaned)
         if present and (cleaned.get(lower_key) is None or cleaned.get(upper_key) is None):
             raise ValueError(f"record {line_number}: {lower_key} and {upper_key} must appear together")
         if present:
@@ -262,6 +296,36 @@ def summarize(records: list[dict[str, Any]], bin_width: float) -> dict[str, Any]
     return result
 
 
+def availability_audit(records: list[dict[str, Any]]) -> dict[str, Any]:
+    scorable = [record for record in records if record["_scorable"]]
+    unscored = [record for record in records if not record["_scorable"]]
+    status_counts = Counter(record["status"] for record in records)
+    missing_data_counts = Counter(
+        item
+        for record in unscored
+        for item in record.get("missing_data", [])
+    )
+    snapshots: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"total": 0, "scorable": 0, "unscored": 0}
+    )
+    for record in records:
+        bucket = snapshots[record["snapshot"]]
+        bucket["total"] += 1
+        key = "scorable" if record["_scorable"] else "unscored"
+        bucket[key] += 1
+    total = len(records)
+    return {
+        "total_records": total,
+        "scorable_records": len(scorable),
+        "unscored_records": len(unscored),
+        "model_coverage": _round(len(scorable) / total) if total else 0.0,
+        "status_counts": dict(sorted(status_counts.items())),
+        "missing_data_counts": dict(sorted(missing_data_counts.items())),
+        "by_snapshot": dict(sorted(snapshots.items())),
+        "note": "Only status=modeled records enter probabilistic and run-error metrics.",
+    }
+
+
 def _paired_loss(record: dict[str, Any], metric: str) -> float:
     outcome = _outcome(record)
     if metric == "brier":
@@ -370,18 +434,20 @@ def main() -> int:
 
     try:
         records = _demo_records() if args.demo else _read_records(args.input)
+        scorable_records = [record for record in records if record["_scorable"]]
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for record in records:
+        for record in scorable_records:
             grouped[record["model_version"]].append(record)
         result: dict[str, Any] = {
             "records": len(records),
+            "availability": availability_audit(records),
             "by_model_version": {
                 version: summarize(group, args.bin_width) for version, group in sorted(grouped.items())
             },
         }
         if args.compare:
             result["paired_comparison"] = compare_versions(
-                records, args.compare[0], args.compare[1], args.seed
+                scorable_records, args.compare[0], args.compare[1], args.seed
             )
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
