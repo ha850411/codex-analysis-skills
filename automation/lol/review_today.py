@@ -17,7 +17,7 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, codex_command, fail,
-    github_env, github_git_env, job_lock, load_jsonl, require_executable, review_branch, run,
+    github_env, github_git_env, job_lock, load_jsonl, load_pr_summary, require_executable, review_branch, run,
     target_date, write_status,
 )
 from predict_next_day import fetch_schedule
@@ -68,6 +68,7 @@ def prompt_for(target: str, prediction_dir: Path, review_dir: Path, worktree: Pa
 5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
 6. 若修改 skill，保持最小差異，驗證受影響內容，並在 postmortem 記錄證據、修改、測試、回退方式與未解問題。
 7. 若證據不足，明確寫「不修改 skill／不建立 PR」與需要累積的 cohort，不為產生 PR 而修改。
+8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
 
 
@@ -133,7 +134,8 @@ def ensure_github_ready(base: str) -> None:
     run(["git", "fetch", "origin", base], env=github_git_env())
 
 
-def create_pr(worktree: Path, branch: str, base: str, target: str, report: Path) -> str:
+def create_pr(worktree: Path, branch: str, base: str, target: str, report: Path, summary: Path) -> str:
+    pr_summary = load_pr_summary(summary)
     gh = require_executable("gh", "GH_BIN")
     run(["git", "add", "lol-analysis"], cwd=worktree)
     run(["git", "commit", "-m", f"fix(lol): apply {target} postmortem findings"], cwd=worktree)
@@ -141,7 +143,7 @@ def create_pr(worktree: Path, branch: str, base: str, target: str, report: Path)
     audit = report.read_text(encoding="utf-8")
     if len(audit) > 52_000:
         audit = audit[:52_000] + "\n\n[完整報告保留於執行主機；PR 內容已截斷。]"
-    body = f"Automated LoL S Tier postmortem for {target} (Asia/Taipei).\n\nOnly evidence-backed process changes are included. Please review before merging.\n\n<details><summary>Postmortem evidence</summary>\n\n{audit}\n\n</details>"
+    body = f"Automated LoL S Tier postmortem for {target} (Asia/Taipei).\n\n{pr_summary}\n\n<details><summary>完整檢討證據</summary>\n\n{audit}\n\n</details>"
     result = run([gh, "pr", "create", "--base", base, "--head", branch, "--title", f"LoL postmortem: {target}", "--body", body], cwd=worktree, capture=True, env=github_env())
     return (result.stdout or "").strip()
 
@@ -194,7 +196,7 @@ def main() -> int:
                 print(f"Review complete; no skill change justified: {report}")
                 return 0
             validate_changes(worktree)
-            pr_url = create_pr(worktree, branch, base, target, report)
+            pr_url = create_pr(worktree, branch, base, target, report, review_dir / "pr-summary.md")
             write_status(review_dir, "review", "complete", target_date=target, pr_created=True, pr_url=pr_url)
             print(f"Review complete; PR created: {pr_url}")
             return 0

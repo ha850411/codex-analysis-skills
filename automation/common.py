@@ -282,6 +282,27 @@ def assert_nonempty(path: Path) -> None:
         raise JobError(f"Expected non-empty artifact was not created: {path}")
 
 
+def load_pr_summary(path: Path, max_chars: int = 4_000) -> str:
+    """讀取可直接置於 PR 開頭的短版檢討摘要，並驗證必要章節。"""
+    assert_nonempty(path)
+    summary = path.read_text(encoding="utf-8").strip()
+    if len(summary) > max_chars:
+        raise JobError(
+            f"PR summary is too long ({len(summary)} characters; max {max_chars}): {path}"
+        )
+    pattern = re.compile(
+        r"^## 本次調整\s*\n(?P<changes>.+?)\n+## 發現的問題\s*\n(?P<issues>.+?)$",
+        re.DOTALL,
+    )
+    match = pattern.fullmatch(summary)
+    if not match or not all(match.group(name).strip() for name in ("changes", "issues")):
+        raise JobError(
+            "PR summary must contain non-empty '## 本次調整' and "
+            f"'## 發現的問題' sections in that order: {path}"
+        )
+    return summary
+
+
 def load_jsonl(path: Path) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

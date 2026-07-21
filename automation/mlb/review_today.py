@@ -26,6 +26,7 @@ from common import (
     github_git_env,
     job_lock,
     load_jsonl,
+    load_pr_summary,
     require_executable,
     review_branch,
     run,
@@ -65,6 +66,7 @@ def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path
 5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測。不得自行 commit、push 或建立 PR；外層程式會處理。
 6. 若修改 skill，保持最小差異，實際驗證所有受影響腳本；在 postmortem.md 記錄證據、修改、測試、回退方式與仍未解問題。
 7. 若證據不足，明確寫「不修改 skill／不建立 PR」以及需要累積的 cohort，不為了產生 PR 而修改。
+8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
 
 
@@ -149,7 +151,8 @@ def ensure_github_ready(base: str) -> None:
     run(["git", "fetch", "origin", base], env=github_git_env())
 
 
-def create_pr(worktree: Path, branch: str, base: str, date: str, report: Path) -> str:
+def create_pr(worktree: Path, branch: str, base: str, date: str, report: Path, summary: Path) -> str:
+    pr_summary = load_pr_summary(summary)
     gh = require_executable("gh", "GH_BIN")
     run(["git", "add", "mlb-analysis"], cwd=worktree)
     run(["git", "commit", "-m", f"fix(mlb): apply {date} postmortem findings"], cwd=worktree)
@@ -163,9 +166,8 @@ def create_pr(worktree: Path, branch: str, base: str, date: str, report: Path) -
         audit = audit[:52_000] + "\n\n[完整報告保留於執行主機；PR 內容因長度限制截斷。]"
     body = (
         f"Automated MLB postmortem for {date} (Asia/Taipei).\n\n"
-        "The skill was changed only for evidence-backed process errors. "
-        "Please review the methodology change and validation evidence before merging.\n\n"
-        "<details><summary>Postmortem evidence</summary>\n\n"
+        f"{pr_summary}\n\n"
+        "<details><summary>完整檢討證據</summary>\n\n"
         f"{audit}\n\n</details>"
     )
     result = run(
@@ -240,7 +242,7 @@ def main() -> int:
                 print(f"Review complete; no skill change justified: {report}")
                 return 0
             validate_changes(worktree)
-            pr_url = create_pr(worktree, branch, base, date, report)
+            pr_url = create_pr(worktree, branch, base, date, report, review_dir / "pr-summary.md")
             write_status(review_dir, "review", "complete", target_date=date, pr_created=True, pr_url=pr_url)
             print(f"Review complete; PR created: {pr_url}")
             return 0
