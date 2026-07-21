@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from common import JobError, atomic_json, load_jsonl, send_email
+AUTOMATION_DIR = Path(__file__).resolve().parents[1]
+if str(AUTOMATION_DIR) not in sys.path:
+    sys.path.insert(0, str(AUTOMATION_DIR))
+os.environ["AUTOMATION_MODULE"] = "mlb"
+
+from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
 from predict_next_day import extract_taipei_games, validate_forecasts, validate_notion_summary
 from review_today import is_recent_report, safe_date, validate_skill_frontmatter
 
@@ -38,6 +45,21 @@ class AutomationTests(unittest.TestCase):
     def test_invalid_date_is_rejected(self) -> None:
         with self.assertRaises(JobError):
             safe_date("2026-7-2")
+
+    def test_review_branch_uses_feature_module_mmdd(self) -> None:
+        self.assertEqual(review_branch("MLB", "2026-07-21"), "feature/MLB-0721")
+        self.assertEqual(review_branch("LOL", "2026-07-21"), "feature/LOL-0721")
+
+    @mock.patch("common.require_executable", return_value="/usr/bin/codex")
+    def test_codex_command_uses_scheduled_model_settings(self, _: mock.Mock) -> None:
+        settings = {
+            "AUTOMATION_CODEX_MODEL": "gpt-5.6-sol",
+            "AUTOMATION_REASONING_EFFORT": "high",
+        }
+        with mock.patch.dict(os.environ, settings, clear=False):
+            command = codex_command(Path("/tmp/work"), Path("/tmp/last.txt"), "prompt")
+        self.assertIn("gpt-5.6-sol", command)
+        self.assertIn('model_reasoning_effort="high"', command)
 
     def test_frontmatter_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -89,7 +111,7 @@ class AutomationTests(unittest.TestCase):
             "SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587",
             "SMTP_SECURITY": "starttls", "SMTP_USERNAME": "sender@example.com",
             "SMTP_PASSWORD": "secret", "SMTP_FROM": "sender@example.com",
-            "MLB_NOTIFICATION_EMAIL": "owner@example.com",
+            "AUTOMATION_NOTIFICATION_EMAIL": "owner@example.com",
         }
         with mock.patch.dict(__import__("os").environ, settings, clear=False):
             recipients = send_email("subject", "body")

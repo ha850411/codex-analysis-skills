@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Shared, deterministic plumbing for the MLB scheduled jobs."""
+"""賽事分析自動排程模組共用的確定性基礎功能。"""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,19 +17,21 @@ from zoneinfo import ZoneInfo
 
 
 TAIPEI = ZoneInfo("Asia/Taipei")
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+MODULE = os.environ.get("AUTOMATION_MODULE", "mlb").strip().lower()
+if MODULE not in {"mlb", "lol"}:
+    raise RuntimeError(f"Unsupported AUTOMATION_MODULE: {MODULE!r}")
 
 
 def load_repo_env() -> None:
-    """Load only automation-approved keys from .env without overriding the process."""
+    """只從 .env 載入自動排程允許的鍵，且不覆寫現有程序環境。"""
     allowed = {
         "GITHUB_PAT",
         "MLB_AUTOMATION_STATE_DIR",
-        "MLB_CODEX_MODEL",
-        "MLB_GIT_BASE_BRANCH",
+        "LOL_AUTOMATION_STATE_DIR",
+        "AUTOMATION_NOTIFICATION_EMAIL",
         "CODEX_BIN",
         "GH_BIN",
-        "MLB_NOTIFICATION_EMAIL",
         "SMTP_FROM",
         "SMTP_HOST",
         "SMTP_PASSWORD",
@@ -60,16 +63,29 @@ def load_repo_env() -> None:
 load_repo_env()
 
 STATE_ROOT = Path(
-    os.environ.get("MLB_AUTOMATION_STATE_DIR", REPO_ROOT / ".automation-state" / "mlb")
+    os.environ.get(
+        f"{MODULE.upper()}_AUTOMATION_STATE_DIR",
+        REPO_ROOT / ".automation-state" / MODULE,
+    )
 ).expanduser().resolve()
 
 
 class JobError(RuntimeError):
-    """Expected operational failure with a user-actionable message."""
+    """可預期且能提供使用者處理方式的作業錯誤。"""
 
 
 def target_date(offset_days: int = 0) -> str:
     return (datetime.now(TAIPEI).date() + timedelta(days=offset_days)).isoformat()
+
+
+def review_branch(module: str, date: str) -> str:
+    """依模組與賽事日期產生固定的賽後檢討 feature 分支名稱。"""
+    normalized_module = module.strip().upper()
+    if normalized_module not in {"MLB", "LOL"}:
+        raise JobError(f"Unsupported review branch module: {module!r}")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise JobError(f"Invalid review branch date: {date!r}")
+    return f"feature/{normalized_module}-{date[5:7]}{date[8:10]}"
 
 
 def require_executable(name: str, env_name: str | None = None) -> str:
@@ -153,7 +169,8 @@ def codex_command(
     add_dirs: Sequence[Path] = (),
 ) -> list[str]:
     codex = require_executable("codex", "CODEX_BIN")
-    model = os.environ.get("MLB_CODEX_MODEL", "").strip()
+    model = os.environ.get("AUTOMATION_CODEX_MODEL", "").strip()
+    reasoning_effort = os.environ.get("AUTOMATION_REASONING_EFFORT", "").strip()
     command = [
         codex,
         "exec",
@@ -174,12 +191,14 @@ def codex_command(
         command.extend(["--add-dir", str(directory)])
     if model:
         command.extend(["--model", model])
+    if reasoning_effort:
+        command.extend(["--config", f'model_reasoning_effort="{reasoning_effort}"'])
     command.append(prompt)
     return command
 
 
 def github_env() -> dict[str, str]:
-    """Return ephemeral GitHub auth variables without persisting the PAT."""
+    """回傳暫時性的 GitHub 驗證環境變數，不將 PAT 寫入磁碟。"""
     token = os.environ.get("GITHUB_PAT", "").strip()
     if not token:
         return {}
@@ -187,7 +206,7 @@ def github_env() -> dict[str, str]:
 
 
 def github_git_env() -> dict[str, str]:
-    """Authenticate GitHub HTTPS via an in-memory Git config entry."""
+    """透過記憶體中的 Git 設定完成 GitHub HTTPS 驗證。"""
     token = os.environ.get("GITHUB_PAT", "").strip()
     if not token:
         return {}
@@ -202,15 +221,16 @@ def github_git_env() -> dict[str, str]:
 
 
 def send_email(subject: str, body: str) -> list[str]:
-    """Send a UTF-8 plain-text notification through configured SMTP."""
+    """透過已設定的 SMTP 寄送 UTF-8 純文字通知。"""
     import smtplib
     import ssl
     from email.message import EmailMessage
 
     host = os.environ.get("SMTP_HOST", "").strip()
+    recipient_setting = os.environ.get("AUTOMATION_NOTIFICATION_EMAIL", "").strip()
     recipients = [
         address.strip()
-        for address in os.environ.get("MLB_NOTIFICATION_EMAIL", "").split(",")
+        for address in recipient_setting.split(",")
         if address.strip()
     ]
     username = os.environ.get("SMTP_USERNAME", "").strip()
@@ -226,7 +246,7 @@ def send_email(subject: str, body: str) -> list[str]:
     if not host:
         missing.append("SMTP_HOST")
     if not recipients:
-        missing.append("MLB_NOTIFICATION_EMAIL")
+        missing.append("AUTOMATION_NOTIFICATION_EMAIL")
     if not sender:
         missing.append("SMTP_FROM or SMTP_USERNAME")
     if missing:

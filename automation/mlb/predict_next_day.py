@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-"""At 21:00 Asia/Taipei, forecast every MLB game on the next TW date."""
+"""台灣時間 21:00 預測下一個台灣日曆日的全部 MLB 賽事。"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date as date_type, datetime, timedelta
 from pathlib import Path
+
+AUTOMATION_DIR = Path(__file__).resolve().parents[1]
+if str(AUTOMATION_DIR) not in sys.path:
+    sys.path.insert(0, str(AUTOMATION_DIR))
+os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import (
     REPO_ROOT,
@@ -49,7 +56,7 @@ FORECAST_FIELDS = {
 
 
 def fetch_schedule(target: str) -> list[dict[str, object]]:
-    """Query two MLB local dates, then retain games on the requested TW date."""
+    """查詢兩個 MLB 當地日期，再保留落在指定台灣日期的賽事。"""
     requested = date_type.fromisoformat(target)
     payloads: list[dict[str, object]] = []
     for day in (requested - timedelta(days=1), requested):
@@ -251,9 +258,9 @@ def finalize_prediction(output_dir: Path, date: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", help="Override target TW date (YYYY-MM-DD)")
-    parser.add_argument("--force", action="store_true", help="Replace an existing snapshot")
-    parser.add_argument("--dry-run", action="store_true", help="Print work without invoking Codex")
+    parser.add_argument("--date", help="覆寫台灣時間目標日期（YYYY-MM-DD）")
+    parser.add_argument("--force", action="store_true", help="取代既有預測快照")
+    parser.add_argument("--dry-run", action="store_true", help="只顯示工作內容，不啟動 Codex")
     return parser.parse_args()
 
 

@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""At 15:00 Asia/Taipei, review today's MLB forecasts and open a skill PR if justified."""
+"""台灣時間 15:00 檢討當日 MLB 預測，並在證據充分時建立 Skill PR。"""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
+import sys
 import time
 from pathlib import Path
+
+AUTOMATION_DIR = Path(__file__).resolve().parents[1]
+if str(AUTOMATION_DIR) not in sys.path:
+    sys.path.insert(0, str(AUTOMATION_DIR))
+os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import (
     REPO_ROOT,
@@ -21,6 +27,7 @@ from common import (
     job_lock,
     load_jsonl,
     require_executable,
+    review_branch,
     run,
     target_date,
     write_status,
@@ -63,7 +70,7 @@ def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path
 
 def prepare_worktree(date: str, base: str) -> tuple[Path, str]:
     git = require_executable("git")
-    branch = f"automation/mlb-review-{date}"
+    branch = review_branch("MLB", date)
     worktree = STATE_ROOT / "worktrees" / date
     if worktree.exists():
         if (worktree / ".git").exists():
@@ -113,7 +120,7 @@ def validate_changes(worktree: Path) -> None:
 
 
 def validate_skill_frontmatter(skill_dir: Path) -> None:
-    """Dependency-free fallback for hosts where quick_validate lacks PyYAML."""
+    """供 quick_validate 缺少 PyYAML 的主機使用，且不需額外相依套件的備援驗證。"""
     skill_file = skill_dir / "SKILL.md"
     if not skill_file.is_file():
         raise JobError(f"Missing skill file: {skill_file}")
@@ -172,15 +179,15 @@ def create_pr(worktree: Path, branch: str, base: str, date: str, report: Path) -
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", help="Override review TW date (YYYY-MM-DD)")
-    parser.add_argument("--dry-run", action="store_true", help="Print work without network or Codex")
+    parser.add_argument("--date", help="覆寫台灣時間檢討日期（YYYY-MM-DD）")
+    parser.add_argument("--dry-run", action="store_true", help="只顯示工作內容，不使用網路或 Codex")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     date = safe_date(args.date or target_date())
-    base = os.environ.get("MLB_GIT_BASE_BRANCH", "master")
+    base = "master"
     prediction_dir = STATE_ROOT / "predictions" / date
     review_dir = STATE_ROOT / "reviews" / date
     report = review_dir / "postmortem.md"
