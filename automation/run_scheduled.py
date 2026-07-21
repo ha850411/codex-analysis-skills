@@ -13,6 +13,11 @@ from pathlib import Path
 
 AUTOMATION_DIR = Path(__file__).resolve().parent
 REPO_ROOT = AUTOMATION_DIR.parent
+if str(AUTOMATION_DIR) not in sys.path:
+    sys.path.insert(0, str(AUTOMATION_DIR))
+
+from common import cleanup_old_reports
+
 CONFIG_FILE = AUTOMATION_DIR / "modules.json"
 PHASE_SCRIPTS = {
     "prediction": "predict_next_day.py",
@@ -76,6 +81,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.phase == "prediction":
+        is_dry_run = "--dry-run" in args.extra
+        cleaned = cleanup_old_reports(days=3, dry_run=is_dry_run)
+        if cleaned:
+            status = "Would clean" if is_dry_run else "Cleaned"
+            print(f"[cleanup] {status} {len(cleaned)} report item(s) older than 3 days.", flush=True)
+
     try:
         modules = load_config()
     except ConfigError as exc:

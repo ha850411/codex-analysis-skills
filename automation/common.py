@@ -78,6 +78,63 @@ def target_date(offset_days: int = 0) -> str:
     return (datetime.now(TAIPEI).date() + timedelta(days=offset_days)).isoformat()
 
 
+def cleanup_old_reports(
+    days: int = 3,
+    state_dir: Path | None = None,
+    dry_run: bool = False,
+) -> list[Path]:
+    """刪除指定天數（預設 3 天）以前的自動化報告與產物。"""
+    if state_dir is None:
+        state_dir = REPO_ROOT / ".automation-state"
+    state_dir = state_dir.expanduser().resolve()
+    if not state_dir.exists():
+        return []
+
+    cutoff_date = datetime.now(TAIPEI).date() - timedelta(days=days)
+    deleted: list[Path] = []
+
+    dirs_to_check: list[Path] = [state_dir]
+    for child in state_dir.iterdir():
+        if child.is_dir():
+            dirs_to_check.append(child)
+
+    for mod_dir in dirs_to_check:
+        for category in ("predictions", "reviews", "worktrees"):
+            cat_dir = mod_dir / category
+            if not cat_dir.is_dir():
+                continue
+            for item in list(cat_dir.iterdir()):
+                item_date = None
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", item.name):
+                    try:
+                        item_date = datetime.strptime(item.name, "%Y-%m-%d").date()
+                    except ValueError:
+                        pass
+                if item_date is None:
+                    mtime = item.stat().st_mtime
+                    item_date = datetime.fromtimestamp(mtime, tz=TAIPEI).date()
+
+                if item_date < cutoff_date:
+                    if not dry_run:
+                        if item.is_dir():
+                            if (item / ".git").exists():
+                                git = shutil.which("git")
+                                if git:
+                                    run([git, "worktree", "remove", "--force", str(item)], check=False)
+                            if item.exists():
+                                shutil.rmtree(item, ignore_errors=True)
+                        else:
+                            item.unlink(missing_ok=True)
+                    deleted.append(item)
+
+    if deleted and not dry_run:
+        git = shutil.which("git")
+        if git:
+            run([git, "worktree", "prune"], check=False)
+
+    return deleted
+
+
 def review_branch(module: str, date: str) -> str:
     """依模組與賽事日期產生固定的賽後檢討 feature 分支名稱。"""
     normalized_module = module.strip().upper()

@@ -21,8 +21,8 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, TAIPEI, JobError, atomic_json, assert_nonempty,
-    codex_command, fail, job_lock, load_jsonl, run, send_email, target_date,
-    write_status,
+    cleanup_old_reports, codex_command, fail, job_lock, load_jsonl, run,
+    send_email, target_date, write_status,
 )
 
 
@@ -253,6 +253,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    cleanup_old_reports(days=3, dry_run=args.dry_run)
     target = safe_date(args.date or target_date(1))
     output_dir = STATE_ROOT / "predictions" / target
     try:

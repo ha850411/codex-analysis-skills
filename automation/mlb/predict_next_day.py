@@ -23,8 +23,9 @@ from common import (
     STATE_ROOT,
     TAIPEI,
     JobError,
-    atomic_json,
     assert_nonempty,
+    atomic_json,
+    cleanup_old_reports,
     codex_command,
     fail,
     job_lock,
@@ -292,6 +293,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    cleanup_old_reports(days=3, dry_run=args.dry_run)
     date = args.date or target_date(1)
     output_dir = STATE_ROOT / "predictions" / date
     prediction = output_dir / "prediction.md"
