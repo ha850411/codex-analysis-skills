@@ -23,6 +23,7 @@ from common import (
     job_lock,
     load_jsonl,
     run,
+    send_email,
     target_date,
     write_status,
 )
@@ -112,7 +113,12 @@ def prompt_for(date: str, output_dir: Path) -> str:
    若官方確認當天完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
 6. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
-7. 最後自行檢查 prediction.md 與 forecasts.jsonl 均已建立；不要只在最終訊息貼報告。
+7. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 建立 {output_dir / 'notion-summary.json'}，供整日賽程建立一筆 Notion daily-summary。至少包含：
+   title, sport="MLB", module="mlb-analysis", event, startTime（+08:00）, prediction,
+   winner, winProbability, recommendation, stake, confidence, risk, sourceStatus,
+   analysisType="daily-summary", tags。
+8. 只建立本地 Notion summary，不要自行發布；外層程式會在驗證成功後發布並寄 Email。
+9. 最後自行檢查 prediction.md、forecasts.jsonl 與 notion-summary.json 均已建立；不要只在最終訊息貼報告。
 """
 
 
@@ -135,6 +141,114 @@ def validate_forecasts(path: Path) -> None:
                 raise JobError(f"forecasts.jsonl record {index}: {field} must be 0..1")
 
 
+def validate_notion_summary(path: Path) -> dict[str, object]:
+    assert_nonempty(path)
+    try:
+        summary = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid Notion summary JSON: {exc}") from exc
+    if not isinstance(summary, dict):
+        raise JobError("Notion summary must be a JSON object")
+    required = {
+        "title", "sport", "module", "event", "startTime", "prediction", "winner",
+        "winProbability", "recommendation", "stake", "confidence", "risk",
+        "sourceStatus", "analysisType", "tags",
+    }
+    missing = sorted(key for key in required if key not in summary)
+    if missing:
+        raise JobError(f"Notion summary missing: {', '.join(missing)}")
+    if summary["sport"] != "MLB" or summary["module"] != "mlb-analysis":
+        raise JobError("Notion summary must use sport=MLB and module=mlb-analysis")
+    if summary["analysisType"] != "daily-summary":
+        raise JobError("Notion summary must use analysisType=daily-summary")
+    if not str(summary["startTime"]).endswith("+08:00"):
+        raise JobError("Notion summary startTime must include the +08:00 timezone")
+    if summary["confidence"] is None or not str(summary["confidence"]).strip():
+        raise JobError("Notion summary confidence cannot be empty")
+    return summary
+
+
+def publish_to_notion(output_dir: Path) -> str:
+    receipt = output_dir / "notion-publish.json"
+    if receipt.is_file():
+        saved = json.loads(receipt.read_text(encoding="utf-8"))
+        if saved.get("ok") is True and saved.get("url"):
+            return str(saved["url"])
+    summary = output_dir / "notion-summary.json"
+    validate_notion_summary(summary)
+    result = run(
+        [
+            "node",
+            "shared/notion/publish_prediction.mjs",
+            "--summary",
+            str(summary),
+            "--markdown",
+            str(output_dir / "prediction.md"),
+        ],
+        capture=True,
+    )
+    try:
+        published = json.loads(result.stdout or "")
+    except json.JSONDecodeError as exc:
+        raise JobError("Notion exporter did not return valid JSON") from exc
+    if published.get("ok") is not True or not published.get("url"):
+        raise JobError("Notion exporter did not confirm a published page URL")
+    atomic_json(receipt, published)
+    return str(published["url"])
+
+
+def notify_by_email(output_dir: Path, date: str, notion_url: str) -> None:
+    receipt = output_dir / "email-notification.json"
+    if receipt.is_file():
+        saved = json.loads(receipt.read_text(encoding="utf-8"))
+        if saved.get("sent") is True and saved.get("notion_url") == notion_url:
+            return
+    recipients = send_email(
+        f"MLB 預測報告已完成｜{date}",
+        "\n".join(
+            [
+                f"{date}（台灣時間）的 MLB 預測報告已完成。",
+                "",
+                f"Notion：{notion_url}",
+                f"本地報告：{output_dir / 'prediction.md'}",
+                "",
+                "此信由 MLB 自動排程寄出。",
+            ]
+        ),
+    )
+    atomic_json(
+        receipt,
+        {
+            "sent": True,
+            "sent_at": datetime.now(TAIPEI).isoformat(),
+            "recipients": recipients,
+            "notion_url": notion_url,
+        },
+    )
+
+
+def finalize_prediction(output_dir: Path, date: str) -> str:
+    prediction = output_dir / "prediction.md"
+    forecasts = output_dir / "forecasts.jsonl"
+    assert_nonempty(prediction)
+    assert_nonempty(forecasts)
+    assert_nonempty(output_dir / "probability-checks.json")
+    validate_forecasts(forecasts)
+    validate_notion_summary(output_dir / "notion-summary.json")
+    run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
+    notion_url = publish_to_notion(output_dir)
+    notify_by_email(output_dir, date, notion_url)
+    write_status(
+        output_dir,
+        "prediction",
+        "complete",
+        target_date=date,
+        notion_url=notion_url,
+        email_notified=True,
+    )
+    return notion_url
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", help="Override target TW date (YYYY-MM-DD)")
@@ -154,8 +268,8 @@ def main() -> int:
         with job_lock("prediction"):
             if prediction.exists() and forecasts.exists() and not args.force:
                 validate_forecasts(forecasts)
-                write_status(output_dir, "prediction", "skipped", reason="immutable snapshot exists")
-                print(f"Prediction snapshot already exists: {output_dir}")
+                notion_url = finalize_prediction(output_dir, date)
+                print(f"Prediction already existed; publication finalized: {notion_url}")
                 return 0
             output_dir.mkdir(parents=True, exist_ok=True)
             prompt = prompt_for(date, output_dir)
@@ -177,13 +291,9 @@ def main() -> int:
                 return 0
             write_status(output_dir, "prediction", "running", target_date=date)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt))
-            assert_nonempty(prediction)
-            assert_nonempty(forecasts)
-            assert_nonempty(output_dir / "probability-checks.json")
-            validate_forecasts(forecasts)
-            run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
-            write_status(output_dir, "prediction", "complete", target_date=date)
+            notion_url = finalize_prediction(output_dir, date)
             print(f"Prediction complete: {prediction}")
+            print(f"Notion: {notion_url}")
             return 0
     except (JobError, OSError) as exc:
         return fail(output_dir, "prediction", exc)

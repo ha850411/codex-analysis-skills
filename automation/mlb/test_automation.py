@@ -5,9 +5,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from common import JobError, atomic_json, load_jsonl
-from predict_next_day import extract_taipei_games, validate_forecasts
+from common import JobError, atomic_json, load_jsonl, send_email
+from predict_next_day import extract_taipei_games, validate_forecasts, validate_notion_summary
 from review_today import is_recent_report, safe_date, validate_skill_frontmatter
 
 
@@ -66,6 +67,36 @@ class AutomationTests(unittest.TestCase):
             old = time.time() - 25 * 3600
             __import__("os").utime(report, (old, old))
             self.assertFalse(is_recent_report(report))
+
+    def test_notion_summary_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "notion-summary.json"
+            path.write_text(json.dumps({
+                "title": "MLB 2026-07-22", "sport": "MLB", "module": "mlb-analysis",
+                "event": "MLB", "startTime": "2026-07-22T01:00:00+08:00",
+                "prediction": "daily slate", "winner": "N/A", "winProbability": "N/A",
+                "recommendation": "see report", "stake": "N/A", "confidence": "60%",
+                "risk": "lineups pending", "sourceStatus": "checked",
+                "analysisType": "daily-summary", "tags": ["MLB", "prediction"],
+            }), encoding="utf-8")
+            summary = validate_notion_summary(path)
+            self.assertEqual(summary["analysisType"], "daily-summary")
+
+    @mock.patch("smtplib.SMTP")
+    def test_email_uses_starttls_and_auth(self, smtp_class: mock.Mock) -> None:
+        smtp = smtp_class.return_value.__enter__.return_value
+        settings = {
+            "SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587",
+            "SMTP_SECURITY": "starttls", "SMTP_USERNAME": "sender@example.com",
+            "SMTP_PASSWORD": "secret", "SMTP_FROM": "sender@example.com",
+            "MLB_NOTIFICATION_EMAIL": "owner@example.com",
+        }
+        with mock.patch.dict(__import__("os").environ, settings, clear=False):
+            recipients = send_email("subject", "body")
+        self.assertEqual(recipients, ["owner@example.com"])
+        smtp.starttls.assert_called_once()
+        smtp.login.assert_called_once_with("sender@example.com", "secret")
+        smtp.send_message.assert_called_once()
 
 
 if __name__ == "__main__":

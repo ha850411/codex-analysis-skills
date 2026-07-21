@@ -28,6 +28,13 @@ def load_repo_env() -> None:
         "MLB_GIT_BASE_BRANCH",
         "CODEX_BIN",
         "GH_BIN",
+        "MLB_NOTIFICATION_EMAIL",
+        "SMTP_FROM",
+        "SMTP_HOST",
+        "SMTP_PASSWORD",
+        "SMTP_PORT",
+        "SMTP_SECURITY",
+        "SMTP_USERNAME",
     }
     env_file = REPO_ROOT / ".env"
     if not env_file.is_file():
@@ -192,6 +199,61 @@ def github_git_env() -> dict[str, str]:
         "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
         "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credential}",
     }
+
+
+def send_email(subject: str, body: str) -> list[str]:
+    """Send a UTF-8 plain-text notification through configured SMTP."""
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+
+    host = os.environ.get("SMTP_HOST", "").strip()
+    recipients = [
+        address.strip()
+        for address in os.environ.get("MLB_NOTIFICATION_EMAIL", "").split(",")
+        if address.strip()
+    ]
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = os.environ.get("SMTP_FROM", "").strip() or username
+    security = os.environ.get("SMTP_SECURITY", "starttls").strip().lower()
+    try:
+        port = int(os.environ.get("SMTP_PORT", "465" if security == "ssl" else "587"))
+    except ValueError as exc:
+        raise JobError("SMTP_PORT must be an integer") from exc
+
+    missing = []
+    if not host:
+        missing.append("SMTP_HOST")
+    if not recipients:
+        missing.append("MLB_NOTIFICATION_EMAIL")
+    if not sender:
+        missing.append("SMTP_FROM or SMTP_USERNAME")
+    if missing:
+        raise JobError(f"Missing email settings: {', '.join(missing)}")
+    if security not in {"starttls", "ssl", "none"}:
+        raise JobError("SMTP_SECURITY must be starttls, ssl, or none")
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = ", ".join(recipients)
+    message.set_content(body)
+
+    context = ssl.create_default_context()
+    if security == "ssl":
+        smtp_connection = smtplib.SMTP_SSL(host, port, timeout=30, context=context)
+    else:
+        smtp_connection = smtplib.SMTP(host, port, timeout=30)
+    with smtp_connection as smtp:
+        if security == "starttls":
+            smtp.starttls(context=context)
+        if username:
+            if not password:
+                raise JobError("SMTP_PASSWORD is required when SMTP_USERNAME is set")
+            smtp.login(username, password)
+        smtp.send_message(message)
+    return recipients
 
 
 def assert_nonempty(path: Path) -> None:

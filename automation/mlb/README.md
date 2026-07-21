@@ -12,9 +12,26 @@ Runtime reports and logs live under `.automation-state/mlb/` and are intentional
 1. `codex login`
 2. Add `GITHUB_PAT=github_pat_...` to the repo-root `.env` (recommended), or run `gh auth login -h github.com`. The token needs repository Contents write and Pull requests write access.
 3. The Mac clock/timezone must be Asia/Taipei. The crontab also sets `TZ=Asia/Taipei`, but macOS cron scheduling follows the machine timezone.
-4. The repository remote must be named `origin`. The base branch defaults to `master`; override with `MLB_GIT_BASE_BRANCH` in the launchd environment if needed.
+4. The repository remote must be named `origin`. The base branch defaults to `master`; override with `MLB_GIT_BASE_BRANCH` in `.env` if needed.
+5. Configure Notion and SMTP in `.env`. A verified prediction is published as one `daily-summary` Notion page, then an email containing the Notion URL is sent.
 
-The loader reads only these allowlisted `.env` keys: `GITHUB_PAT`, `CODEX_BIN`, `GH_BIN`, `MLB_CODEX_MODEL`, `MLB_AUTOMATION_STATE_DIR`, and `MLB_GIT_BASE_BRANCH`. It never persists the PAT to a plist, Git remote, report, or commit.
+The loader reads only allowlisted automation, GitHub, and SMTP keys from `.env`. It never persists passwords or tokens to crontab, Git remotes, reports, or commits.
+
+Required publication/notification settings:
+
+```dotenv
+NOTION_TOKEN=secret_xxx
+NOTION_DATA_SOURCE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+MLB_NOTIFICATION_EMAIL=you@example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls
+SMTP_USERNAME=you@example.com
+SMTP_PASSWORD=app-password
+SMTP_FROM=you@example.com
+```
+
+Use `SMTP_SECURITY=ssl` with port 465 when required by the provider. Multiple recipients may be comma-separated. If Notion succeeds but email fails, rerunning the prediction job reuses the saved Notion URL and retries only email; it does not invoke Codex again.
 
 Never put a real token in `.env.example`; it is tracked by Git. Keep the secret only in ignored `.env` and rotate it immediately if it has ever been committed or pushed.
 
