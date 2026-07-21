@@ -7,7 +7,13 @@ from pathlib import Path
 import time
 from datetime import datetime, timedelta
 
-from automation.common import TAIPEI, JobError, cleanup_old_reports, load_pr_summary
+from automation.common import (
+    TAIPEI,
+    JobError,
+    cleanup_old_reports,
+    load_pr_summary,
+    recreate_dated_output_dir,
+)
 
 
 class PrSummaryTests(unittest.TestCase):
@@ -90,6 +96,32 @@ class CleanupTests(unittest.TestCase):
             deleted = cleanup_old_reports(days=3, state_dir=root, dry_run=True)
             self.assertIn(target_path, deleted)
             self.assertTrue(target_path.exists())
+
+
+class RecreateOutputDirTests(unittest.TestCase):
+    def test_recreates_only_the_requested_date_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            predictions = Path(temp_dir) / "predictions"
+            target = predictions / "2026-07-22"
+            target.mkdir(parents=True)
+            (target / "old.txt").write_text("old", encoding="utf-8")
+
+            self.assertTrue(recreate_dated_output_dir(target, predictions))
+            self.assertTrue(target.is_dir())
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_rejects_paths_outside_the_expected_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            predictions = root / "predictions"
+            outside = root / "2026-07-22"
+            outside.mkdir()
+            marker = outside / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            with self.assertRaises(JobError):
+                recreate_dated_output_dir(outside, predictions)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
 
 
 if __name__ == "__main__":

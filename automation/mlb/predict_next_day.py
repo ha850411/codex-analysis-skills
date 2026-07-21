@@ -30,6 +30,7 @@ from common import (
     fail,
     job_lock,
     load_jsonl,
+    recreate_dated_output_dir,
     run,
     send_email,
     target_date,
@@ -77,6 +78,17 @@ def fetch_schedule(target: str) -> list[dict[str, object]]:
     return extract_taipei_games(payloads, target)
 
 
+def safe_date(value: str) -> str:
+    """驗證日期並拒絕可能逃出 predictions 目錄的路徑字串。"""
+    try:
+        parsed = date_type.fromisoformat(value)
+    except ValueError as exc:
+        raise JobError(f"Invalid date: {value!r}") from exc
+    if parsed.isoformat() != value:
+        raise JobError(f"Invalid date: {value!r}")
+    return value
+
+
 def extract_taipei_games(
     payloads: list[dict[str, object]], target: str
 ) -> list[dict[str, object]]:
@@ -111,7 +123,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
 要求：
 1. 使用即時網路來源先盤點該台灣日期的全部比賽，處理雙重賽、延賽、TBD 先發及美國跨日。
 2. 嚴格先鎖定模型機率，再查市場；資料不足時保留 N/A／等待條件，不硬造數字。
-3. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。若目錄已有舊產物，這是明確授權的排程重跑；必須以本次結果更新 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
+3. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 4. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的輸出契約，且全文最後只有一個「簡表總結」。
 5. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    game_id, predicted_at, first_pitch, snapshot, model_version, away_team, home_team,
@@ -294,17 +306,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     cleanup_old_reports(days=3, dry_run=args.dry_run)
-    date = args.date or target_date(1)
+    date = safe_date(args.date or target_date(1))
     output_dir = STATE_ROOT / "predictions" / date
     prediction = output_dir / "prediction.md"
 
     try:
         with job_lock("prediction"):
-            output_dir.mkdir(parents=True, exist_ok=True)
             prompt = prompt_for(date, output_dir)
             if args.dry_run:
                 print(prompt)
                 return 0
+            if recreate_dated_output_dir(output_dir, STATE_ROOT / "predictions"):
+                print(f"[reset] Removed existing prediction directory: {output_dir}", flush=True)
             games = fetch_schedule(date)
             schedule_snapshot = {
                 "target_date": date,

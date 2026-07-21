@@ -21,8 +21,8 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, TAIPEI, JobError, atomic_json, assert_nonempty,
-    cleanup_old_reports, codex_command, fail, job_lock, load_jsonl, run,
-    send_email, target_date, write_status,
+    cleanup_old_reports, codex_command, fail, job_lock, load_jsonl,
+    recreate_dated_output_dir, run, send_email, target_date, write_status,
 )
 
 
@@ -127,7 +127,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 要求：
 1. 只能預測 schedule-precheck.json 列出的比賽；賽程入口固定為 {SOURCE_URL}。不得加入 A/B/C Tier。
 2. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
-3. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。若目錄已有舊產物，這是明確授權的排程重跑；必須以本次結果更新 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
+3. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 4. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
 5. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
@@ -258,10 +258,11 @@ def main() -> int:
     output_dir = STATE_ROOT / "predictions" / target
     try:
         with job_lock("prediction"):
-            output_dir.mkdir(parents=True, exist_ok=True)
             if args.dry_run:
                 print(prompt_for(target, output_dir))
                 return 0
+            if recreate_dated_output_dir(output_dir, STATE_ROOT / "predictions"):
+                print(f"[reset] Removed existing prediction directory: {output_dir}", flush=True)
             matches = fetch_schedule(target)
             snapshot = {"target_date": target, "checked_at": datetime.now(TAIPEI).isoformat(), "source": SOURCE_URL, "api": API_URL, "tier": "s", "match_count": len(matches), "matches": [compact_match(match) for match in matches]}
             atomic_json(output_dir / "schedule-precheck.json", snapshot)

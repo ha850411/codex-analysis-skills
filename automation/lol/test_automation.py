@@ -29,6 +29,7 @@ class LolAutomationTests(unittest.TestCase):
             output_dir.mkdir(parents=True)
             (output_dir / "prediction.md").write_text("old", encoding="utf-8")
             (output_dir / "forecasts.jsonl").write_text("old\n", encoding="utf-8")
+            (output_dir / "email-notification.json").write_text("old", encoding="utf-8")
 
             with (
                 mock.patch("predict_next_day.STATE_ROOT", state_root),
@@ -47,6 +48,33 @@ class LolAutomationTests(unittest.TestCase):
                 self.assertEqual(prediction_main(), 0)
 
             run_mock.assert_called_once_with(["codex", "exec"])
+            self.assertFalse((output_dir / "prediction.md").exists())
+            self.assertFalse((output_dir / "forecasts.jsonl").exists())
+            self.assertFalse((output_dir / "email-notification.json").exists())
+            self.assertTrue((output_dir / "schedule-precheck.json").exists())
+
+    def test_dry_run_preserves_existing_prediction_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            output_dir = state_root / "predictions/2026-07-22"
+            output_dir.mkdir(parents=True)
+            old_report = output_dir / "prediction.md"
+            old_report.write_text("old", encoding="utf-8")
+
+            with (
+                mock.patch("predict_next_day.STATE_ROOT", state_root),
+                mock.patch(
+                    "predict_next_day.parse_args",
+                    return_value=Namespace(date="2026-07-22", force=False, dry_run=True),
+                ),
+                mock.patch("predict_next_day.cleanup_old_reports"),
+                mock.patch("predict_next_day.job_lock", side_effect=lambda _: nullcontext()),
+                mock.patch("predict_next_day.fetch_schedule") as fetch_mock,
+            ):
+                self.assertEqual(prediction_main(), 0)
+
+            self.assertEqual(old_report.read_text(encoding="utf-8"), "old")
+            fetch_mock.assert_not_called()
 
     def test_filters_tier_and_taipei_date(self) -> None:
         records = [

@@ -135,6 +135,24 @@ def cleanup_old_reports(
     return deleted
 
 
+def recreate_dated_output_dir(output_dir: Path, expected_parent: Path) -> bool:
+    """安全地刪除並重建單一 YYYY-MM-DD 排程輸出目錄。"""
+    output_dir = output_dir.expanduser()
+    expected_parent = expected_parent.expanduser().resolve()
+    if output_dir.parent.resolve() != expected_parent:
+        raise JobError(f"Refusing to reset output outside {expected_parent}: {output_dir}")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", output_dir.name):
+        raise JobError(f"Refusing to reset non-dated output directory: {output_dir}")
+
+    removed = output_dir.exists() or output_dir.is_symlink()
+    if output_dir.is_symlink() or output_dir.is_file():
+        output_dir.unlink()
+    elif output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=False)
+    return removed
+
+
 def review_branch(module: str, date: str) -> str:
     """依模組與賽事日期產生固定的賽後檢討 feature 分支名稱。"""
     normalized_module = module.strip().upper()
