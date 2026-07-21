@@ -61,6 +61,14 @@ class AutomationTests(unittest.TestCase):
         self.assertIn("gpt-5.6-sol", command)
         self.assertIn('model_reasoning_effort="high"', command)
 
+    @mock.patch("common.require_executable", return_value="/usr/bin/codex")
+    def test_codex_global_options_precede_exec_subcommand(self, _: mock.Mock) -> None:
+        command = codex_command(Path("/tmp/work"), Path("/tmp/last.txt"), "prompt")
+        exec_index = command.index("exec")
+        self.assertLess(command.index("--search"), exec_index)
+        self.assertLess(command.index("--ask-for-approval"), exec_index)
+        self.assertEqual(command[command.index("--ask-for-approval") + 1], "never")
+
     def test_frontmatter_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             skill = Path(directory) / "demo-skill"

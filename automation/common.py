@@ -173,15 +173,16 @@ def codex_command(
     reasoning_effort = os.environ.get("AUTOMATION_REASONING_EFFORT", "").strip()
     command = [
         codex,
-        "exec",
+        # These are root CLI options and must appear before the `exec` subcommand.
         "--search",
+        "--ask-for-approval",
+        "never",
+        "exec",
         "--ephemeral",
         "--color",
         "never",
         "--sandbox",
         "workspace-write",
-        "--ask-for-approval",
-        "never",
         "--cd",
         str(workdir),
         "--output-last-message",

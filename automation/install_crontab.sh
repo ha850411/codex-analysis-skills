@@ -13,6 +13,9 @@ command -v crontab >/dev/null 2>&1 || { print -u2 "找不到 crontab。"; exit 1
 PYTHON_BIN="$(command -v python3 || true)"
 [[ -n "${PYTHON_BIN}" ]] || { print -u2 "找不到 python3。"; exit 1; }
 readonly PYTHON_BIN
+CODEX_BIN="$(command -v codex || true)"
+[[ -n "${CODEX_BIN}" ]] || { print -u2 "找不到 codex。"; exit 1; }
+readonly CODEX_BIN
 mkdir -p "${LOG_DIR}"
 
 current_file="$(mktemp -t codex-analysis-cron-current.XXXXXX)"
@@ -33,8 +36,8 @@ awk -v begin="${BEGIN_MARKER}" -v end="${END_MARKER}" -v old_begin="${OLD_BEGIN_
   print "SHELL=/bin/zsh"
   print "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
   print "TZ=Asia/Taipei"
-  print -r -- "0 21 * * * cd '${REPO_ROOT}' && '${PYTHON_BIN}' automation/run_scheduled.py prediction >> '${LOG_DIR}/prediction.log' 2>&1"
-  print -r -- "0 15 * * * cd '${REPO_ROOT}' && '${PYTHON_BIN}' automation/run_scheduled.py review >> '${LOG_DIR}/review.log' 2>&1"
+  print -r -- "0 21 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py prediction >> '${LOG_DIR}/prediction.log' 2>&1"
+  print -r -- "0 15 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py review >> '${LOG_DIR}/review.log' 2>&1"
   print -r -- "${END_MARKER}"
 } >>"${new_file}"
 
