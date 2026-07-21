@@ -130,22 +130,48 @@ def prompt_for(date: str, output_dir: Path) -> str:
 
 
 def validate_forecasts(path: Path) -> None:
-    for index, record in enumerate(load_jsonl(path), 1):
+    records = load_jsonl(path)
+    no_games = [record for record in records if record.get("status") == "no-games"]
+    if no_games:
+        if len(records) != 1:
+            raise JobError("forecasts.jsonl cannot mix no-games with game forecasts")
+        record = no_games[0]
+        if not record.get("date") or not record.get("sources"):
+            raise JobError("forecasts.jsonl no-games record requires date and sources")
+        return
+
+    modeled_count = 0
+    for index, record in enumerate(records, 1):
         if record.get("status") == "no-games":
-            if not record.get("date") or not record.get("sources"):
-                raise JobError(f"forecasts.jsonl record {index}: no-games requires date and sources")
-            continue
+            raise AssertionError("no-games records were handled above")
         if record.get("status", "modeled") != "modeled":
             if not record.get("missing_data"):
                 raise JobError(f"forecasts.jsonl record {index} is unmodeled without missing_data")
             continue
+        modeled_count += 1
         missing = sorted(FORECAST_FIELDS - record.keys())
         if missing:
             raise JobError(f"forecasts.jsonl record {index} missing: {', '.join(missing)}")
+        model_version = record["model_version"]
+        if not isinstance(model_version, str) or not model_version.strip() or model_version.strip().upper().startswith("N/A"):
+            raise JobError(f"forecasts.jsonl record {index}: model_version must identify a production model")
+        for field in (
+            "away_f5_runs_mean", "home_f5_runs_mean", "away_late_runs_mean",
+            "home_late_runs_mean", "away_runs_mean", "home_runs_mean",
+        ):
+            value = record[field]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise JobError(f"forecasts.jsonl record {index}: {field} must be a non-negative number")
         for field in ("home_win_prob", "model_confidence"):
             value = record[field]
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
                 raise JobError(f"forecasts.jsonl record {index}: {field} must be 0..1")
+
+    if modeled_count == 0:
+        raise JobError(
+            "MLB schedule contains games but forecasts.jsonl has zero modeled forecasts; "
+            "refusing to publish an all-N/A report"
+        )
 
 
 def validate_notion_summary(path: Path) -> dict[str, object]:

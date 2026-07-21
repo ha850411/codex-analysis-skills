@@ -42,6 +42,56 @@ class AutomationTests(unittest.TestCase):
             )
             validate_forecasts(path)
 
+    def test_all_unmodeled_forecasts_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecasts.jsonl"
+            path.write_text(json.dumps({
+                "game_id": 1,
+                "status": "insufficient-model-data",
+                "missing_data": ["production model"],
+            }) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(JobError, "zero modeled forecasts"):
+                validate_forecasts(path)
+
+    def test_no_games_cannot_be_mixed_with_forecasts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecasts.jsonl"
+            records = [
+                {"status": "no-games", "date": "2026-12-25", "sources": ["MLB"]},
+                {"game_id": 1, "status": "insufficient-model-data", "missing_data": ["model"]},
+            ]
+            path.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(JobError, "cannot mix no-games"):
+                validate_forecasts(path)
+
+    def test_modeled_forecast_requires_production_model_and_numeric_means(self) -> None:
+        base = {
+            "game_id": 1, "predicted_at": "2026-07-21T21:00:00+08:00",
+            "first_pitch": "2026-07-22T07:00:00+08:00", "snapshot": "pre-lineup",
+            "model_version": "mlb-baseline-v1", "away_team": "Away", "home_team": "Home",
+            "away_f5_runs_mean": 2.1, "home_f5_runs_mean": 2.3,
+            "away_late_runs_mean": 1.8, "home_late_runs_mean": 1.9,
+            "away_runs_mean": 3.9, "home_runs_mean": 4.2,
+            "home_win_prob": 0.54, "model_confidence": 0.62, "sources": ["MLB"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecasts.jsonl"
+            path.write_text(json.dumps(base) + "\n", encoding="utf-8")
+            validate_forecasts(path)
+
+            invalid_version = {**base, "model_version": "N/A-no-model"}
+            path.write_text(json.dumps(invalid_version) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(JobError, "production model"):
+                validate_forecasts(path)
+
+            invalid_mean = {**base, "away_runs_mean": None}
+            path.write_text(json.dumps(invalid_mean) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(JobError, "away_runs_mean"):
+                validate_forecasts(path)
+
     def test_invalid_date_is_rejected(self) -> None:
         with self.assertRaises(JobError):
             safe_date("2026-7-2")
