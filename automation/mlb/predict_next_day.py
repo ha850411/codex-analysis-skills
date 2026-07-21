@@ -111,7 +111,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
 要求：
 1. 使用即時網路來源先盤點該台灣日期的全部比賽，處理雙重賽、延賽、TBD 先發及美國跨日。
 2. 嚴格先鎖定模型機率，再查市場；資料不足時保留 N/A／等待條件，不硬造數字。
-3. 產生不可覆寫的 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。
+3. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。若目錄已有舊產物，這是明確授權的排程重跑；必須以本次結果更新 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 4. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的輸出契約，且全文最後只有一個「簡表總結」。
 5. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    game_id, predicted_at, first_pitch, snapshot, model_version, away_team, home_team,
@@ -286,7 +286,7 @@ def finalize_prediction(output_dir: Path, date: str) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", help="覆寫台灣時間目標日期（YYYY-MM-DD）")
-    parser.add_argument("--force", action="store_true", help="取代既有預測快照")
+    parser.add_argument("--force", action="store_true", help="相容舊呼叫；排程現在預設就會重跑")
     parser.add_argument("--dry-run", action="store_true", help="只顯示工作內容，不啟動 Codex")
     return parser.parse_args()
 
@@ -297,15 +297,9 @@ def main() -> int:
     date = args.date or target_date(1)
     output_dir = STATE_ROOT / "predictions" / date
     prediction = output_dir / "prediction.md"
-    forecasts = output_dir / "forecasts.jsonl"
 
     try:
         with job_lock("prediction"):
-            if prediction.exists() and forecasts.exists() and not args.force:
-                validate_forecasts(forecasts)
-                notion_url = finalize_prediction(output_dir, date)
-                print(f"Prediction already existed; publication finalized: {notion_url}")
-                return 0
             output_dir.mkdir(parents=True, exist_ok=True)
             prompt = prompt_for(date, output_dir)
             if args.dry_run:

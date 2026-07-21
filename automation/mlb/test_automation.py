@@ -6,6 +6,8 @@ import sys
 import tempfile
 import time
 import unittest
+from argparse import Namespace
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -15,11 +17,36 @@ if str(AUTOMATION_DIR) not in sys.path:
 os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
-from predict_next_day import extract_taipei_games, validate_forecasts, validate_notion_summary
+from predict_next_day import extract_taipei_games, main as prediction_main, validate_forecasts, validate_notion_summary
 from review_today import is_recent_report, safe_date, validate_skill_frontmatter
 
 
 class AutomationTests(unittest.TestCase):
+    def test_existing_prediction_is_regenerated_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            output_dir = state_root / "predictions/2026-07-22"
+            output_dir.mkdir(parents=True)
+            (output_dir / "prediction.md").write_text("old", encoding="utf-8")
+            (output_dir / "forecasts.jsonl").write_text("old\n", encoding="utf-8")
+
+            with (
+                mock.patch("predict_next_day.STATE_ROOT", state_root),
+                mock.patch(
+                    "predict_next_day.parse_args",
+                    return_value=Namespace(date="2026-07-22", force=False, dry_run=False),
+                ),
+                mock.patch("predict_next_day.cleanup_old_reports"),
+                mock.patch("predict_next_day.job_lock", side_effect=lambda _: nullcontext()),
+                mock.patch("predict_next_day.fetch_schedule", return_value=[{"gamePk": 1}]),
+                mock.patch("predict_next_day.codex_command", return_value=["codex", "exec"]),
+                mock.patch("predict_next_day.run") as run_mock,
+                mock.patch("predict_next_day.finalize_prediction", return_value="https://notion.example/report"),
+            ):
+                self.assertEqual(prediction_main(), 0)
+
+            run_mock.assert_called_once_with(["codex", "exec"])
+
     def test_atomic_json_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "status.json"
