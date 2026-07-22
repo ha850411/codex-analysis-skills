@@ -70,7 +70,7 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     if not isinstance(status, str) or not status.strip():
         raise ValueError(f"record {line_number}: status must be non-empty")
     status = status.strip()
-    scorable = status == "modeled"
+    scorable = status in {"modeled", "baseline"}
     required = REQUIRED_FIELDS if scorable else UNMODELED_REQUIRED_FIELDS
     missing = sorted(required - record.keys())
     if missing:
@@ -322,7 +322,10 @@ def availability_audit(records: list[dict[str, Any]]) -> dict[str, Any]:
         "status_counts": dict(sorted(status_counts.items())),
         "missing_data_counts": dict(sorted(missing_data_counts.items())),
         "by_snapshot": dict(sorted(snapshots.items())),
-        "note": "Only status=modeled records enter probabilistic and run-error metrics.",
+        "note": (
+            "status=modeled and status=baseline records enter scoring; keep model_version "
+            "and status cohorts separate because baseline is not production-calibrated."
+        ),
     }
 
 

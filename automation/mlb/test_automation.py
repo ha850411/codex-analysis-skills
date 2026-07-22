@@ -21,6 +21,11 @@ if str(MLB_SCRIPTS_DIR) not in sys.path:
 os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
+from build_public_baseline import (
+    fit_public_environment,
+    parse_pitcher_projection,
+    phase_run_means,
+)
 from evaluate_forecasts import _read_records, availability_audit
 from predict_next_day import (
     extract_taipei_games,
@@ -28,12 +33,43 @@ from predict_next_day import (
     forecast_window,
     main as prediction_main,
     validate_forecasts,
+    validate_against_public_baseline,
     validate_notion_summary,
 )
 from review_today import is_recent_report, main as review_main, safe_date, validate_skill_frontmatter
 
 
 class AutomationTests(unittest.TestCase):
+    def test_public_baseline_fits_only_auditable_numeric_inputs(self) -> None:
+        games = []
+        for index in range(120):
+            away_score = index % 8
+            home_score = (index * 3 + 1) % 9
+            if away_score == home_score:
+                home_score = (home_score + 1) % 10
+            games.append({
+                "teams": {
+                    "away": {"team": {"id": 1}, "score": away_score},
+                    "home": {"team": {"id": 2}, "score": home_score},
+                }
+            })
+        environment = fit_public_environment(games)
+        self.assertEqual(environment["completed_game_count"], 120)
+        self.assertIn("1", environment["team_profiles"])
+        self.assertGreater(environment["away_runs_per_game"], 0)
+        self.assertGreaterEqual(environment["dispersion"]["away_team_sigma"], 0.05)
+
+        fallback = parse_pitcher_projection({}, environment["team_runs_per_game"])
+        means = phase_run_means(
+            environment["team_profiles"]["1"],
+            environment["team_profiles"]["2"],
+            fallback,
+            environment["away_runs_per_game"],
+            environment["team_runs_per_game"],
+        )
+        self.assertGreater(means["f5"], 0)
+        self.assertGreater(means["late"], 0)
+
     def test_existing_prediction_is_regenerated_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state_root = Path(directory)
@@ -52,6 +88,7 @@ class AutomationTests(unittest.TestCase):
                 mock.patch("predict_next_day.cleanup_old_reports"),
                 mock.patch("predict_next_day.job_lock", side_effect=lambda _: nullcontext()),
                 mock.patch("predict_next_day.fetch_schedule", return_value=[{"gamePk": 1}]),
+                mock.patch("predict_next_day.build_public_baseline") as baseline_mock,
                 mock.patch("predict_next_day.codex_command", return_value=["codex", "exec"]),
                 mock.patch("predict_next_day.run") as run_mock,
                 mock.patch("predict_next_day.finalize_prediction", return_value="https://notion.example/report"),
@@ -59,6 +96,7 @@ class AutomationTests(unittest.TestCase):
                 self.assertEqual(prediction_main(), 0)
 
             run_mock.assert_called_once_with(["codex", "exec"])
+            baseline_mock.assert_called_once_with(output_dir)
             self.assertFalse((output_dir / "prediction.md").exists())
             self.assertFalse((output_dir / "forecasts.jsonl").exists())
             self.assertFalse((output_dir / "notion-publish.json").exists())
@@ -158,11 +196,17 @@ class AutomationTests(unittest.TestCase):
         base = {
             "game_id": 1, "predicted_at": "2026-07-21T21:00:00+08:00",
             "first_pitch": "2026-07-22T07:00:00+08:00", "snapshot": "pre-lineup",
-            "model_version": "mlb-baseline-v1", "away_team": "Away", "home_team": "Home",
+            "model_version": "mlb-production-v1", "away_team": "Away", "home_team": "Home",
             "away_f5_runs_mean": 2.1, "home_f5_runs_mean": 2.3,
             "away_late_runs_mean": 1.8, "home_late_runs_mean": 1.9,
             "away_runs_mean": 3.9, "home_runs_mean": 4.2,
             "home_win_prob": 0.54, "model_confidence": 0.62, "sources": ["MLB"],
+            "f5_away_win_prob": 0.40, "f5_tie_prob": 0.20,
+            "f5_home_win_prob": 0.40, "away_runs_p10": 1, "away_runs_p90": 7,
+            "home_runs_p10": 1, "home_runs_p90": 8,
+            "total_runs_p10": 4, "total_runs_p90": 14,
+            "status": "modeled", "model_tier": "production",
+            "validation_status": "walk-forward-validated", "recommendation_eligible": True,
         }
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "forecasts.jsonl"
@@ -171,7 +215,7 @@ class AutomationTests(unittest.TestCase):
 
             invalid_version = {**base, "model_version": "N/A-no-model"}
             path.write_text(json.dumps(invalid_version) + "\n", encoding="utf-8")
-            with self.assertRaisesRegex(JobError, "production model"):
+            with self.assertRaisesRegex(JobError, "numeric model"):
                 validate_forecasts(path)
 
             invalid_mean = {**base, "away_runs_mean": None}
@@ -179,7 +223,7 @@ class AutomationTests(unittest.TestCase):
             with self.assertRaisesRegex(JobError, "away_runs_mean"):
                 validate_forecasts(path)
 
-    def test_finalize_publishes_degraded_report_and_records_quality(self) -> None:
+    def test_finalize_refuses_all_na_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_dir = Path(directory)
             (output_dir / "prediction.md").write_text("# degraded report\n", encoding="utf-8")
@@ -206,29 +250,43 @@ class AutomationTests(unittest.TestCase):
                 "risk": "production model missing", "sourceStatus": "schedule checked",
                 "analysisType": "daily-summary", "tags": ["MLB", "degraded"],
             }) + "\n", encoding="utf-8")
-
-            with (
-                mock.patch("predict_next_day.run"),
-                mock.patch(
-                    "predict_next_day.publish_to_notion",
-                    return_value="https://notion.example/degraded",
-                ),
-                mock.patch("predict_next_day.notify_by_email") as notify_mock,
-            ):
-                url = finalize_prediction(output_dir, "2026-07-22")
-
-            self.assertEqual(url, "https://notion.example/degraded")
-            notify_mock.assert_called_once_with(
-                output_dir,
-                "2026-07-22",
-                "https://notion.example/degraded",
-                "degraded",
+            (output_dir / "public-baseline.json").write_text(
+                json.dumps({"forecasts": []}), encoding="utf-8"
             )
-            status = json.loads((output_dir / "status.json").read_text(encoding="utf-8"))
-            self.assertEqual(status["status"], "complete")
-            self.assertEqual(status["report_quality"], "degraded")
-            self.assertEqual(status["modeled_forecasts"], 0)
-            self.assertEqual(status["unmodeled_forecasts"], 1)
+            with self.assertRaisesRegex(JobError, "public-baseline.json has no forecasts"):
+                finalize_prediction(output_dir, "2026-07-22")
+
+    def test_baseline_forecast_is_numeric_but_not_recommendation_eligible(self) -> None:
+        record = {
+            "game_id": "1", "predicted_at": "2026-07-21T21:00:00+08:00",
+            "first_pitch": "2026-07-22T07:00:00+08:00", "snapshot": "pre-lineup",
+            "model_version": "mlb-public-baseline-v1.0.0", "away_team": "Away",
+            "home_team": "Home", "away_f5_runs_mean": 2.1, "home_f5_runs_mean": 2.3,
+            "away_late_runs_mean": 1.8, "home_late_runs_mean": 1.9,
+            "away_runs_mean": 3.9, "home_runs_mean": 4.2, "home_win_prob": 0.54,
+            "f5_away_win_prob": 0.40, "f5_tie_prob": 0.20,
+            "f5_home_win_prob": 0.40, "away_runs_p10": 1, "away_runs_p90": 7,
+            "home_runs_p10": 1, "home_runs_p90": 8,
+            "total_runs_p10": 4, "total_runs_p90": 14,
+            "model_confidence": 0.55, "status": "baseline",
+            "model_tier": "public-data-baseline", "validation_status": "uncalibrated",
+            "recommendation_eligible": False, "sources": ["MLB Stats API"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            forecasts = root / "forecasts.jsonl"
+            baseline = root / "public-baseline.json"
+            forecasts.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            baseline.write_text(json.dumps({"forecasts": [record]}), encoding="utf-8")
+            result = validate_forecasts(forecasts)
+            self.assertEqual(result["report_quality"], "baseline")
+            self.assertEqual(result["baseline_count"], 1)
+            validate_against_public_baseline(forecasts, baseline)
+
+            changed = {**record, "home_win_prob": 0.60}
+            forecasts.write_text(json.dumps(changed) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(JobError, "changed locked baseline fields"):
+                validate_against_public_baseline(forecasts, baseline)
 
     def test_evaluator_audits_unmodeled_records_without_scoring_them(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

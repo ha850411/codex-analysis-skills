@@ -13,7 +13,7 @@
 
 找不到原紀錄時，明確標註「無法做正式校準」；只能做流程稽核，不得憑先前文字摘要重建假精準機率。
 
-原紀錄若標記為 `unmodeled`、`insufficient-model-input` 或其他 degraded 狀態，仍須保留並加入資料可用率稽核。統計各狀態、缺失欄位、來源失敗與受影響場數；不可在賽後補造賽前勝率。只有原本 `modeled` 且數值完整的紀錄可進入 Brier、log loss、得分誤差與 calibration 計算。
+原紀錄若標記為 `unmodeled`、`insufficient-model-input` 或其他 degraded 狀態，仍須保留並加入資料可用率稽核。統計各狀態、缺失欄位、來源失敗與受影響場數；不可在賽後補造賽前勝率。原本 `modeled` 或 `baseline` 且數值完整的紀錄可進入 Brier、log loss、得分誤差與 calibration 計算，但必須依 `status + model_version + snapshot` 分開 cohort；不得以 baseline 的成績宣稱生產模型已校準。
 
 ## 2. 重建當時可知的快照
 
@@ -47,7 +47,7 @@ python mlb-analysis/scripts/evaluate_forecasts.py forecasts.jsonl --compare old-
 - 前五局與盤口：使用各自的三路或 win／push／loss Brier；不可把平手、走盤當輸。
 - 精確比分命中率只作附帶診斷，不是模型升版目標。
 
-所有 cohort 依 `snapshot`、model version、先發狀態、球場／屋頂、ABS 制度與信心區間拆分。小樣本須保留 bootstrap 區間，不宣稱已校準。
+所有 cohort 依 `status`、`snapshot`、model version、先發狀態、球場／屋頂、ABS 制度與信心區間拆分。小樣本須保留 bootstrap 區間，不宣稱已校準。`mlb-public-baseline-v1.0.0` 的第一優先評估是 Brier、log loss、得分 bias 與 50%／80% coverage；通過相同 game ID 的 paired walk-forward 比較前，維持 `uncalibrated` 與 0u。
 
 ## 5. 錯誤歸因
 
