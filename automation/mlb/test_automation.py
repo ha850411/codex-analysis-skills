@@ -28,7 +28,7 @@ from predict_next_day import (
     validate_forecasts,
     validate_notion_summary,
 )
-from review_today import is_recent_report, safe_date, validate_skill_frontmatter
+from review_today import is_recent_report, main as review_main, safe_date, validate_skill_frontmatter
 
 
 class AutomationTests(unittest.TestCase):
@@ -288,15 +288,33 @@ class AutomationTests(unittest.TestCase):
             )
             validate_skill_frontmatter(skill)
 
-    def test_schedule_is_filtered_by_taipei_date(self) -> None:
+    def test_schedule_is_filtered_by_rolling_2100_window(self) -> None:
         payload = {
             "dates": [{"games": [
-                {"gamePk": 1, "gameDate": "2026-07-21T23:00:00Z"},
-                {"gamePk": 2, "gameDate": "2026-07-22T17:00:00Z"},
+                {"gamePk": 1, "gameDate": "2026-07-22T12:59:59Z"},
+                {"gamePk": 2, "gameDate": "2026-07-22T13:00:00Z"},
+                {"gamePk": 3, "gameDate": "2026-07-23T12:59:59Z"},
+                {"gamePk": 4, "gameDate": "2026-07-23T13:00:00Z"},
             ]}]
         }
         games = extract_taipei_games([payload], "2026-07-22")
-        self.assertEqual([game["gamePk"] for game in games], [1])
+        self.assertEqual([game["gamePk"] for game in games], [2, 3])
+
+    def test_review_defaults_to_previous_report_date(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            with (
+                mock.patch("review_today.STATE_ROOT", state_root),
+                mock.patch(
+                    "review_today.parse_args",
+                    return_value=Namespace(date=None, dry_run=True),
+                ),
+                mock.patch("review_today.target_date", return_value="2026-07-21") as target_mock,
+                mock.patch("review_today.job_lock", side_effect=lambda _: nullcontext()),
+            ):
+                self.assertEqual(review_main(), 0)
+            target_mock.assert_called_once_with(-1)
+            self.assertTrue((state_root / "reviews/2026-07-21").is_dir())
 
     def test_report_must_be_within_24_hours(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

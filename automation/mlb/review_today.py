@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 15:00 檢討當日 MLB 預測，並在證據充分時建立 Skill PR。"""
+"""台灣時間 20:30 檢討前一日 MLB 預測，並在證據充分時建立 Skill PR。"""
 
 from __future__ import annotations
 
@@ -181,14 +181,14 @@ def create_pr(worktree: Path, branch: str, base: str, date: str, report: Path, s
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", help="覆寫台灣時間檢討日期（YYYY-MM-DD）")
+    parser.add_argument("--date", help="覆寫要檢討的報告日期（YYYY-MM-DD）")
     parser.add_argument("--dry-run", action="store_true", help="只顯示工作內容，不使用網路或 Codex")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    date = safe_date(args.date or target_date())
+    date = safe_date(args.date or target_date(-1))
     base = "master"
     prediction_dir = STATE_ROOT / "predictions" / date
     review_dir = STATE_ROOT / "reviews" / date

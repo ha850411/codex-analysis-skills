@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""預測 bo3.gg 列出的下一日 LoL S Tier 賽事。"""
+"""台灣時間 09:00 預測未來 24 小時的 LoL S Tier 賽事。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,15 @@ def _parse_instant(value: object) -> datetime | None:
         return None
 
 
+def forecast_window(target: str) -> tuple[datetime, datetime]:
+    """回傳報告日期 09:00 起算、起點含且終點不含的 24 小時視窗。"""
+    day = date_type.fromisoformat(target)
+    start = datetime.combine(day, time(hour=9), TAIPEI)
+    return start, start + timedelta(days=1)
+
+
 def extract_taipei_s_matches(records: list[dict[str, object]], target: str) -> list[dict[str, object]]:
+    start, end = forecast_window(target)
     matches: dict[int, dict[str, object]] = {}
     for record in records:
         instant = _parse_instant(record.get("start_date"))
@@ -60,16 +68,17 @@ def extract_taipei_s_matches(records: list[dict[str, object]], target: str) -> l
             instant is not None
             and isinstance(match_id, int)
             and str(record.get("tier", "")).lower() == "s"
-            and instant.astimezone(TAIPEI).date().isoformat() == target
+            and start <= instant.astimezone(TAIPEI) < end
         ):
             matches[match_id] = record
-    return sorted(matches.values(), key=lambda item: str(item.get("start_date", "")))
+    return sorted(
+        matches.values(),
+        key=lambda item: _parse_instant(item.get("start_date")) or end,
+    )
 
 
 def fetch_schedule(target: str) -> list[dict[str, object]]:
-    day = date_type.fromisoformat(target)
-    start = datetime.combine(day, time.min, TAIPEI)
-    end = start + timedelta(days=1)
+    start, end = forecast_window(target)
     params = {
         "filter[matches.discipline_id][eq]": "3",
         "filter[matches.tier][in]": "s",
@@ -117,7 +126,11 @@ def compact_match(record: dict[str, object]) -> dict[str, object]:
 
 
 def prompt_for(target: str, output_dir: Path) -> str:
-    return f"""使用 `$lol-analysis` 完成 {target}（台灣時間 UTC+8）的 LoL S Tier daily-summary 預測。
+    start, end = forecast_window(target)
+    return f"""使用 `$lol-analysis` 完成 LoL S Tier daily-summary 預測。
+
+報告日期：{target}
+預測視窗：{start.isoformat()}（含）至 {end.isoformat()}（不含），共 24 小時。
 
 這是無人值守排程。必須完整讀取並遵守：
 - {REPO_ROOT / 'lol-analysis/SKILL.md'}
@@ -125,7 +138,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 - 已鎖定賽程：{output_dir / 'schedule-precheck.json'}
 
 要求：
-1. 只能預測 schedule-precheck.json 列出的比賽；賽程入口固定為 {SOURCE_URL}。不得加入 A/B/C Tier。
+1. 只能預測 schedule-precheck.json 列出的比賽；它已鎖定上述 24 小時視窗。賽程入口固定為 {SOURCE_URL}。不得加入 A/B/C Tier，也不得依台灣日曆日自行增減比賽。
 2. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
 3. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 4. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
@@ -254,7 +267,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     cleanup_old_reports(days=3, dry_run=args.dry_run)
-    target = safe_date(args.date or target_date(1))
+    target = safe_date(args.date or target_date())
     output_dir = STATE_ROOT / "predictions" / target
     try:
         with job_lock("prediction"):
@@ -264,11 +277,23 @@ def main() -> int:
             if recreate_dated_output_dir(output_dir, STATE_ROOT / "predictions"):
                 print(f"[reset] Removed existing prediction directory: {output_dir}", flush=True)
             matches = fetch_schedule(target)
-            snapshot = {"target_date": target, "checked_at": datetime.now(TAIPEI).isoformat(), "source": SOURCE_URL, "api": API_URL, "tier": "s", "match_count": len(matches), "matches": [compact_match(match) for match in matches]}
+            window_start, window_end = forecast_window(target)
+            snapshot = {
+                "report_date": target,
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "window_boundary": "start-inclusive/end-exclusive",
+                "checked_at": datetime.now(TAIPEI).isoformat(),
+                "source": SOURCE_URL,
+                "api": API_URL,
+                "tier": "s",
+                "match_count": len(matches),
+                "matches": [compact_match(match) for match in matches],
+            }
             atomic_json(output_dir / "schedule-precheck.json", snapshot)
             if not matches:
                 write_status(output_dir, "prediction", "skipped", target_date=target, reason="no LoL S Tier matches")
-                print(f"Prediction skipped; bo3.gg has no LoL S Tier matches on {target} TW")
+                print(f"Prediction skipped; bo3.gg has no LoL S Tier matches in the {target} 09:00 TW window")
                 return 0
             write_status(output_dir, "prediction", "running", target_date=target)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)))

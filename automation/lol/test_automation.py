@@ -18,7 +18,7 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import JobError
 from predict_next_day import extract_taipei_s_matches, main as prediction_main, validate_forecasts
-from review_today import is_recent_report, settled_match_ids
+from review_today import is_recent_report, main as review_main, settled_match_ids
 
 
 class LolAutomationTests(unittest.TestCase):
@@ -76,13 +76,34 @@ class LolAutomationTests(unittest.TestCase):
             self.assertEqual(old_report.read_text(encoding="utf-8"), "old")
             fetch_mock.assert_not_called()
 
-    def test_filters_tier_and_taipei_date(self) -> None:
+    def test_filters_tier_and_rolling_0900_window(self) -> None:
         records = [
-            {"id": 1, "tier": "s", "start_date": "2026-07-22T09:00:00Z"},
-            {"id": 2, "tier": "a", "start_date": "2026-07-22T09:00:00Z"},
-            {"id": 3, "tier": "s", "start_date": "2026-07-21T09:00:00Z"},
+            {"id": 1, "tier": "s", "start_date": "2026-07-22T01:00:00Z"},
+            {"id": 2, "tier": "a", "start_date": "2026-07-22T02:00:00Z"},
+            {"id": 3, "tier": "s", "start_date": "2026-07-22T00:59:59Z"},
+            {"id": 4, "tier": "s", "start_date": "2026-07-23T00:59:59Z"},
+            {"id": 5, "tier": "s", "start_date": "2026-07-23T01:00:00Z"},
         ]
-        self.assertEqual([item["id"] for item in extract_taipei_s_matches(records, "2026-07-22")], [1])
+        self.assertEqual(
+            [item["id"] for item in extract_taipei_s_matches(records, "2026-07-22")],
+            [1, 4],
+        )
+
+    def test_review_defaults_to_previous_report_date(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            with (
+                mock.patch("review_today.STATE_ROOT", state_root),
+                mock.patch(
+                    "review_today.parse_args",
+                    return_value=Namespace(date=None, dry_run=True),
+                ),
+                mock.patch("review_today.target_date", return_value="2026-07-21") as target_mock,
+                mock.patch("review_today.job_lock", side_effect=lambda _: nullcontext()),
+            ):
+                self.assertEqual(review_main(), 0)
+            target_mock.assert_called_once_with(-1)
+            self.assertTrue((state_root / "reviews/2026-07-21").is_dir())
 
     def test_exact_score_contract(self) -> None:
         record = {

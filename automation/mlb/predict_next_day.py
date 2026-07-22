@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 21:00 預測下一個台灣日曆日的全部 MLB 賽事。"""
+"""台灣時間 21:00 預測未來 24 小時的全部 MLB 賽事。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type, datetime, time, timedelta
 from pathlib import Path
 
 AUTOMATION_DIR = Path(__file__).resolve().parents[1]
@@ -71,11 +71,22 @@ UNMODELED_FORECAST_FIELDS = {
 }
 
 
+def forecast_window(target: str) -> tuple[datetime, datetime]:
+    """回傳報告日期 21:00 起算、起點含且終點不含的 24 小時視窗。"""
+    day = date_type.fromisoformat(target)
+    start = datetime.combine(day, time(hour=21), TAIPEI)
+    return start, start + timedelta(days=1)
+
+
 def fetch_schedule(target: str) -> list[dict[str, object]]:
-    """查詢兩個 MLB 當地日期，再保留落在指定台灣日期的賽事。"""
+    """查詢相鄰 MLB 日期，再保留落在指定 24 小時視窗的賽事。"""
     requested = date_type.fromisoformat(target)
     payloads: list[dict[str, object]] = []
-    for day in (requested - timedelta(days=1), requested):
+    for day in (
+        requested - timedelta(days=1),
+        requested,
+        requested + timedelta(days=1),
+    ):
         query = urllib.parse.urlencode({"sportId": 1, "date": day.isoformat()})
         request = urllib.request.Request(
             f"https://statsapi.mlb.com/api/v1/schedule?{query}",
@@ -106,6 +117,7 @@ def safe_date(value: str) -> str:
 def extract_taipei_games(
     payloads: list[dict[str, object]], target: str
 ) -> list[dict[str, object]]:
+    start, end = forecast_window(target)
     games: dict[int, dict[str, object]] = {}
     for payload in payloads:
         for schedule_date in payload.get("dates", []):
@@ -122,20 +134,27 @@ def extract_taipei_games(
                     instant = datetime.fromisoformat(game_date.replace("Z", "+00:00"))
                 except ValueError:
                     continue
-                if instant.astimezone(TAIPEI).date().isoformat() == target:
+                if start <= instant.astimezone(TAIPEI) < end:
                     games[game_pk] = game
-    return list(games.values())
+    return sorted(
+        games.values(),
+        key=lambda game: datetime.fromisoformat(str(game["gameDate"]).replace("Z", "+00:00")),
+    )
 
 
 def prompt_for(date: str, output_dir: Path) -> str:
-    return f"""使用 `$mlb-analysis` 完成 {date}（台灣時間 UTC+8）全部 MLB 賽事的 daily-summary 預測。
+    start, end = forecast_window(date)
+    return f"""使用 `$mlb-analysis` 完成未來 24 小時全部 MLB 賽事的 daily-summary 預測。
+
+報告日期：{date}
+預測視窗：{start.isoformat()}（含）至 {end.isoformat()}（不含），共 24 小時。
 
 這是無人值守排程。必須完整讀取並遵守：
 - {REPO_ROOT / 'mlb-analysis/SKILL.md'}
 - skill 指定的 shared 契約與 MLB references
 
 要求：
-1. 使用即時網路來源先盤點該台灣日期的全部比賽，處理雙重賽、延賽、TBD 先發及美國跨日。
+1. 只能分析 {output_dir / 'schedule-precheck.json'} 鎖定在上述視窗內的比賽，再用即時網路來源查核雙重賽、延賽、TBD 先發及美國跨日；不得依台灣日曆日自行增減比賽。
 2. 嚴格先鎖定模型機率，再查市場；資料不足時保留 N/A／等待條件，不硬造數字。
    零場可建模時仍必須完成並交付 degraded 報告；報告失去數值不等於排程失敗。
 3. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
@@ -146,7 +165,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
    away_runs_mean, home_runs_mean, home_win_prob（0..1）, model_confidence（0..1）, sources。
    若比賽存在但無法可靠建模，仍保留紀錄並以 status 與 missing_data 說明；不得捏造缺失值。
    這類紀錄仍須保存 game_id、時間、快照、模型狀態、主客隊、來源與非空 missing_data，數值欄位可為 null。
-   若官方確認當天完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
+   若官方確認該 24 小時視窗完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
 6. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
 7. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 建立 {output_dir / 'notion-summary.json'}，供整日賽程建立一筆 Notion daily-summary。至少包含：
@@ -383,7 +402,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     cleanup_old_reports(days=3, dry_run=args.dry_run)
-    date = safe_date(args.date or target_date(1))
+    date = safe_date(args.date or target_date())
     output_dir = STATE_ROOT / "predictions" / date
     prediction = output_dir / "prediction.md"
 
@@ -396,8 +415,12 @@ def main() -> int:
             if recreate_dated_output_dir(output_dir, STATE_ROOT / "predictions"):
                 print(f"[reset] Removed existing prediction directory: {output_dir}", flush=True)
             games = fetch_schedule(date)
+            window_start, window_end = forecast_window(date)
             schedule_snapshot = {
-                "target_date": date,
+                "report_date": date,
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "window_boundary": "start-inclusive/end-exclusive",
                 "checked_at": datetime.now(TAIPEI).isoformat(),
                 "source": "MLB Stats API",
                 "game_count": len(games),
@@ -406,7 +429,7 @@ def main() -> int:
             atomic_json(output_dir / "schedule-precheck.json", schedule_snapshot)
             if not games:
                 write_status(output_dir, "prediction", "skipped", target_date=date, reason="no MLB games")
-                print(f"Prediction skipped; MLB schedule has no games on {date} TW")
+                print(f"Prediction skipped; MLB schedule has no games in the {date} 21:00 TW window")
                 return 0
             write_status(output_dir, "prediction", "running", target_date=date)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt))

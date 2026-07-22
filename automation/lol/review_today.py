@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""檢討近期 LoL S Tier 預測，並在證據充分時建立 Skill PR。"""
+"""台灣時間 08:30 檢討前一日的 LoL S Tier 預測報告。"""
 
 from __future__ import annotations
 
@@ -150,14 +150,14 @@ def create_pr(worktree: Path, branch: str, base: str, target: str, report: Path,
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", help="覆寫台灣時間檢討日期（YYYY-MM-DD）")
+    parser.add_argument("--date", help="覆寫要檢討的報告日期（YYYY-MM-DD）")
     parser.add_argument("--dry-run", action="store_true", help="只顯示工作內容，不使用網路或 Codex")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    target = safe_date(args.date or target_date())
+    target = safe_date(args.date or target_date(-1))
     base = "master"
     prediction_dir = STATE_ROOT / "predictions" / target
     review_dir = STATE_ROOT / "reviews" / target
