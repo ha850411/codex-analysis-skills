@@ -36,7 +36,7 @@
 
 **地圖禁選/系列賽推演（必做）：**
 
-> **註：** 所有地圖名稱統一採用 `英文名稱（中國國服譯名）` 格式標註（如 Ascent（亞海懸城）、Bind（源工重鎮）、Haven（隱世修所）、Split（霓虹町）、Icebox（森寒冬港）、Breeze（微風島嶼）、Fracture（裂變峽谷）、Pearl（深海明珠）、Lotus（蓮華古城）、Sunset（日落之城）、Abyss（深窟幽境））。
+> **註：** 所有地圖名稱統一採用 `英文名稱（中國國服譯名）` 格式標註（如 Ascent（亞海懸城）、Bind（源工重鎮）、Haven（隱世修所）、Split（霓虹町）、Icebox（森寒冬港）、Breeze（微風島嶼）、Fracture（裂變峽谷）、Pearl（深海明珠）、Lotus（蓮華古城）、Sunset（日落之城）、Abyss（深窟幽境）、Summit（天樞雲闕））。
 
 **全地圖逐圖分析（當前 Map Pool，必做）：**
 
