@@ -1,9 +1,13 @@
 # 賽事分析自動排程
 
-所有分析模組共用兩筆 cron 排程：
+分析模組使用各自的 cron 排程（台灣時間）：
 
-- 台灣時間 21:00：對每個已啟用模組執行下一日預測前置檢查，並自動清理三天以前的舊報告與產物。
-- 台灣時間 15:00：對每個已啟用模組執行賽後檢討前置檢查。
+- MLB 21:00：執行下一日預測前置檢查。
+- MLB 15:00：執行賽後檢討前置檢查。
+- LoL 09:00：執行下一日 S Tier 預測前置檢查。
+- LoL 22:30：執行賽後檢討前置檢查。
+
+每次預測排程也會自動清理三天以前的舊報告與產物。
 
 在 `automation/modules.json` 啟用或停用模組；切換後不需要重新安裝 cron：
 
@@ -56,6 +60,8 @@ automation/uninstall_crontab.sh
 ```bash
 python3 automation/run_scheduled.py prediction --dry-run
 python3 automation/run_scheduled.py review --dry-run
+python3 automation/run_scheduled.py prediction --module lol --dry-run
+python3 automation/run_scheduled.py review --module lol --dry-run
 ```
 
 兩個模組都將報告寄到唯一的 `AUTOMATION_NOTIFICATION_EMAIL`。如需多位收件者，使用逗號分隔；不提供模組專屬收件信箱設定。

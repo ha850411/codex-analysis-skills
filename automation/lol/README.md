@@ -17,6 +17,6 @@ python3 automation/lol/predict_next_day.py --date 2026-07-22 --dry-run
 python3 automation/lol/review_today.py --date 2026-07-22 --dry-run
 ```
 
-使用 `automation/install_crontab.sh` 安裝共用排程，並透過 `automation/modules.json` 切換模組、模型與推理強度。
+使用 `automation/install_crontab.sh` 安裝排程：LoL 每天台灣時間 09:00 執行預測、22:30 執行賽後檢討。透過 `automation/modules.json` 切換模組、模型與推理強度。
 
 LoL 與 MLB 共用 `AUTOMATION_NOTIFICATION_EMAIL`，不需要 LoL 專屬收件信箱。賽後檢討固定從 `origin/master` 建立 `feature/LOL-MMDD` 分支，例如 `feature/LOL-0721`。

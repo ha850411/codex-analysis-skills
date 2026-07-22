@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from automation.run_scheduled import ConfigError, load_config, module_environment
+from automation.run_scheduled import ConfigError, load_config, module_environment, parse_args
 
 
 class DispatcherConfigTests(unittest.TestCase):
@@ -42,6 +44,16 @@ class DispatcherConfigTests(unittest.TestCase):
         env = module_environment({"model": "gpt-5.6-sol", "reasoning_effort": "high"})
         self.assertEqual(env["AUTOMATION_CODEX_MODEL"], "gpt-5.6-sol")
         self.assertEqual(env["AUTOMATION_REASONING_EFFORT"], "high")
+
+    def test_module_filter_is_parsed_without_consuming_job_arguments(self) -> None:
+        with mock.patch.object(
+            sys,
+            "argv",
+            ["run_scheduled.py", "prediction", "--module", "lol", "--dry-run"],
+        ):
+            args = parse_args()
+        self.assertEqual(args.module, "lol")
+        self.assertEqual(args.extra, ["--dry-run"])
 
 
 if __name__ == "__main__":

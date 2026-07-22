@@ -75,8 +75,10 @@ def module_environment(settings: dict[str, object]) -> dict[str, str]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=sorted(PHASE_SCRIPTS))
-    parser.add_argument("extra", nargs=argparse.REMAINDER, help="傳給每個模組工作的額外參數")
-    return parser.parse_args()
+    parser.add_argument("--module", choices=sorted(KNOWN_MODULES), help="只執行指定模組")
+    args, extra = parser.parse_known_args()
+    args.extra = extra
+    return args
 
 
 def main() -> int:
@@ -94,9 +96,14 @@ def main() -> int:
         print(f"automation config: {exc}", file=sys.stderr)
         return 2
     failures: list[str] = []
-    enabled = [name for name in sorted(modules) if modules[name]["enabled"]]
+    enabled = [
+        name
+        for name in sorted(modules)
+        if modules[name]["enabled"] and (args.module is None or name == args.module)
+    ]
     if not enabled:
-        print(f"No automation modules enabled for {args.phase}.")
+        scope = f"module {args.module}" if args.module else "automation modules"
+        print(f"No enabled {scope} for {args.phase}.")
         return 0
     for name in enabled:
         script = AUTOMATION_DIR / name / PHASE_SCRIPTS[args.phase]
