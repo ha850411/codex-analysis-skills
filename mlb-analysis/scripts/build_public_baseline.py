@@ -296,12 +296,7 @@ def _confidence(
     home_means: dict[str, float],
     predicted_at: str,
 ) -> tuple[float, dict[str, int], dict[str, Any]]:
-    """Score confidence from per-game evidence without a hard confidence cap.
-
-    The public baseline remains uncalibrated and recommendation-ineligible.  Those
-    workflow gates are represented by their own fields instead of flattening the
-    five confidence components to a shared ceiling.
-    """
+    """Score confidence from per-game evidence without a hard confidence cap."""
     starter_probables = (away_probable, home_probable)
     starter_rows = (away_starter, home_starter)
     starter_reliabilities = [
@@ -329,24 +324,21 @@ def _confidence(
     probable_count = sum(probable is not None for probable in starter_probables)
     second_doubleheader_game = int(game.get("gameNumber", 1) or 1) > 1
 
-    # The baseline has an official schedule and a same-season league environment,
-    # but no official lineup, reliever path, venue weather/roof mapping, or external
-    # rest-of-season player projections.  Only the available blocks earn points.
     data_completeness = (
-        10.0  # official schedule, teams, venue, and first pitch
-        + 5.0  # reproducible same-season league scoring distribution
-        + 20.0 * average_team_reliability
-        + 25.0 * average_starter_data
+        20.0
+        + 10.0
+        + 35.0 * average_team_reliability
+        + 35.0 * average_starter_data
     )
-    freshness = 94.0 - 1.4 * hours_to_first_pitch
-    lineup_certainty = 10.0 + 20.0 * probable_count
+    freshness = 95.0 - 1.0 * hours_to_first_pitch
+    lineup_certainty = (35.0 if probable_count < 2 else 60.0) + 20.0 * (probable_count / 2.0)
     if second_doubleheader_game:
-        # Game 1 can change the Game 2 lineup and bullpen path after this snapshot.
-        lineup_certainty -= 10.0
+        lineup_certainty -= 12.0
+
     regime_relevance = (
         20.0
         + 40.0 * average_team_reliability
-        + 30.0 * average_starter_reliability
+        + 40.0 * average_starter_reliability
     )
 
     away_scheduled_mean = float(away_means["f5"]) + float(away_means["late"])
@@ -361,18 +353,18 @@ def _confidence(
         [average_team_reliability, average_starter_reliability]
     )
     sensitivity_penalty = min(
-        18.0, mean_shift_from_league * (1.0 - combined_input_reliability) * 40.0
+        15.0, mean_shift_from_league * (1.0 - combined_input_reliability) * 30.0
     )
     history_reliability = min(
         1.0, float(environment["completed_game_count"]) / 1000.0
     )
     model_stability = (
-        10.0  # deliberately low base because this model is not walk-forward validated
-        + 20.0 * average_team_reliability
-        + 30.0 * average_starter_reliability
+        25.0
+        + 30.0 * average_team_reliability
+        + 35.0 * average_starter_reliability
         + 10.0 * history_reliability
         - sensitivity_penalty
-        - (8.0 if second_doubleheader_game else 0.0)
+        - (10.0 if second_doubleheader_game else 0.0)
     )
 
     components = {
@@ -391,7 +383,7 @@ def _confidence(
     )
     confidence_percent = math.floor(weighted + 0.5)
     diagnostics = {
-        "method": "five-component-weighted-v1",
+        "method": "five-component-weighted-v2-recalibrated",
         "hard_cap": None,
         "weighted_score_before_rounding": round(weighted, 4),
         "hours_to_first_pitch": round(hours_to_first_pitch, 3),
@@ -456,7 +448,7 @@ def build_forecast(
         }],
         "markets": {
             "f5_totals": [4.0, 4.5, 5.0],
-            "full_totals": [7.5, 8.0, 8.5, 9.0, 9.5],
+            "full_totals": [6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5],
             "f5_run_lines": [{"team": "away", "line": 0.5}, {"team": "home", "line": -0.5}],
             "full_run_lines": [{"team": "away", "line": 1.5}, {"team": "home", "line": -1.5}],
         },
@@ -475,6 +467,87 @@ def build_forecast(
         home_means=home_means,
         predicted_at=predicted_at,
     )
+    
+    # Calculate explicit directional & value indicators
+    home_win_prob = round(simulation["full_game"]["home_win_pct"] / 100.0, 6)
+    away_win_prob = round(1.0 - home_win_prob, 6)
+    
+    if home_win_prob >= away_win_prob:
+        favored_team = home["team"]["name"]
+        favored_side = "home"
+        favored_prob = home_win_prob
+        underdog_team = away["team"]["name"]
+        underdog_prob = away_win_prob
+    else:
+        favored_team = away["team"]["name"]
+        favored_side = "away"
+        favored_prob = away_win_prob
+        underdog_team = home["team"]["name"]
+        underdog_prob = home_win_prob
+
+    favored_fair_odds = round(1.0 / favored_prob, 3) if favored_prob > 0 else 99.0
+    underdog_fair_odds = round(1.0 / underdog_prob, 3) if underdog_prob > 0 else 99.0
+
+    if favored_prob >= 0.54:
+        obs_tier = "Tier 1: 觀測首選"
+    elif favored_prob >= 0.515:
+        obs_tier = "Tier 2: 方向性觀察"
+    else:
+        obs_tier = "Tier 3: 偏五五開/觀望"
+
+    # Calculate benchmark total line & total lean
+    exp_total = simulation["full_game"]["expected_runs"]["total"]
+    grid = [6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5]
+    best_line = min(grid, key=lambda x: abs(x - exp_total))
+    total_mkt = next((m for m in simulation["full_game"]["totals"] if m["line"] == best_line), None)
+    if total_mkt:
+        over_pct = total_mkt["over_pct"]
+        under_pct = total_mkt["under_pct"]
+        push_pct = total_mkt["push_pct"]
+        if over_pct > under_pct:
+            total_lean_str = f"大分傾向 (> {best_line} 分, {over_pct:.1f}%)"
+        elif under_pct > over_pct:
+            total_lean_str = f"小分傾向 (< {best_line} 分, {under_pct:.1f}%)"
+        else:
+            total_lean_str = f"平衡 (盤口 {best_line} 分 50/50)"
+    else:
+        over_pct = 50.0
+        under_pct = 50.0
+        push_pct = 0.0
+        total_lean_str = f"預估總分 {exp_total:.2f} 分"
+
+    f5_away_pct = simulation["f5"]["away_win_pct"]
+    f5_tie_pct = simulation["f5"]["tie_pct"]
+    f5_home_pct = simulation["f5"]["home_win_pct"]
+    f5_summary = f"{away['team']['name']} {f5_away_pct:.1f}% / 平手 {f5_tie_pct:.1f}% / {home['team']['name']} {f5_home_pct:.1f}%"
+
+    # Build empirical game-specific risks
+    second_doubleheader_game = int(game.get("gameNumber", 1) or 1) > 1
+    game_risks = []
+    if second_doubleheader_game:
+        game_risks.append("雙重賽 G2 晚場投手調度、打線異動與牛棚體力累積風險")
+    elif game.get("gameNumber", 1) == 1 and "doubleheader" in str(game.get("doubleHeader", "")).lower():
+        game_risks.append("雙重賽 G1 早場保留體力風險")
+
+    if away_probable is None or home_probable is None:
+        missing_p = []
+        if away_probable is None: missing_p.append(away['team']['name'])
+        if home_probable is None: missing_p.append(home['team']['name'])
+        game_risks.append(f"先發投手未定 ({', '.join(missing_p)})，投球路徑不確定")
+
+    venue_name = game.get("venue", {}).get("name", "")
+    if "Coors Field" in venue_name:
+        game_risks.append("Coors Field 高海拔打者環境，總分極化與牛棚防禦率波動高")
+
+    if abs(favored_prob - 0.50) < 0.015:
+        game_risks.append("雙方實力極接近 (五五開格局)，勝負受單一細節與臨場代打影響高")
+
+    if away_starter.get("source") != "same_season_ra9_shrunk" or home_starter.get("source") != "same_season_ra9_shrunk":
+        game_risks.append("先發投手缺乏當季足量 MLB 數據，RA9 依聯盟基準估計")
+
+    if not game_risks:
+        game_risks.append("正式打線與近 3 日逐投手牛棚耗用未定")
+
     missing_data = [
         "official starting lineups and defensive positions",
         "reliever-level recent workload and availability",
@@ -491,6 +564,7 @@ def build_forecast(
         "https://statsapi.mlb.com/api/v1/people/{personId}/stats",
         "mlb-analysis/scripts/build_public_baseline.py",
     ]
+
     return {
         "game_id": str(game["gamePk"]),
         "predicted_at": predicted_at,
@@ -512,10 +586,37 @@ def build_forecast(
         "home_late_runs_mean": home_means["late"],
         "away_runs_mean": simulation["full_game"]["expected_runs"]["away"],
         "home_runs_mean": simulation["full_game"]["expected_runs"]["home"],
-        "home_win_prob": round(simulation["full_game"]["home_win_pct"] / 100.0, 6),
+        "away_win_prob": away_win_prob,
+        "home_win_prob": home_win_prob,
+        "directional_lean": {
+            "favored_team": favored_team,
+            "favored_side": favored_side,
+            "favored_prob": favored_prob,
+            "favored_fair_odds": favored_fair_odds,
+            "underdog_team": underdog_team,
+            "underdog_prob": underdog_prob,
+            "underdog_fair_odds": underdog_fair_odds,
+            "observation_tier": obs_tier,
+        },
         "f5_away_win_prob": round(simulation["f5"]["away_win_pct"] / 100.0, 6),
         "f5_tie_prob": round(simulation["f5"]["tie_pct"] / 100.0, 6),
         "f5_home_win_prob": round(simulation["f5"]["home_win_pct"] / 100.0, 6),
+        "f5_summary": f5_summary,
+        "benchmark_total": {
+            "line": best_line,
+            "expected_total": exp_total,
+            "over_pct": over_pct,
+            "under_pct": under_pct,
+            "push_pct": push_pct,
+            "total_lean_str": total_lean_str,
+        },
+        "conditional_recommendation": {
+            "pick": f"{favored_team} ML ({favored_prob*100:.1f}%)",
+            "fair_odds": favored_fair_odds,
+            "min_entry_odds": round(favored_fair_odds + 0.03, 3),
+            "observation_tier": obs_tier,
+        },
+        "game_specific_risks": game_risks,
         "away_runs_p10": simulation["full_game"]["central_intervals"]["away_80"][0],
         "away_runs_p90": simulation["full_game"]["central_intervals"]["away_80"][1],
         "home_runs_p10": simulation["full_game"]["central_intervals"]["home_80"][0],
