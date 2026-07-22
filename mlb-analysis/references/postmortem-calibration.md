@@ -47,7 +47,7 @@ python mlb-analysis/scripts/evaluate_forecasts.py forecasts.jsonl --compare old-
 - 前五局與盤口：使用各自的三路或 win／push／loss Brier；不可把平手、走盤當輸。
 - 精確比分命中率只作附帶診斷，不是模型升版目標。
 
-所有 cohort 依 `status`、`snapshot`、model version、先發狀態、球場／屋頂、ABS 制度與信心區間拆分。小樣本須保留 bootstrap 區間，不宣稱已校準。`mlb-public-baseline-v1.0.0` 的第一優先評估是 Brier、log loss、得分 bias 與 50%／80% coverage；通過相同 game ID 的 paired walk-forward 比較前，維持 `uncalibrated` 與 0u。
+所有 cohort 依 `status`、`snapshot`、model version、先發狀態、球場／屋頂、ABS 制度與信心區間拆分。小樣本須保留 bootstrap 區間，不宣稱已校準。`mlb-public-baseline-v1.0.0` 與採逐場信心度的 `v1.1.0` 必須分版評估；第一優先指標是 Brier、log loss、得分 bias 與 50%／80% coverage。通過相同 game ID 的 paired walk-forward 比較前，維持 `uncalibrated` 與 0u。
 
 ## 5. 錯誤歸因
 

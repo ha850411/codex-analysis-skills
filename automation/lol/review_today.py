@@ -66,7 +66,7 @@ def prompt_for(target: str, prediction_dir: Path, review_dir: Path, worktree: Pa
 3. 將逐場命中、Brier score、log loss、信心校準、BP/版本/名單歸因與 cohort 限制寫入 {review_dir / 'postmortem.md'}。
 4. 單場爆冷、單次 BP 或小樣本不得觸發 skill 修改。只有可重複的流程錯誤或足夠批次證據才可修改 {worktree / 'lol-analysis'}。
 5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
-6. 若修改 skill，保持最小差異，驗證受影響內容，並在 postmortem 記錄證據、修改、測試、回退方式與未解問題。
+6. 若修改 skill，鐵則是去蕪存菁：只保留能改善分析的指令，刪除或合併無效、重複、已被取代的規則，不得以賽後案例為由無限追加特例。新增規則時應同步取代舊規則，並保持最小差異、驗證受影響內容。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `lol-analysis/references/output-template.md`。在 postmortem 記錄證據、修改、測試、回退方式與未解問題。
 7. 若證據不足，明確寫「不修改 skill／不建立 PR」與需要累積的 cohort，不為產生 PR 而修改。
 8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
@@ -115,6 +115,8 @@ def validate_changes(worktree: Path) -> None:
     disallowed = [path for path in paths if not path.startswith("lol-analysis/")]
     if disallowed:
         raise JobError(f"Postmortem changed disallowed paths: {', '.join(disallowed)}")
+    if "lol-analysis/references/output-template.md" in paths:
+        raise JobError("Postmortem must not change the LoL output template")
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     validator = codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
     if not validator.is_file():

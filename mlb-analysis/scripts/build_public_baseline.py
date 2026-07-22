@@ -25,13 +25,13 @@ from typing import Any
 from simulate_scores import _validate_config, simulate
 
 
-MODEL_VERSION = "mlb-public-baseline-v1.0.0"
+MODEL_VERSION = "mlb-public-baseline-v1.1.0"
 TEAM_PRIOR_GAMES = 30.0
 STARTER_PRIOR_INNINGS = 40.0
 WORKLOAD_PRIOR_STARTS = 5.0
 WORKLOAD_PRIOR_IP = 5.2
 MIN_COMPLETED_GAMES = 100
-USER_AGENT = "codex-mlb-public-baseline/1.0"
+USER_AGENT = "codex-mlb-public-baseline/1.1"
 
 
 class BaselineError(RuntimeError):
@@ -264,14 +264,123 @@ def _probable(game: dict[str, Any], side: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) and isinstance(value.get("id"), int) else None
 
 
-def _confidence(has_away_starter: bool, has_home_starter: bool) -> tuple[float, dict[str, int]]:
-    both = has_away_starter and has_home_starter
+def _clamp_score(value: float) -> float:
+    return min(100.0, max(0.0, value))
+
+
+def _starter_sample_reliability(
+    probable: dict[str, Any] | None,
+    starter: dict[str, float | int | str],
+) -> float:
+    """Return 0..1 same-season evidence reliability, separate from identity certainty."""
+    if probable is None or starter.get("source") != "same_season_ra9_shrunk":
+        return 0.0
+    innings = max(0.0, float(starter.get("innings", 0.0)))
+    starts = max(0.0, float(starter.get("games_started", 0.0)))
+    innings_reliability = innings / (innings + STARTER_PRIOR_INNINGS)
+    workload_reliability = starts / (starts + WORKLOAD_PRIOR_STARTS)
+    return 0.60 * innings_reliability + 0.40 * workload_reliability
+
+
+def _confidence(
+    *,
+    game: dict[str, Any],
+    environment: dict[str, Any],
+    away_profile: dict[str, float],
+    home_profile: dict[str, float],
+    away_probable: dict[str, Any] | None,
+    home_probable: dict[str, Any] | None,
+    away_starter: dict[str, float | int | str],
+    home_starter: dict[str, float | int | str],
+    away_means: dict[str, float],
+    home_means: dict[str, float],
+    predicted_at: str,
+) -> tuple[float, dict[str, int], dict[str, Any]]:
+    """Score confidence from per-game evidence without a hard confidence cap.
+
+    The public baseline remains uncalibrated and recommendation-ineligible.  Those
+    workflow gates are represented by their own fields instead of flattening the
+    five confidence components to a shared ceiling.
+    """
+    starter_probables = (away_probable, home_probable)
+    starter_rows = (away_starter, home_starter)
+    starter_reliabilities = [
+        _starter_sample_reliability(probable, starter)
+        for probable, starter in zip(starter_probables, starter_rows)
+    ]
+    average_starter_reliability = statistics.fmean(starter_reliabilities)
+    starter_data_scores = [
+        0.0 if probable is None else 0.35 + 0.65 * reliability
+        for probable, reliability in zip(starter_probables, starter_reliabilities)
+    ]
+    average_starter_data = statistics.fmean(starter_data_scores)
+
+    team_reliabilities = [
+        float(profile["games"]) / (float(profile["games"]) + TEAM_PRIOR_GAMES)
+        for profile in (away_profile, home_profile)
+    ]
+    average_team_reliability = statistics.fmean(team_reliabilities)
+
+    first_pitch = _iso_datetime(str(game["gameDate"]))
+    prediction_time = _iso_datetime(predicted_at)
+    hours_to_first_pitch = max(
+        0.0, (first_pitch - prediction_time).total_seconds() / 3600.0
+    )
+    probable_count = sum(probable is not None for probable in starter_probables)
+    second_doubleheader_game = int(game.get("gameNumber", 1) or 1) > 1
+
+    # The baseline has an official schedule and a same-season league environment,
+    # but no official lineup, reliever path, venue weather/roof mapping, or external
+    # rest-of-season player projections.  Only the available blocks earn points.
+    data_completeness = (
+        10.0  # official schedule, teams, venue, and first pitch
+        + 5.0  # reproducible same-season league scoring distribution
+        + 20.0 * average_team_reliability
+        + 25.0 * average_starter_data
+    )
+    freshness = 94.0 - 1.4 * hours_to_first_pitch
+    lineup_certainty = 10.0 + 20.0 * probable_count
+    if second_doubleheader_game:
+        # Game 1 can change the Game 2 lineup and bullpen path after this snapshot.
+        lineup_certainty -= 10.0
+    regime_relevance = (
+        20.0
+        + 40.0 * average_team_reliability
+        + 30.0 * average_starter_reliability
+    )
+
+    away_scheduled_mean = float(away_means["f5"]) + float(away_means["late"])
+    home_scheduled_mean = float(home_means["f5"]) + float(home_means["late"])
+    mean_shift_from_league = statistics.fmean(
+        [
+            abs(away_scheduled_mean - float(environment["away_runs_per_game"])),
+            abs(home_scheduled_mean - float(environment["home_runs_per_game"])),
+        ]
+    )
+    combined_input_reliability = statistics.fmean(
+        [average_team_reliability, average_starter_reliability]
+    )
+    sensitivity_penalty = min(
+        18.0, mean_shift_from_league * (1.0 - combined_input_reliability) * 40.0
+    )
+    history_reliability = min(
+        1.0, float(environment["completed_game_count"]) / 1000.0
+    )
+    model_stability = (
+        10.0  # deliberately low base because this model is not walk-forward validated
+        + 20.0 * average_team_reliability
+        + 30.0 * average_starter_reliability
+        + 10.0 * history_reliability
+        - sensitivity_penalty
+        - (8.0 if second_doubleheader_game else 0.0)
+    )
+
     components = {
-        "dataCompleteness": 58 if both else 43,
-        "freshness": 90,
-        "lineupCertainty": 45 if both else 30,
-        "regimeRelevance": 68,
-        "modelStability": 35,
+        "dataCompleteness": round(_clamp_score(data_completeness)),
+        "freshness": round(_clamp_score(freshness)),
+        "lineupCertainty": round(_clamp_score(lineup_certainty)),
+        "regimeRelevance": round(_clamp_score(regime_relevance)),
+        "modelStability": round(_clamp_score(model_stability)),
     }
     weighted = (
         0.25 * components["dataCompleteness"]
@@ -280,8 +389,20 @@ def _confidence(has_away_starter: bool, has_home_starter: bool) -> tuple[float, 
         + 0.20 * components["regimeRelevance"]
         + 0.10 * components["modelStability"]
     )
-    cap = 55 if both else 45
-    return round(min(weighted, cap) / 100.0, 4), components
+    confidence_percent = math.floor(weighted + 0.5)
+    diagnostics = {
+        "method": "five-component-weighted-v1",
+        "hard_cap": None,
+        "weighted_score_before_rounding": round(weighted, 4),
+        "hours_to_first_pitch": round(hours_to_first_pitch, 3),
+        "second_doubleheader_game": second_doubleheader_game,
+        "team_sample_reliability": round(average_team_reliability, 6),
+        "away_starter_sample_reliability": round(starter_reliabilities[0], 6),
+        "home_starter_sample_reliability": round(starter_reliabilities[1], 6),
+        "mean_shift_from_league_runs": round(mean_shift_from_league, 6),
+        "sensitivity_penalty": round(sensitivity_penalty, 4),
+    }
+    return confidence_percent / 100.0, components, diagnostics
 
 
 def build_forecast(
@@ -341,7 +462,19 @@ def build_forecast(
         },
     }
     simulation = simulate(_validate_config(config))
-    confidence, confidence_components = _confidence(away_probable is not None, home_probable is not None)
+    confidence, confidence_components, confidence_diagnostics = _confidence(
+        game=game,
+        environment=environment,
+        away_profile=profiles[str(away_id)],
+        home_profile=profiles[str(home_id)],
+        away_probable=away_probable,
+        home_probable=home_probable,
+        away_starter=away_starter,
+        home_starter=home_starter,
+        away_means=away_means,
+        home_means=home_means,
+        predicted_at=predicted_at,
+    )
     missing_data = [
         "official starting lineups and defensive positions",
         "reliever-level recent workload and availability",
@@ -391,6 +524,7 @@ def build_forecast(
         "total_runs_p90": simulation["full_game"]["central_intervals"]["total_80"][1],
         "model_confidence": confidence,
         "confidence_components": confidence_components,
+        "confidence_diagnostics": confidence_diagnostics,
         "missing_data": missing_data,
         "sources": sources,
         "model_inputs": {

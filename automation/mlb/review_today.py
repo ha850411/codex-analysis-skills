@@ -64,7 +64,7 @@ def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path
 3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。若原紀錄未建模，保留原 N/A，不得賽後補造機率；改做 modeled coverage、status 與 missing_data 頻率稽核。
 4. 單場冷門、BABIP、單次全壘打等合理變異不得觸發 skill 修改。只有確認可重複的流程錯誤，或批次 paired walk-forward 證據通過升版門檻時，才可修改 {worktree / 'mlb-analysis'}。
 5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測。不得自行 commit、push 或建立 PR；外層程式會處理。
-6. 若修改 skill，保持最小差異，實際驗證所有受影響腳本；在 postmortem.md 記錄證據、修改、測試、回退方式與仍未解問題。
+6. 若修改 skill，鐵則是去蕪存菁：只保留能改善分析的指令，刪除或合併無效、重複、已被取代的規則，不得以賽後案例為由無限追加特例。新增規則時應同步取代舊規則，並保持最小差異、實際驗證所有受影響腳本。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `mlb-analysis/references/output-template.md`。在 postmortem.md 記錄證據、修改、測試、回退方式與仍未解問題。
 7. 若證據不足，明確寫「不修改 skill／不建立 PR」以及需要累積的 cohort，不為了產生 PR 而修改。
 8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
@@ -101,6 +101,8 @@ def validate_changes(worktree: Path) -> None:
     disallowed = [path for path in paths if not path.startswith("mlb-analysis/")]
     if disallowed:
         raise JobError(f"Postmortem changed disallowed paths: {', '.join(disallowed)}")
+    if "mlb-analysis/references/output-template.md" in paths:
+        raise JobError("Postmortem must not change the MLB output template")
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     validator = codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
     if not validator.is_file():

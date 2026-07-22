@@ -71,6 +71,11 @@ FORECAST_FIELDS = {
     "sources",
 }
 
+BASELINE_CONFIDENCE_FIELDS = {
+    "confidence_components",
+    "confidence_diagnostics",
+}
+
 UNMODELED_FORECAST_FIELDS = {
     "game_id",
     "predicted_at",
@@ -174,8 +179,9 @@ def prompt_for(date: str, output_dir: Path) -> str:
 要求：
 1. 只能分析 {output_dir / 'schedule-precheck.json'} 鎖定在上述視窗內的比賽，再用即時網路來源查核雙重賽、延賽、TBD 先發及美國跨日；不得依台灣日曆日自行增減比賽。
 2. 先讀取排程已確定性建立的 {output_dir / 'public-baseline.json'}。逐場保留其中的
-   model_version、status=baseline、run means、主隊勝率、前五局三路、區間、信心度與
-   validation_status，不得改成 N/A，也不得用市場價格修改。可用即時資料補充風險與等待條件。
+   model_version、status=baseline、run means、主隊勝率、前五局三路、區間、逐場信心度、
+   五項信心組成、信心診斷值與 validation_status，不得改成 N/A，也不得用市場價格修改。
+   信心度不設硬上限，禁止以模型層級或全日摘要數字把逐場信心度改成同一值。可用即時資料補充風險與等待條件。
    public baseline 是未完成 walk-forward 校準的方向性數值層：可報機率與公允價格，
    但 recommendation_eligible=false，全部注碼固定 0u，不得寫主推或可打。
 3. 嚴格先鎖定模型機率，再查市場。只有 public-baseline.json 明確缺少某 game ID 時，
@@ -186,6 +192,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
    game_id, predicted_at, first_pitch, snapshot, model_version, away_team, home_team,
    away_f5_runs_mean, home_f5_runs_mean, away_late_runs_mean, home_late_runs_mean,
    away_runs_mean, home_runs_mean, home_win_prob（0..1）, model_confidence（0..1）,
+   confidence_components, confidence_diagnostics,
    f5_away_win_prob, f5_tie_prob, f5_home_win_prob, away/home/total_runs_p10/p90,
    status, model_tier, validation_status, recommendation_eligible, sources。
    以上模型欄位必須逐字／逐值沿用 public-baseline.json；不得自行重算或四捨五入 JSON。
@@ -194,10 +201,13 @@ def prompt_for(date: str, output_dir: Path) -> str:
    若官方確認該 24 小時視窗完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
 7. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
+   每一場 baseline 都必須包含 `weighted_confidence` 檢查，使用 public-baseline.json 的
+   model_confidence（轉為整數百分比）與五項 confidence_components 回算。
 8. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 建立 {output_dir / 'notion-summary.json'}，供整日賽程建立一筆 Notion daily-summary。至少包含：
    title, sport="MLB", module="mlb-analysis", event, startTime（+08:00）, prediction,
    winner, winProbability, recommendation, stake, confidence, risk, sourceStatus,
-   analysisType="daily-summary", tags。
+   analysisType="daily-summary", tags。confidence 必須寫逐場實際最小值–最大值；若剛好相同才寫單一值，
+   不得寫成「baseline 上限」。
 9. 只建立本地 Notion summary，不要自行發布；外層程式會在驗證成功後發布並寄 Email。
 10. 最後自行檢查 prediction.md、forecasts.jsonl 與 notion-summary.json 均已建立；不要只在最終訊息貼報告。
 """
@@ -299,6 +309,47 @@ def validate_forecasts(path: Path) -> dict[str, object]:
                 raise JobError(f"forecasts.jsonl record {index}: baseline must remain uncalibrated")
             if record.get("recommendation_eligible") is not False:
                 raise JobError(f"forecasts.jsonl record {index}: baseline cannot be recommendation eligible")
+            missing_confidence = sorted(BASELINE_CONFIDENCE_FIELDS - record.keys())
+            if missing_confidence:
+                raise JobError(
+                    f"forecasts.jsonl baseline record {index} missing: "
+                    + ", ".join(missing_confidence)
+                )
+            components = record["confidence_components"]
+            expected_component_keys = {
+                "dataCompleteness", "freshness", "lineupCertainty",
+                "regimeRelevance", "modelStability",
+            }
+            if not isinstance(components, dict) or set(components) != expected_component_keys:
+                raise JobError(
+                    f"forecasts.jsonl baseline record {index}: invalid confidence_components"
+                )
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not 0 <= value <= 100
+                for value in components.values()
+            ):
+                raise JobError(
+                    f"forecasts.jsonl baseline record {index}: confidence components must be 0..100"
+                )
+            weighted_score = (
+                0.25 * components["dataCompleteness"]
+                + 0.20 * components["freshness"]
+                + 0.25 * components["lineupCertainty"]
+                + 0.20 * components["regimeRelevance"]
+                + 0.10 * components["modelStability"]
+            )
+            weighted_confidence = int(weighted_score + 0.5) / 100.0
+            if record["model_confidence"] != weighted_confidence:
+                raise JobError(
+                    f"forecasts.jsonl baseline record {index}: model_confidence does not match components"
+                )
+            diagnostics = record["confidence_diagnostics"]
+            if not isinstance(diagnostics, dict) or diagnostics.get("hard_cap", "missing") is not None:
+                raise JobError(
+                    f"forecasts.jsonl baseline record {index}: confidence must not have a hard cap"
+                )
         for field in (
             "away_f5_runs_mean", "home_f5_runs_mean", "away_late_runs_mean",
             "home_late_runs_mean", "away_runs_mean", "home_runs_mean",
@@ -369,6 +420,7 @@ def validate_against_public_baseline(forecasts_path: Path, baseline_path: Path) 
         "recommendation_eligible", "away_f5_runs_mean", "home_f5_runs_mean",
         "away_late_runs_mean", "home_late_runs_mean", "away_runs_mean",
         "home_runs_mean", "home_win_prob", "model_confidence",
+        "confidence_components", "confidence_diagnostics",
         "f5_away_win_prob", "f5_tie_prob", "f5_home_win_prob",
         "away_runs_p10", "away_runs_p90", "home_runs_p10", "home_runs_p90",
         "total_runs_p10", "total_runs_p90",

@@ -42,7 +42,9 @@ log(階段期望得分) = log(聯盟基準)
 - 由同季已完賽比分以矩估計共同／隊伍得分波動，再交給 `simulate_scores.py` 推導所有相依市場。
 - 保留主客場聯盟得分環境；不假裝已有正式打線、逐投手牛棚、屋頂、天氣、球場或外部 rest-of-season projection 修正。
 
-這些固定值屬 `mlb-public-baseline-v1.0.0` 的版本契約，不是臨場手調。輸出必須標記 `status=baseline`、`validation_status=uncalibrated`、`recommendation_eligible=false`；信心度上限 55%，先發 TBD 時上限 45%。baseline 可以輸出得分均值、區間、勝率與公允賠率並納入賽後評分，但未通過 paired walk-forward 升版前，EV、價格門檻與注碼一律停用。
+這些得分模型固定值屬 `mlb-public-baseline-v1.1.0` 的版本契約，不是臨場手調。輸出必須標記 `status=baseline`、`validation_status=uncalibrated`、`recommendation_eligible=false`。baseline 可以輸出得分均值、區間、勝率與公允賠率並納入賽後評分，但未通過 paired walk-forward 升版前，EV、價格門檻與注碼一律停用。
+
+baseline 的信心度不設硬上限，也不得用「兩邊先發已列＝固定 55%／有 TBD＝固定 45%」代替逐場評分。`build_public_baseline.py` 必須依共用五項公式逐場保存分數與診斷值：資料完整度納入球隊及先發樣本覆蓋；新鮮度納入快照距開賽時間；名單／先發確定度納入 probable starter 與雙重賽第 2 場的不確定性；制度與樣本相關性納入當季球隊及先發有效樣本；模型穩定性納入樣本可靠度、相對聯盟基準的輸入敏感度、歷史分布樣本及雙重賽第 2 場風險。`uncalibrated` 與 `recommendation_eligible=false` 才是投注停用閘門，不得再以信心度上限代理驗證狀態。
 
 ## 3. 必要特徵與優先度
 

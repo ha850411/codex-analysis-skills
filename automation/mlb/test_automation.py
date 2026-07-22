@@ -22,6 +22,7 @@ os.environ["AUTOMATION_MODULE"] = "mlb"
 
 from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
 from build_public_baseline import (
+    _confidence,
     fit_public_environment,
     parse_pitcher_projection,
     phase_run_means,
@@ -40,6 +41,79 @@ from review_today import is_recent_report, main as review_main, safe_date, valid
 
 
 class AutomationTests(unittest.TestCase):
+    @staticmethod
+    def _confidence_inputs() -> dict[str, object]:
+        profile = {
+            "games": 120.0,
+            "offense_runs_per_game": 4.5,
+            "defense_runs_per_game": 4.5,
+        }
+        starter = {
+            "source": "same_season_ra9_shrunk",
+            "games_started": 20,
+            "innings": 120.0,
+            "projected_ra9": 4.2,
+            "projected_innings": 5.5,
+        }
+        return {
+            "game": {
+                "gameDate": "2026-07-23T00:00:00+00:00",
+                "gameNumber": 1,
+            },
+            "environment": {
+                "completed_game_count": 1500,
+                "away_runs_per_game": 4.4,
+                "home_runs_per_game": 4.6,
+            },
+            "away_profile": profile,
+            "home_profile": profile,
+            "away_probable": {"id": 1},
+            "home_probable": {"id": 2},
+            "away_starter": starter,
+            "home_starter": starter,
+            "away_means": {"f5": 2.5, "late": 1.9},
+            "home_means": {"f5": 2.6, "late": 2.0},
+            "predicted_at": "2026-07-22T22:00:00+00:00",
+        }
+
+    def test_public_baseline_confidence_is_uncapped_and_weighted(self) -> None:
+        confidence, components, diagnostics = _confidence(**self._confidence_inputs())
+        weighted_score = (
+            0.25 * components["dataCompleteness"]
+            + 0.20 * components["freshness"]
+            + 0.25 * components["lineupCertainty"]
+            + 0.20 * components["regimeRelevance"]
+            + 0.10 * components["modelStability"]
+        )
+        expected = int(weighted_score + 0.5) / 100.0
+        self.assertEqual(confidence, expected)
+        self.assertGreater(confidence, 0.55)
+        self.assertIsNone(diagnostics["hard_cap"])
+
+    def test_public_baseline_confidence_varies_by_game_evidence(self) -> None:
+        strong_inputs = self._confidence_inputs()
+        strong, _, _ = _confidence(**strong_inputs)
+
+        weak_inputs = self._confidence_inputs()
+        weak_inputs["game"] = {
+            "gameDate": "2026-07-23T08:00:00+00:00",
+            "gameNumber": 2,
+        }
+        weak_inputs["home_probable"] = None
+        weak_inputs["home_starter"] = {
+            "source": "league_fallback_tbd_starter",
+            "games_started": 0,
+            "innings": 0.0,
+            "projected_ra9": 4.5,
+            "projected_innings": 4.5,
+        }
+        weak, weak_components, weak_diagnostics = _confidence(**weak_inputs)
+
+        self.assertLess(weak, strong)
+        self.assertLess(weak_components["freshness"], 90)
+        self.assertLess(weak_components["lineupCertainty"], 30)
+        self.assertTrue(weak_diagnostics["second_doubleheader_game"])
+
     def test_public_baseline_fits_only_auditable_numeric_inputs(self) -> None:
         games = []
         for index in range(120):
@@ -260,7 +334,7 @@ class AutomationTests(unittest.TestCase):
         record = {
             "game_id": "1", "predicted_at": "2026-07-21T21:00:00+08:00",
             "first_pitch": "2026-07-22T07:00:00+08:00", "snapshot": "pre-lineup",
-            "model_version": "mlb-public-baseline-v1.0.0", "away_team": "Away",
+            "model_version": "mlb-public-baseline-v1.1.0", "away_team": "Away",
             "home_team": "Home", "away_f5_runs_mean": 2.1, "home_f5_runs_mean": 2.3,
             "away_late_runs_mean": 1.8, "home_late_runs_mean": 1.9,
             "away_runs_mean": 3.9, "home_runs_mean": 4.2, "home_win_prob": 0.54,
@@ -268,7 +342,13 @@ class AutomationTests(unittest.TestCase):
             "f5_home_win_prob": 0.40, "away_runs_p10": 1, "away_runs_p90": 7,
             "home_runs_p10": 1, "home_runs_p90": 8,
             "total_runs_p10": 4, "total_runs_p90": 14,
-            "model_confidence": 0.55, "status": "baseline",
+            "model_confidence": 0.55,
+            "confidence_components": {
+                "dataCompleteness": 55, "freshness": 55, "lineupCertainty": 55,
+                "regimeRelevance": 55, "modelStability": 55,
+            },
+            "confidence_diagnostics": {"hard_cap": None},
+            "status": "baseline",
             "model_tier": "public-data-baseline", "validation_status": "uncalibrated",
             "recommendation_eligible": False, "sources": ["MLB Stats API"],
         }
