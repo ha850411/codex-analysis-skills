@@ -4,12 +4,12 @@
     "mlb": {
       "enabled": true,
       "model": "gpt-5.6-sol",
-      "reasoning_effort": "medium"
+      "reasoning_effort": "high"
     },
     "lol": {
       "enabled": true,
       "model": "gpt-5.6-sol",
-      "reasoning_effort": "medium",
+      "reasoning_effort": "high",
       "schedule_source": "https://bo3.gg/lol/matches/current?tiers=s",
       "tier": "s"
     }
