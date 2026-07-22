@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 08:30 檢討前一日的 LoL S Tier 預測報告。"""
+"""依 JSON 設定的台灣時間檢討前一日 LoL S Tier 預測。"""
 
 from __future__ import annotations
 

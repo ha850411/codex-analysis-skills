@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 20:30 檢討前一日 MLB 預測，並在證據充分時建立 Skill PR。"""
+"""依 JSON 設定的台灣時間檢討前一日 MLB 預測。"""
 
 from __future__ import annotations
 

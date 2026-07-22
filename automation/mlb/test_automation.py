@@ -8,6 +8,7 @@ import time
 import unittest
 from argparse import Namespace
 from contextlib import nullcontext
+from datetime import time as datetime_time
 from pathlib import Path
 from unittest import mock
 
@@ -24,6 +25,7 @@ from evaluate_forecasts import _read_records, availability_audit
 from predict_next_day import (
     extract_taipei_games,
     finalize_prediction,
+    forecast_window,
     main as prediction_main,
     validate_forecasts,
     validate_notion_summary,
@@ -299,6 +301,15 @@ class AutomationTests(unittest.TestCase):
         }
         games = extract_taipei_games([payload], "2026-07-22")
         self.assertEqual([game["gamePk"] for game in games], [2, 3])
+
+    def test_forecast_window_uses_configured_prediction_time(self) -> None:
+        with mock.patch(
+            "predict_next_day.module_schedule_time",
+            return_value=datetime_time(hour=18, minute=45),
+        ):
+            start, end = forecast_window("2026-07-22")
+        self.assertEqual(start.isoformat(), "2026-07-22T18:45:00+08:00")
+        self.assertEqual(end.isoformat(), "2026-07-23T18:45:00+08:00")
 
     def test_review_defaults_to_previous_report_date(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

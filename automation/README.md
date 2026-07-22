@@ -1,6 +1,6 @@
 # 賽事分析自動排程
 
-分析模組使用各自的 cron 排程（台灣時間）：
+分析模組使用各自的 cron 排程（台灣時間）。預設值為：
 
 - MLB 21:00：預測當日 21:00（含）至隔日 21:00（不含）的全部賽事。
 - MLB 20:30：檢討前一日 21:00 產生的報告。
@@ -9,7 +9,7 @@
 
 每次預測排程也會自動清理三天以前的舊報告與產物。
 
-在 `automation/modules.json` 啟用或停用模組；切換後不需要重新安裝 cron：
+在 `automation/modules.json` 啟用或停用模組，並管理模型與排程時間：
 
 ```json
 {
@@ -18,12 +18,20 @@
     "mlb": {
       "enabled": true,
       "model": "gpt-5.6-sol",
-      "reasoning_effort": "high"
+      "reasoning_effort": "high",
+      "schedule": {
+        "prediction": "21:00",
+        "review": "20:30"
+      }
     },
     "lol": {
       "enabled": false,
       "model": "gpt-5.6-sol",
       "reasoning_effort": "high",
+      "schedule": {
+        "prediction": "09:00",
+        "review": "08:30"
+      },
       "schedule_source": "https://bo3.gg/lol/matches/current?tiers=s",
       "tier": "s"
     }
@@ -44,6 +52,16 @@
 
 - `model`：傳給 Codex CLI 的模型 ID，例如 `gpt-5.6-sol`。
 - `reasoning_effort`：推理強度，可用 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`、`ultra`；實際支援程度仍依模型與帳號權限而定。
+- `schedule.prediction`：每天執行預測的台灣時間，必須是補零的 24 小時制 `HH:MM`。
+- `schedule.review`：每天檢討前一日報告的台灣時間，格式同上，而且必須早於 `prediction`。
+
+修改 `enabled`、模型或推理強度後不必重裝 cron，dispatcher 會在每次執行時重新讀取設定。修改 `schedule` 後則必須重新套用一次，讓 macOS crontab 更新：
+
+```bash
+automation/install_crontab.sh
+```
+
+預測程式的 24 小時賽事視窗會同步使用 `schedule.prediction`，不會停留在舊的固定時間。若 JSON 格式、時間格式或先後順序無效，安裝程式會拒絕覆寫現有 crontab。
 
 ## 安裝與移除 cron
 

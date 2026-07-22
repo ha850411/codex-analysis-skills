@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 09:00 預測未來 24 小時的 LoL S Tier 賽事。"""
+"""依 JSON 設定的台灣時間預測未來 24 小時 LoL S Tier 賽事。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date as date_type, datetime, time, timedelta
+from datetime import date as date_type, datetime, timedelta
 from pathlib import Path
 
 AUTOMATION_DIR = Path(__file__).resolve().parents[1]
@@ -24,6 +24,7 @@ from common import (
     cleanup_old_reports, codex_command, fail, job_lock, load_jsonl,
     recreate_dated_output_dir, run, send_email, target_date, write_status,
 )
+from config import ConfigError, module_schedule_time
 
 
 SOURCE_URL = "https://bo3.gg/lol/matches/current?tiers=s"
@@ -52,9 +53,9 @@ def _parse_instant(value: object) -> datetime | None:
 
 
 def forecast_window(target: str) -> tuple[datetime, datetime]:
-    """回傳報告日期 09:00 起算、起點含且終點不含的 24 小時視窗。"""
+    """回傳報告日期排程時間起算、起點含且終點不含的 24 小時視窗。"""
     day = date_type.fromisoformat(target)
-    start = datetime.combine(day, time(hour=9), TAIPEI)
+    start = datetime.combine(day, module_schedule_time("lol", "prediction"), TAIPEI)
     return start, start + timedelta(days=1)
 
 
@@ -293,7 +294,10 @@ def main() -> int:
             atomic_json(output_dir / "schedule-precheck.json", snapshot)
             if not matches:
                 write_status(output_dir, "prediction", "skipped", target_date=target, reason="no LoL S Tier matches")
-                print(f"Prediction skipped; bo3.gg has no LoL S Tier matches in the {target} 09:00 TW window")
+                print(
+                    f"Prediction skipped; bo3.gg has no LoL S Tier matches in the "
+                    f"{target} {window_start:%H:%M} TW window"
+                )
                 return 0
             write_status(output_dir, "prediction", "running", target_date=target)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)))
@@ -301,7 +305,7 @@ def main() -> int:
             print(f"Prediction complete: {output_dir / 'prediction.md'}")
             print(f"Notion: {notion_url}")
             return 0
-    except (JobError, OSError, ValueError) as exc:
+    except (ConfigError, JobError, OSError, ValueError) as exc:
         return fail(output_dir, "prediction", exc)
 
 

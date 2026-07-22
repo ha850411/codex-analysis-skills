@@ -2,8 +2,8 @@
 
 本目錄包含兩個供 macOS `crontab` 使用、以台灣時區解讀的工作：
 
-- `predict_next_day.py`：21:00 先在不啟動 Codex 的情況下查詢 MLB 賽程；報告日期 21:00（含）至隔日 21:00（不含）的 24 小時視窗有比賽時，才預測全部賽事。若資料或生產模型不足，仍發布逐場缺口完整的 `degraded` 報告，不把 N/A 冒充模型預測。
-- `review_today.py`：20:30 檢查前一日報告產物是否在 24 小時內；評分不可覆寫的原始預測，只套用有證據支持的 `mlb-analysis` 修正，並在合理時建立 GitHub PR。
+- `predict_next_day.py`：在 `automation/modules.json` 的 `mlb.schedule.prediction` 時間，先在不啟動 Codex 的情況下查詢 MLB 賽程；只在該時間起算的 24 小時視窗有比賽時，才預測全部賽事。若資料或生產模型不足，仍發布逐場缺口完整的 `degraded` 報告，不把 N/A 冒充模型預測。
+- `review_today.py`：在 `mlb.schedule.review` 時間檢查前一日報告產物是否在 24 小時內；評分不可覆寫的原始預測，只套用有證據支持的 `mlb-analysis` 修正，並在合理時建立 GitHub PR。
 
 執行報告與 Log 位於 `.automation-state/mlb/`，且已由 Git 忽略。賽後檢討在隔離的 worktree 中修改，因此不會碰觸使用者目前分支或尚未提交的變更。
 
@@ -45,7 +45,7 @@ automation/install_crontab.sh
 
 `--date` 對預測與檢討都代表報告日期；檢討未指定日期時會自動選前一日報告。
 
-共用安裝程式會保留所有無關的 cron 工作、遷移舊 MLB 專用區塊，並只派送 `automation/modules.json` 中已啟用的模組。
+預設為 21:00 預測、20:30 檢討。修改 `automation/modules.json` 內的時間後需重新執行安裝程式。共用安裝程式會保留所有無關的 cron 工作、遷移舊 MLB 專用區塊，並只派送設定檔中已啟用的模組。
 
 查看已安裝排程：
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""台灣時間 21:00 預測未來 24 小時的全部 MLB 賽事。"""
+"""依 JSON 設定的台灣時間預測未來 24 小時全部 MLB 賽事。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date as date_type, datetime, time, timedelta
+from datetime import date as date_type, datetime, timedelta
 from pathlib import Path
 
 AUTOMATION_DIR = Path(__file__).resolve().parents[1]
@@ -36,6 +36,7 @@ from common import (
     target_date,
     write_status,
 )
+from config import ConfigError, module_schedule_time
 
 
 FORECAST_FIELDS = {
@@ -72,9 +73,9 @@ UNMODELED_FORECAST_FIELDS = {
 
 
 def forecast_window(target: str) -> tuple[datetime, datetime]:
-    """回傳報告日期 21:00 起算、起點含且終點不含的 24 小時視窗。"""
+    """回傳報告日期排程時間起算、起點含且終點不含的 24 小時視窗。"""
     day = date_type.fromisoformat(target)
-    start = datetime.combine(day, time(hour=21), TAIPEI)
+    start = datetime.combine(day, module_schedule_time("mlb", "prediction"), TAIPEI)
     return start, start + timedelta(days=1)
 
 
@@ -429,7 +430,10 @@ def main() -> int:
             atomic_json(output_dir / "schedule-precheck.json", schedule_snapshot)
             if not games:
                 write_status(output_dir, "prediction", "skipped", target_date=date, reason="no MLB games")
-                print(f"Prediction skipped; MLB schedule has no games in the {date} 21:00 TW window")
+                print(
+                    f"Prediction skipped; MLB schedule has no games in the "
+                    f"{date} {window_start:%H:%M} TW window"
+                )
                 return 0
             write_status(output_dir, "prediction", "running", target_date=date)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt))
@@ -437,7 +441,7 @@ def main() -> int:
             print(f"Prediction complete: {prediction}")
             print(f"Notion: {notion_url}")
             return 0
-    except (JobError, OSError) as exc:
+    except (ConfigError, JobError, OSError) as exc:
         return fail(output_dir, "prediction", exc)
 
 

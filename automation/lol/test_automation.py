@@ -8,6 +8,7 @@ import time
 import unittest
 from argparse import Namespace
 from contextlib import nullcontext
+from datetime import time as datetime_time
 from pathlib import Path
 from unittest import mock
 
@@ -17,7 +18,12 @@ if str(AUTOMATION_DIR) not in sys.path:
 os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import JobError
-from predict_next_day import extract_taipei_s_matches, main as prediction_main, validate_forecasts
+from predict_next_day import (
+    extract_taipei_s_matches,
+    forecast_window,
+    main as prediction_main,
+    validate_forecasts,
+)
 from review_today import is_recent_report, main as review_main, settled_match_ids
 
 
@@ -88,6 +94,15 @@ class LolAutomationTests(unittest.TestCase):
             [item["id"] for item in extract_taipei_s_matches(records, "2026-07-22")],
             [1, 4],
         )
+
+    def test_forecast_window_uses_configured_prediction_time(self) -> None:
+        with mock.patch(
+            "predict_next_day.module_schedule_time",
+            return_value=datetime_time(hour=6, minute=15),
+        ):
+            start, end = forecast_window("2026-07-22")
+        self.assertEqual(start.isoformat(), "2026-07-22T06:15:00+08:00")
+        self.assertEqual(end.isoformat(), "2026-07-23T06:15:00+08:00")
 
     def test_review_defaults_to_previous_report_date(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

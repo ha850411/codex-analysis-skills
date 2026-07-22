@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -17,53 +16,12 @@ if str(AUTOMATION_DIR) not in sys.path:
     sys.path.insert(0, str(AUTOMATION_DIR))
 
 from common import cleanup_old_reports
+from config import ConfigError, KNOWN_MODULES, load_config
 
-CONFIG_FILE = AUTOMATION_DIR / "modules.json"
 PHASE_SCRIPTS = {
     "prediction": "predict_next_day.py",
     "review": "review_today.py",
 }
-KNOWN_MODULES = {"mlb", "lol"}
-REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
-
-
-class ConfigError(RuntimeError):
-    pass
-
-
-def load_config(path: Path = CONFIG_FILE) -> dict[str, dict[str, object]]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise ConfigError(f"Missing module config: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"Invalid module config JSON: {exc}") from exc
-    if not isinstance(payload, dict) or payload.get("timezone") != "Asia/Taipei":
-        raise ConfigError("modules.json timezone must be Asia/Taipei")
-    modules = payload.get("modules")
-    if not isinstance(modules, dict):
-        raise ConfigError("modules.json must contain a modules object")
-    unknown = sorted(set(modules) - KNOWN_MODULES)
-    if unknown:
-        raise ConfigError(f"Unknown automation modules: {', '.join(unknown)}")
-    normalized: dict[str, dict[str, object]] = {}
-    for name, settings in modules.items():
-        if not isinstance(settings, dict) or not isinstance(settings.get("enabled"), bool):
-            raise ConfigError(f"modules.{name}.enabled must be true or false")
-        model = settings.get("model")
-        if not isinstance(model, str) or not model.strip():
-            raise ConfigError(f"modules.{name}.model must be a non-empty string")
-        reasoning_effort = settings.get("reasoning_effort")
-        if reasoning_effort not in REASONING_EFFORTS:
-            allowed = ", ".join(sorted(REASONING_EFFORTS))
-            raise ConfigError(f"modules.{name}.reasoning_effort must be one of: {allowed}")
-        if name == "lol" and settings.get("enabled"):
-            if settings.get("schedule_source") != "https://bo3.gg/lol/matches/current?tiers=s" or settings.get("tier") != "s":
-                raise ConfigError("Enabled LoL automation must use the approved bo3.gg S-tier source")
-        normalized[name] = settings
-    return normalized
-
-
 def module_environment(settings: dict[str, object]) -> dict[str, str]:
     """將單一模組的模型設定轉成子程序專用環境變數。"""
     env = os.environ.copy()

@@ -33,18 +33,16 @@ awk -v begin="${BEGIN_MARKER}" -v end="${END_MARKER}" -v old_begin="${OLD_BEGIN_
 {
   print ""
   print -r -- "${BEGIN_MARKER}"
-  print "SHELL=/bin/zsh"
-  print "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-  print "TZ=Asia/Taipei"
-  print -r -- "0 21 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py prediction --module mlb >> '${LOG_DIR}/mlb-prediction.log' 2>&1"
-  print -r -- "30 20 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py review --module mlb >> '${LOG_DIR}/mlb-review.log' 2>&1"
-  print -r -- "0 9 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py prediction --module lol >> '${LOG_DIR}/lol-prediction.log' 2>&1"
-  print -r -- "30 8 * * * cd '${REPO_ROOT}' && CODEX_BIN='${CODEX_BIN}' '${PYTHON_BIN}' automation/run_scheduled.py review --module lol >> '${LOG_DIR}/lol-review.log' 2>&1"
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/render_crontab.py" \
+    --repo-root "${REPO_ROOT}" \
+    --python-bin "${PYTHON_BIN}" \
+    --codex-bin "${CODEX_BIN}" \
+    --log-dir "${LOG_DIR}"
   print -r -- "${END_MARKER}"
 } >>"${new_file}"
 
 crontab "${new_file}"
-print "自動化排程已設定：MLB 每天 21:00 預測、20:30 檢討前一日報告；LoL 每天 09:00 預測、08:30 檢討前一日報告。"
-print "模組開關：${SCRIPT_DIR}/modules.json"
+print "自動化排程已依 modules.json 設定。"
+print "模組、模型與排程時間：${SCRIPT_DIR}/modules.json"
 print "Log：${LOG_DIR}"
 print "可用 crontab -l 查看；Mac 必須保持開機與喚醒。"
