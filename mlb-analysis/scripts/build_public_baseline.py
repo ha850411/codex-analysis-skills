@@ -331,7 +331,7 @@ def _confidence(
         + 35.0 * average_starter_data
     )
     freshness = 95.0 - 1.0 * hours_to_first_pitch
-    lineup_certainty = (35.0 if probable_count < 2 else 60.0) + 20.0 * (probable_count / 2.0)
+    lineup_certainty = (30.0 if probable_count < 2 else 60.0) + 20.0 * (probable_count / 2.0)
     if second_doubleheader_game:
         lineup_certainty -= 12.0
 
