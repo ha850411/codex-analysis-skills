@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# 1. 設置專案路徑（請替換成你的實際目錄）
-REPO_DIR="~/.agents/skills"
+HOME="/home/ec2-user"
+REPO_DIR="$HOME/.agents/skills"
 LOG_PATH="$REPO_DIR/.automation-state/logs/cron_pull.log"
 
 # 2. 切換到專案目錄，並將執行日誌輸出到日誌檔
