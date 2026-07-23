@@ -7,7 +7,7 @@
     "reasoning_effort": null
   },
   "red_team": {
-    "model": "Gemini 3.6 Flash (High)"
+    "model": "gemini-3.6-flash-high"
   },
   "final_adjudication": {
     "mode": "current_session",
