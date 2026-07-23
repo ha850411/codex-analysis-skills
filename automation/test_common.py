@@ -124,5 +124,30 @@ class RecreateOutputDirTests(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
 
 
+class NotifyReviewByEmailTests(unittest.TestCase):
+    def test_notify_review_by_email_creates_receipt_and_calls_send_email(self) -> None:
+        from unittest import mock
+        from automation.common import notify_review_by_email
+        with tempfile.TemporaryDirectory() as temp_dir:
+            review_dir = Path(temp_dir)
+            (review_dir / "postmortem.md").write_text("postmortem content", encoding="utf-8")
+            (review_dir / "pr-summary.md").write_text("## 本次調整\n- 無\n\n## 發現的問題\n- 無", encoding="utf-8")
+
+            with mock.patch("automation.common.send_email", return_value=["test@example.com"]) as send_mock:
+                notify_review_by_email("lol", review_dir, "2026-07-22", pr_created=False)
+                send_mock.assert_called_once()
+                subject, body = send_mock.call_args[0]
+                self.assertIn("LOL 復盤報告已完成（未建立 PR）｜2026-07-22", subject)
+                self.assertIn("LOL 預測復盤報告已完成", body)
+                receipt = review_dir / "email-notification.json"
+                self.assertTrue(receipt.is_file())
+
+            # Second call should skip sending email because receipt exists
+            with mock.patch("automation.common.send_email") as send_mock2:
+                notify_review_by_email("lol", review_dir, "2026-07-22", pr_created=False)
+                send_mock2.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -17,7 +17,7 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, codex_command, fail,
-    github_env, github_git_env, job_lock, load_jsonl, load_pr_summary, require_executable, review_branch, run,
+    github_env, github_git_env, job_lock, load_jsonl, load_pr_summary, notify_review_by_email, require_executable, review_branch, run,
     target_date, write_status,
 )
 from predict_next_day import fetch_schedule
@@ -194,12 +194,14 @@ def main() -> int:
                 raise JobError(f"Evaluated match IDs {sorted(evaluated_ids)} do not match settled IDs {sorted(settled)}")
             paths = changed_paths(worktree)
             if not paths:
-                write_status(review_dir, "review", "complete", target_date=target, pr_created=False)
+                notify_review_by_email("lol", review_dir, target, pr_created=False)
+                write_status(review_dir, "review", "complete", target_date=target, pr_created=False, email_notified=True)
                 print(f"Review complete; no skill change justified: {report}")
                 return 0
             validate_changes(worktree)
             pr_url = create_pr(worktree, branch, base, target, report, review_dir / "pr-summary.md")
-            write_status(review_dir, "review", "complete", target_date=target, pr_created=True, pr_url=pr_url)
+            notify_review_by_email("lol", review_dir, target, pr_created=True, pr_url=pr_url)
+            write_status(review_dir, "review", "complete", target_date=target, pr_created=True, pr_url=pr_url, email_notified=True)
             print(f"Review complete; PR created: {pr_url}")
             return 0
     except (JobError, OSError) as exc:

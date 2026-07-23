@@ -352,6 +352,67 @@ def send_email(subject: str, body: str) -> list[str]:
     return recipients
 
 
+def notify_review_by_email(
+    module: str,
+    review_dir: Path,
+    target: str,
+    pr_created: bool,
+    pr_url: str | None = None,
+) -> None:
+    """發送復盤結果與 PR 狀態之 Email 通知。"""
+    receipt = review_dir / "email-notification.json"
+    if receipt.is_file():
+        try:
+            saved = json.loads(receipt.read_text(encoding="utf-8"))
+            if (
+                isinstance(saved, dict)
+                and saved.get("sent") is True
+                and saved.get("pr_created") == pr_created
+                and saved.get("pr_url") == pr_url
+            ):
+                return
+        except json.JSONDecodeError:
+            pass
+
+    module_upper = module.strip().upper()
+    report_file = review_dir / "postmortem.md"
+    summary_file = review_dir / "pr-summary.md"
+
+    pr_status_str = "已建立 PR" if pr_created else "未建立 PR"
+    subject = f"{module_upper} 復盤報告已完成（{pr_status_str}）｜{target}"
+
+    body_lines = [
+        f"{target}（台灣時間）的 {module_upper} 預測復盤報告已完成。",
+        "",
+        f"PR 狀態：{f'已建立 PR - {pr_url}' if pr_created and pr_url else '未調整 Skill / 未建立 PR'}",
+        f"本地報告：{report_file}",
+        "",
+    ]
+
+    if summary_file.is_file():
+        body_lines.extend([
+            "【復盤摘要】",
+            summary_file.read_text(encoding="utf-8").strip(),
+            "",
+        ])
+
+    body_lines.append(f"此信由 {module_upper} 自動排程復盤寄出。")
+    body = "\n".join(body_lines)
+
+    recipients = send_email(subject, body)
+    atomic_json(
+        receipt,
+        {
+            "sent": True,
+            "sent_at": datetime.now(TAIPEI).isoformat(),
+            "recipients": recipients,
+            "pr_created": pr_created,
+            "pr_url": pr_url,
+        },
+    )
+
+
+
 def assert_nonempty(path: Path) -> None:
     if not path.is_file() or path.stat().st_size == 0:
         raise JobError(f"Expected non-empty artifact was not created: {path}")

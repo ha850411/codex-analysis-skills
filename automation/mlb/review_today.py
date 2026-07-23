@@ -27,6 +27,7 @@ from common import (
     job_lock,
     load_jsonl,
     load_pr_summary,
+    notify_review_by_email,
     require_executable,
     review_branch,
     run,
@@ -240,12 +241,14 @@ def main() -> int:
             )
             paths = changed_paths(worktree)
             if not paths:
-                write_status(review_dir, "review", "complete", target_date=date, pr_created=False)
+                notify_review_by_email("mlb", review_dir, date, pr_created=False)
+                write_status(review_dir, "review", "complete", target_date=date, pr_created=False, email_notified=True)
                 print(f"Review complete; no skill change justified: {report}")
                 return 0
             validate_changes(worktree)
             pr_url = create_pr(worktree, branch, base, date, report, review_dir / "pr-summary.md")
-            write_status(review_dir, "review", "complete", target_date=date, pr_created=True, pr_url=pr_url)
+            notify_review_by_email("mlb", review_dir, date, pr_created=True, pr_url=pr_url)
+            write_status(review_dir, "review", "complete", target_date=date, pr_created=True, pr_url=pr_url, email_notified=True)
             print(f"Review complete; PR created: {pr_url}")
             return 0
     except (JobError, OSError) as exc:
