@@ -11,6 +11,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from datetime import date as date_type, datetime, timedelta
 from pathlib import Path
 
@@ -34,6 +35,15 @@ SCORE_KEYS = {
     3: {"2-0", "2-1", "1-2", "0-2"},
     5: {"3-0", "3-1", "3-2", "2-3", "1-3", "0-3"},
 }
+
+
+@dataclass(frozen=True)
+class ScheduleFetch:
+    matches: list[dict[str, object]]
+    filtered_payload: dict[str, object]
+    unfiltered_payload: dict[str, object]
+    filtered_match_ids: list[int]
+    client_filtered_match_ids: list[int]
 
 
 def safe_date(value: str) -> str:
@@ -78,16 +88,17 @@ def extract_taipei_s_matches(records: list[dict[str, object]], target: str) -> l
     )
 
 
-def fetch_schedule(target: str) -> list[dict[str, object]]:
+def _fetch_schedule_payload(target: str, *, tier_filtered: bool) -> dict[str, object]:
     start, end = forecast_window(target)
     params = {
         "filter[matches.discipline_id][eq]": "3",
-        "filter[matches.tier][in]": "s",
         "filter[matches.start_date][gt]": (start - timedelta(seconds=1)).isoformat(),
         "filter[matches.start_date][lt]": end.isoformat(),
         "sort": "start_date",
         "page[limit]": "100",
     }
+    if tier_filtered:
+        params["filter[matches.tier][in]"] = "s"
     request = urllib.request.Request(
         f"{API_URL}?{urllib.parse.urlencode(params)}",
         headers={"Accept": "application/json", "User-Agent": "codex-lol-automation/1.0"},
@@ -102,8 +113,49 @@ def fetch_schedule(target: str) -> list[dict[str, object]]:
     total = payload.get("total")
     if isinstance(total, dict) and isinstance(total.get("count"), int) and total["count"] > 100:
         raise JobError("bo3.gg returned more than 100 matches; refusing an incomplete slate")
-    records = [item for item in payload["results"] if isinstance(item, dict)]
-    return extract_taipei_s_matches(records, target)
+    return payload
+
+
+def _payload_records(payload: dict[str, object]) -> list[dict[str, object]]:
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise JobError("bo3.gg schedule precheck returned invalid data")
+    return [item for item in results if isinstance(item, dict)]
+
+
+def fetch_schedule(target: str) -> ScheduleFetch:
+    """以伺服器端與客戶端 S-tier 篩選各查一次，合併候選並保留原始回應。"""
+    filtered_payload = _fetch_schedule_payload(target, tier_filtered=True)
+    unfiltered_payload = _fetch_schedule_payload(target, tier_filtered=False)
+    filtered_matches = extract_taipei_s_matches(
+        _payload_records(filtered_payload), target
+    )
+    client_filtered_matches = extract_taipei_s_matches(
+        _payload_records(unfiltered_payload), target
+    )
+    union: dict[int, dict[str, object]] = {}
+    for record in [*filtered_matches, *client_filtered_matches]:
+        match_id = record.get("id")
+        if isinstance(match_id, int):
+            union[match_id] = record
+    matches = sorted(
+        union.values(),
+        key=lambda item: _parse_instant(item.get("start_date"))
+        or forecast_window(target)[1],
+    )
+    return ScheduleFetch(
+        matches=matches,
+        filtered_payload=filtered_payload,
+        unfiltered_payload=unfiltered_payload,
+        filtered_match_ids=[
+            int(record["id"]) for record in filtered_matches
+            if isinstance(record.get("id"), int)
+        ],
+        client_filtered_match_ids=[
+            int(record["id"]) for record in client_filtered_matches
+            if isinstance(record.get("id"), int)
+        ],
+    )
 
 
 def compact_match(record: dict[str, object]) -> dict[str, object]:
@@ -136,23 +188,35 @@ def prompt_for(target: str, output_dir: Path) -> str:
 這是無人值守排程。必須完整讀取並遵守：
 - {REPO_ROOT / 'lol-analysis/SKILL.md'}
 - skill 指定的 shared 契約與 LoL references
-- 已鎖定賽程：{output_dir / 'schedule-precheck.json'}
+- bo3.gg 候選賽程：{output_dir / 'schedule-precheck.json'}
+- bo3.gg 原始伺服器端 S-tier 回應：{output_dir / 'bo3-filtered-response.json'}
+- bo3.gg 原始未套 tier 回應：{output_dir / 'bo3-unfiltered-response.json'}
 
 要求：
-1. 只能預測 schedule-precheck.json 列出的比賽；它已鎖定上述 24 小時視窗。賽程入口固定為 {SOURCE_URL}。不得加入 A/B/C Tier，也不得依台灣日曆日自行增減比賽。
-2. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
-3. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
-4. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
-5. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
+1. `schedule-precheck.json` 只是候選集合，不是最終權威。先用一個官方來源（LoL Esports、賽區官方或主辦方）與一個不同營運方的獨立來源（Leaguepedia、Liquipedia 或 OP.GG Esports）盤點完整視窗；bo3.gg 不算官方來源。
+2. 建立 {output_dir / 'schedule-verification.json'}，至少包含：
+   verified_at, timezone="Asia/Taipei", window_start, window_end,
+   complete, no_matches, candidate_match_ids, added_match_ids,
+   removed_match_ids, conflicts, sources, matches。
+   sources 每筆包含 role="official" 或 role="independent"、url、checked_at；
+   matches 每筆包含 match_id, start_time, tier="s", bo_type, team1, team2,
+   tournament, source_urls。match_id 必須能回查 bo3.gg。
+3. 官方或獨立來源發現候選外的 S Tier 賽事時必須補入；候選誤列時必須移除並說明。只有兩類來源支持相同集合、所有 match ID 已取得且 conflicts 為空時，才能寫 complete=true。無賽事也必須雙來源確認，不能因 bo3.gg 空回應直接略過。
+4. 若來源不一致或有未解場次，寫 complete=false 與 conflicts 後停止；不要建立預測、Notion summary 或可發布報告。外層會以失敗狀態停止發布與寄信。
+5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露候選／新增／移除場次及兩類驗證來源。
+6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
+7. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
+8. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
+9. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
    tournament, tier="s", bo_type, exact_score_probabilities, team1_win_prob,
    team2_win_prob, team1_at_least_one_prob, team2_at_least_one_prob,
    model_confidence, sources。所有機率均用 0..1。
-6. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，「至少一局」必須是被橫掃機率的補數，model_confidence 不得冒充勝率。
-7. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}，並執行
+10. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，「至少一局」必須是被橫掃機率的補數，model_confidence 不得冒充勝率。
+11. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}，並執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
-8. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
-9. 只建立本地 Notion summary；外層程式驗證後發布並寄 Email。最後確認所有檔案確實存在。
+12. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
+13. 只建立本地 Notion summary；外層程式驗證賽程與機率後才會發布並寄 Email。最後確認所有檔案確實存在。
 """
 
 
@@ -164,10 +228,21 @@ def validate_forecasts(path: Path) -> None:
         "team1_at_least_one_prob", "team2_at_least_one_prob",
         "model_confidence", "sources",
     }
+    seen_match_ids: set[int] = set()
     for index, record in enumerate(load_jsonl(path), 1):
         missing = sorted(required - record.keys())
         if missing:
             raise JobError(f"forecasts.jsonl record {index} missing: {', '.join(missing)}")
+        match_id = record["match_id"]
+        if (
+            isinstance(match_id, bool)
+            or not isinstance(match_id, int)
+            or match_id in seen_match_ids
+        ):
+            raise JobError(
+                f"forecasts.jsonl record {index}: match_id must be a unique integer"
+            )
+        seen_match_ids.add(match_id)
         if str(record["tier"]).lower() != "s":
             raise JobError(f"forecasts.jsonl record {index}: tier must be s")
         bo = record["bo_type"]
@@ -193,6 +268,189 @@ def validate_forecasts(path: Path) -> None:
         t2_swept = scores[f"{wins}-0"]
         if abs(record["team1_at_least_one_prob"] - (1 - t1_swept)) > 0.002 or abs(record["team2_at_least_one_prob"] - (1 - t2_swept)) > 0.002:
             raise JobError(f"forecasts.jsonl record {index}: at-least-one probabilities are inconsistent")
+
+
+def validate_schedule_verification(
+    path: Path, precheck_path: Path
+) -> dict[str, object]:
+    """驗證雙來源賽程閘門與候選集合差異，未完成時一律拒絕發布。"""
+    assert_nonempty(path)
+    assert_nonempty(precheck_path)
+    try:
+        verification = json.loads(path.read_text(encoding="utf-8"))
+        precheck = json.loads(precheck_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid schedule verification JSON: {exc}") from exc
+    if not isinstance(verification, dict) or not isinstance(precheck, dict):
+        raise JobError("Schedule verification and precheck must be JSON objects")
+    required = {
+        "verified_at", "timezone", "window_start", "window_end", "complete",
+        "no_matches", "candidate_match_ids", "added_match_ids",
+        "removed_match_ids", "conflicts", "sources", "matches",
+    }
+    missing = sorted(required - verification.keys())
+    if missing:
+        raise JobError(
+            f"Schedule verification missing fields: {', '.join(missing)}"
+        )
+    if verification["complete"] is not True:
+        conflicts = verification.get("conflicts")
+        detail = json.dumps(conflicts, ensure_ascii=False)
+        raise JobError(f"Schedule verification incomplete: {detail}")
+    if verification["timezone"] != "Asia/Taipei":
+        raise JobError("Schedule verification timezone must be Asia/Taipei")
+    verified_at = _parse_instant(verification["verified_at"])
+    if verified_at is None or verified_at.utcoffset() is None:
+        raise JobError("Schedule verification verified_at must include timezone")
+    if (
+        verification["window_start"] != precheck.get("window_start")
+        or verification["window_end"] != precheck.get("window_end")
+    ):
+        raise JobError("Schedule verification window disagrees with precheck")
+    if not isinstance(verification["conflicts"], list) or verification["conflicts"]:
+        raise JobError("Complete schedule verification must have no conflicts")
+
+    sources = verification["sources"]
+    if not isinstance(sources, list):
+        raise JobError("Schedule verification sources must be a list")
+    source_roles: dict[str, str] = {}
+    source_hosts: dict[str, set[str]] = {"official": set(), "independent": set()}
+    for index, source in enumerate(sources, 1):
+        if not isinstance(source, dict):
+            raise JobError(f"Schedule source {index} must be an object")
+        role = source.get("role")
+        url = source.get("url")
+        checked_at = _parse_instant(source.get("checked_at"))
+        if (
+            role not in source_hosts
+            or not isinstance(url, str)
+            or checked_at is None
+            or checked_at.utcoffset() is None
+        ):
+            raise JobError(
+                f"Schedule source {index} requires role, URL and checked_at"
+            )
+        if abs(verified_at - checked_at) > timedelta(hours=6):
+            raise JobError(f"Schedule source {index} is stale")
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise JobError(f"Schedule source {index} has invalid URL")
+        source_roles[url] = str(role)
+        source_hosts[str(role)].add(parsed.hostname.lower())
+    if not source_hosts["official"] or not source_hosts["independent"]:
+        raise JobError(
+            "Schedule verification requires official and independent sources"
+        )
+    if source_hosts["official"] & source_hosts["independent"]:
+        raise JobError(
+            "Official and independent schedule sources must use different hosts"
+        )
+
+    candidate_ids = {
+        item.get("match_id")
+        for item in precheck.get("matches", [])
+        if isinstance(item, dict) and isinstance(item.get("match_id"), int)
+    }
+    declared_candidate_ids = verification["candidate_match_ids"]
+    if (
+        not isinstance(declared_candidate_ids, list)
+        or any(
+            isinstance(value, bool) or not isinstance(value, int)
+            for value in declared_candidate_ids
+        )
+        or set(declared_candidate_ids) != candidate_ids
+    ):
+        raise JobError("Schedule verification candidate IDs disagree with precheck")
+
+    matches = verification["matches"]
+    if not isinstance(matches, list):
+        raise JobError("Schedule verification matches must be a list")
+    start = _parse_instant(precheck.get("window_start"))
+    end = _parse_instant(precheck.get("window_end"))
+    if (
+        start is None
+        or end is None
+        or start.utcoffset() is None
+        or end.utcoffset() is None
+    ):
+        raise JobError("Precheck has invalid forecast window")
+    verified_ids: set[int] = set()
+    match_required = {
+        "match_id", "start_time", "tier", "bo_type", "team1", "team2",
+        "tournament", "source_urls",
+    }
+    for index, match in enumerate(matches, 1):
+        if not isinstance(match, dict) or match_required - match.keys():
+            raise JobError(f"Verified match {index} is missing required fields")
+        match_id = match["match_id"]
+        instant = _parse_instant(match["start_time"])
+        bo_type = match["bo_type"]
+        if (
+            isinstance(match_id, bool)
+            or not isinstance(match_id, int)
+            or match_id in verified_ids
+        ):
+            raise JobError(f"Verified match {index} has invalid or duplicate ID")
+        if (
+            instant is None
+            or instant.utcoffset() is None
+            or not start <= instant.astimezone(TAIPEI) < end
+        ):
+            raise JobError(f"Verified match {match_id} is outside forecast window")
+        if str(match["tier"]).lower() != "s" or bo_type not in SCORE_KEYS:
+            raise JobError(f"Verified match {match_id} has invalid tier or BO")
+        if any(
+            not isinstance(match[field], str) or not str(match[field]).strip()
+            for field in ("team1", "team2", "tournament")
+        ):
+            raise JobError(f"Verified match {match_id} has incomplete names")
+        refs = match["source_urls"]
+        if not isinstance(refs, list):
+            raise JobError(f"Verified match {match_id} source_urls must be a list")
+        roles = {source_roles.get(ref) for ref in refs}
+        if not {"official", "independent"} <= roles:
+            raise JobError(
+                f"Verified match {match_id} lacks official and independent support"
+            )
+        verified_ids.add(match_id)
+
+    no_matches = verification["no_matches"]
+    if not isinstance(no_matches, bool) or no_matches != (not verified_ids):
+        raise JobError("Schedule verification no_matches is inconsistent")
+    for field, expected in (
+        ("added_match_ids", verified_ids - candidate_ids),
+        ("removed_match_ids", candidate_ids - verified_ids),
+    ):
+        values = verification[field]
+        if (
+            not isinstance(values, list)
+            or any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in values
+            )
+            or set(values) != expected
+        ):
+            raise JobError(f"Schedule verification {field} is inconsistent")
+    return verification
+
+
+def validate_forecast_schedule(
+    forecasts_path: Path, verification: dict[str, object]
+) -> None:
+    forecast_ids = {
+        record.get("match_id")
+        for record in load_jsonl(forecasts_path)
+        if isinstance(record.get("match_id"), int)
+    }
+    verified_ids = {
+        match.get("match_id")
+        for match in verification.get("matches", [])
+        if isinstance(match, dict) and isinstance(match.get("match_id"), int)
+    }
+    if forecast_ids != verified_ids:
+        raise JobError(
+            "Forecast match IDs must exactly equal the verified schedule"
+        )
 
 
 def validate_notion_summary(path: Path) -> dict[str, object]:
@@ -245,15 +503,33 @@ def notify_by_email(output_dir: Path, target: str, notion_url: str) -> None:
 
 
 def finalize_prediction(output_dir: Path, target: str) -> str:
+    verification = validate_schedule_verification(
+        output_dir / "schedule-verification.json",
+        output_dir / "schedule-precheck.json",
+    )
+    if verification["no_matches"] is True:
+        raise JobError("Cannot publish a no-match schedule")
     assert_nonempty(output_dir / "prediction.md")
     assert_nonempty(output_dir / "forecasts.jsonl")
     assert_nonempty(output_dir / "probability-checks.json")
     validate_forecasts(output_dir / "forecasts.jsonl")
+    validate_forecast_schedule(output_dir / "forecasts.jsonl", verification)
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
     notion_url = publish_to_notion(output_dir)
     notify_by_email(output_dir, target, notion_url)
-    write_status(output_dir, "prediction", "complete", target_date=target, notion_url=notion_url, email_notified=True)
+    write_status(
+        output_dir,
+        "prediction",
+        "complete",
+        target_date=target,
+        notion_url=notion_url,
+        email_notified=True,
+        schedule_verified=True,
+        verified_match_count=len(verification["matches"]),
+        added_match_ids=verification["added_match_ids"],
+        removed_match_ids=verification["removed_match_ids"],
+    )
     return notion_url
 
 
@@ -277,8 +553,17 @@ def main() -> int:
                 return 0
             if recreate_dated_output_dir(output_dir, STATE_ROOT / "predictions"):
                 print(f"[reset] Removed existing prediction directory: {output_dir}", flush=True)
-            matches = fetch_schedule(target)
+            schedule = fetch_schedule(target)
+            matches = schedule.matches
             window_start, window_end = forecast_window(target)
+            atomic_json(
+                output_dir / "bo3-filtered-response.json",
+                schedule.filtered_payload,
+            )
+            atomic_json(
+                output_dir / "bo3-unfiltered-response.json",
+                schedule.unfiltered_payload,
+            )
             snapshot = {
                 "report_date": target,
                 "window_start": window_start.isoformat(),
@@ -289,18 +574,35 @@ def main() -> int:
                 "api": API_URL,
                 "tier": "s",
                 "match_count": len(matches),
+                "server_filtered_match_ids": schedule.filtered_match_ids,
+                "client_filtered_match_ids": schedule.client_filtered_match_ids,
+                "bo3_filter_consistent": (
+                    set(schedule.filtered_match_ids)
+                    == set(schedule.client_filtered_match_ids)
+                ),
                 "matches": [compact_match(match) for match in matches],
             }
             atomic_json(output_dir / "schedule-precheck.json", snapshot)
-            if not matches:
-                write_status(output_dir, "prediction", "skipped", target_date=target, reason="no LoL S Tier matches")
-                print(
-                    f"Prediction skipped; bo3.gg has no LoL S Tier matches in the "
-                    f"{target} {window_start:%H:%M} TW window"
-                )
-                return 0
             write_status(output_dir, "prediction", "running", target_date=target)
             run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)))
+            verification = validate_schedule_verification(
+                output_dir / "schedule-verification.json",
+                output_dir / "schedule-precheck.json",
+            )
+            if verification["no_matches"] is True:
+                write_status(
+                    output_dir,
+                    "prediction",
+                    "skipped",
+                    target_date=target,
+                    reason="no LoL S Tier matches after official and independent verification",
+                    schedule_verified=True,
+                )
+                print(
+                    f"Prediction skipped; official and independent sources verified "
+                    f"no LoL S Tier matches in the {target} {window_start:%H:%M} TW window"
+                )
+                return 0
             notion_url = finalize_prediction(output_dir, target)
             print(f"Prediction complete: {output_dir / 'prediction.md'}")
             print(f"Notion: {notion_url}")

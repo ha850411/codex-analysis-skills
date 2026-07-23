@@ -93,7 +93,7 @@ def load_config(path: Path | None = None) -> dict[str, dict[str, object]]:
                 or settings.get("tier") != "s"
             ):
                 raise ConfigError(
-                    "Enabled LoL automation must use the approved bo3.gg S-tier source"
+                    "Enabled LoL automation must use the approved bo3.gg S-tier candidate source"
                 )
         normalized[name] = settings
     return normalized

@@ -19,10 +19,14 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import JobError
 from predict_next_day import (
+    ScheduleFetch,
     extract_taipei_s_matches,
+    fetch_schedule,
     forecast_window,
     main as prediction_main,
+    validate_forecast_schedule,
     validate_forecasts,
+    validate_schedule_verification,
 )
 from review_today import is_recent_report, main as review_main, settled_match_ids
 
@@ -45,10 +49,23 @@ class LolAutomationTests(unittest.TestCase):
                 ),
                 mock.patch("predict_next_day.cleanup_old_reports"),
                 mock.patch("predict_next_day.job_lock", side_effect=lambda _: nullcontext()),
-                mock.patch("predict_next_day.fetch_schedule", return_value=[{}]),
+                mock.patch(
+                    "predict_next_day.fetch_schedule",
+                    return_value=ScheduleFetch(
+                        matches=[{}],
+                        filtered_payload={"results": []},
+                        unfiltered_payload={"results": []},
+                        filtered_match_ids=[],
+                        client_filtered_match_ids=[],
+                    ),
+                ),
                 mock.patch("predict_next_day.compact_match", return_value={}),
                 mock.patch("predict_next_day.codex_command", return_value=["codex", "exec"]),
                 mock.patch("predict_next_day.run") as run_mock,
+                mock.patch(
+                    "predict_next_day.validate_schedule_verification",
+                    return_value={"no_matches": False},
+                ),
                 mock.patch("predict_next_day.finalize_prediction", return_value="https://notion.example/report"),
             ):
                 self.assertEqual(prediction_main(), 0)
@@ -58,6 +75,8 @@ class LolAutomationTests(unittest.TestCase):
             self.assertFalse((output_dir / "forecasts.jsonl").exists())
             self.assertFalse((output_dir / "email-notification.json").exists())
             self.assertTrue((output_dir / "schedule-precheck.json").exists())
+            self.assertTrue((output_dir / "bo3-filtered-response.json").exists())
+            self.assertTrue((output_dir / "bo3-unfiltered-response.json").exists())
 
     def test_dry_run_preserves_existing_prediction_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -82,13 +101,105 @@ class LolAutomationTests(unittest.TestCase):
             self.assertEqual(old_report.read_text(encoding="utf-8"), "old")
             fetch_mock.assert_not_called()
 
-    def test_filters_tier_and_rolling_0900_window(self) -> None:
+    def test_incomplete_schedule_never_reaches_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            schedule = ScheduleFetch(
+                matches=[],
+                filtered_payload={"results": []},
+                unfiltered_payload={"results": []},
+                filtered_match_ids=[],
+                client_filtered_match_ids=[],
+            )
+            with (
+                mock.patch("predict_next_day.STATE_ROOT", state_root),
+                mock.patch(
+                    "predict_next_day.parse_args",
+                    return_value=Namespace(
+                        date="2026-07-23", force=False, dry_run=False
+                    ),
+                ),
+                mock.patch("predict_next_day.cleanup_old_reports"),
+                mock.patch(
+                    "predict_next_day.job_lock",
+                    side_effect=lambda _: nullcontext(),
+                ),
+                mock.patch(
+                    "predict_next_day.fetch_schedule", return_value=schedule
+                ),
+                mock.patch(
+                    "predict_next_day.codex_command",
+                    return_value=["codex", "exec"],
+                ),
+                mock.patch("predict_next_day.run"),
+                mock.patch(
+                    "predict_next_day.validate_schedule_verification",
+                    side_effect=JobError("Schedule verification incomplete"),
+                ),
+                mock.patch(
+                    "predict_next_day.finalize_prediction"
+                ) as finalize_mock,
+            ):
+                self.assertEqual(prediction_main(), 1)
+            finalize_mock.assert_not_called()
+            status = json.loads(
+                (
+                    state_root
+                    / "predictions/2026-07-23/status.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(status["status"], "failed")
+
+    def test_empty_candidate_still_runs_two_source_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            schedule = ScheduleFetch(
+                matches=[],
+                filtered_payload={"results": []},
+                unfiltered_payload={"results": []},
+                filtered_match_ids=[],
+                client_filtered_match_ids=[],
+            )
+            with (
+                mock.patch("predict_next_day.STATE_ROOT", state_root),
+                mock.patch(
+                    "predict_next_day.parse_args",
+                    return_value=Namespace(
+                        date="2026-07-23", force=False, dry_run=False
+                    ),
+                ),
+                mock.patch("predict_next_day.cleanup_old_reports"),
+                mock.patch(
+                    "predict_next_day.job_lock",
+                    side_effect=lambda _: nullcontext(),
+                ),
+                mock.patch(
+                    "predict_next_day.fetch_schedule", return_value=schedule
+                ),
+                mock.patch(
+                    "predict_next_day.codex_command",
+                    return_value=["codex", "exec"],
+                ),
+                mock.patch("predict_next_day.run") as run_mock,
+                mock.patch(
+                    "predict_next_day.validate_schedule_verification",
+                    return_value={"no_matches": True},
+                ),
+                mock.patch(
+                    "predict_next_day.finalize_prediction"
+                ) as finalize_mock,
+            ):
+                self.assertEqual(prediction_main(), 0)
+            run_mock.assert_called_once_with(["codex", "exec"])
+            finalize_mock.assert_not_called()
+
+    def test_filters_tier_and_rolling_1000_window(self) -> None:
         records = [
-            {"id": 1, "tier": "s", "start_date": "2026-07-22T01:00:00Z"},
-            {"id": 2, "tier": "a", "start_date": "2026-07-22T02:00:00Z"},
-            {"id": 3, "tier": "s", "start_date": "2026-07-22T00:59:59Z"},
-            {"id": 4, "tier": "s", "start_date": "2026-07-23T00:59:59Z"},
-            {"id": 5, "tier": "s", "start_date": "2026-07-23T01:00:00Z"},
+            {"id": 1, "tier": "s", "start_date": "2026-07-22T02:00:00Z"},
+            {"id": 2, "tier": "a", "start_date": "2026-07-22T03:00:00Z"},
+            {"id": 3, "tier": "s", "start_date": "2026-07-22T01:59:59Z"},
+            {"id": 4, "tier": "s", "start_date": "2026-07-23T01:59:59Z"},
+            {"id": 5, "tier": "s", "start_date": "2026-07-23T02:00:00Z"},
         ]
         self.assertEqual(
             [item["id"] for item in extract_taipei_s_matches(records, "2026-07-22")],
@@ -103,6 +214,43 @@ class LolAutomationTests(unittest.TestCase):
             start, end = forecast_window("2026-07-22")
         self.assertEqual(start.isoformat(), "2026-07-22T06:15:00+08:00")
         self.assertEqual(end.isoformat(), "2026-07-23T06:15:00+08:00")
+
+    def test_schedule_fetch_unions_server_and_client_side_tier_results(self) -> None:
+        filtered = {
+            "results": [
+                {
+                    "id": 124500,
+                    "tier": "s",
+                    "start_date": "2026-07-23T11:00:00Z",
+                }
+            ]
+        }
+        unfiltered = {
+            "results": [
+                {
+                    "id": 124499,
+                    "tier": "s",
+                    "start_date": "2026-07-23T09:00:00Z",
+                },
+                {
+                    "id": 124500,
+                    "tier": "s",
+                    "start_date": "2026-07-23T11:00:00Z",
+                },
+            ]
+        }
+        with mock.patch(
+            "predict_next_day._fetch_schedule_payload",
+            side_effect=[filtered, unfiltered],
+        ):
+            result = fetch_schedule("2026-07-23")
+        self.assertEqual(
+            [item["id"] for item in result.matches], [124499, 124500]
+        )
+        self.assertEqual(result.filtered_match_ids, [124500])
+        self.assertEqual(
+            result.client_filtered_match_ids, [124499, 124500]
+        )
 
     def test_review_defaults_to_previous_report_date(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -138,6 +286,132 @@ class LolAutomationTests(unittest.TestCase):
             path.write_text(json.dumps(record) + "\n", encoding="utf-8")
             with self.assertRaises(JobError):
                 validate_forecasts(path)
+
+    def test_schedule_verification_requires_two_source_roles_and_exact_diff(self) -> None:
+        precheck = {
+            "window_start": "2026-07-23T10:00:00+08:00",
+            "window_end": "2026-07-24T10:00:00+08:00",
+            "matches": [{"match_id": 124500}],
+        }
+        verification = {
+            "verified_at": "2026-07-23T11:30:00+08:00",
+            "timezone": "Asia/Taipei",
+            "window_start": precheck["window_start"],
+            "window_end": precheck["window_end"],
+            "complete": True,
+            "no_matches": False,
+            "candidate_match_ids": [124500],
+            "added_match_ids": [124499],
+            "removed_match_ids": [],
+            "conflicts": [],
+            "sources": [
+                {
+                    "role": "official",
+                    "url": "https://lolesports.com/en-US/leagues/lpl",
+                    "checked_at": "2026-07-23T11:25:00+08:00",
+                },
+                {
+                    "role": "independent",
+                    "url": "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    "checked_at": "2026-07-23T11:26:00+08:00",
+                },
+            ],
+            "matches": [
+                {
+                    "match_id": 124499,
+                    "start_time": "2026-07-23T17:00:00+08:00",
+                    "tier": "s",
+                    "bo_type": 3,
+                    "team1": "JD Gaming",
+                    "team2": "Anyone's Legend",
+                    "tournament": "LPL 2026 Split 3",
+                    "source_urls": [
+                        "https://lolesports.com/en-US/leagues/lpl",
+                        "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    ],
+                },
+                {
+                    "match_id": 124500,
+                    "start_time": "2026-07-23T19:00:00+08:00",
+                    "tier": "s",
+                    "bo_type": 3,
+                    "team1": "Bilibili Gaming",
+                    "team2": "ThunderTalk Gaming",
+                    "tournament": "LPL 2026 Split 3",
+                    "source_urls": [
+                        "https://lolesports.com/en-US/leagues/lpl",
+                        "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    ],
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            precheck_path = root / "schedule-precheck.json"
+            verification_path = root / "schedule-verification.json"
+            precheck_path.write_text(json.dumps(precheck), encoding="utf-8")
+            verification_path.write_text(json.dumps(verification), encoding="utf-8")
+            result = validate_schedule_verification(
+                verification_path, precheck_path
+            )
+            self.assertEqual(
+                [item["match_id"] for item in result["matches"]],
+                [124499, 124500],
+            )
+
+            verification["added_match_ids"] = []
+            verification_path.write_text(json.dumps(verification), encoding="utf-8")
+            with self.assertRaises(JobError):
+                validate_schedule_verification(verification_path, precheck_path)
+
+    def test_incomplete_schedule_verification_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            precheck_path = root / "schedule-precheck.json"
+            verification_path = root / "schedule-verification.json"
+            precheck_path.write_text(
+                json.dumps(
+                    {
+                        "window_start": "2026-07-23T10:00:00+08:00",
+                        "window_end": "2026-07-24T10:00:00+08:00",
+                        "matches": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            verification_path.write_text(
+                json.dumps(
+                    {
+                        "verified_at": "2026-07-23T11:30:00+08:00",
+                        "timezone": "Asia/Taipei",
+                        "window_start": "2026-07-23T10:00:00+08:00",
+                        "window_end": "2026-07-24T10:00:00+08:00",
+                        "complete": False,
+                        "no_matches": True,
+                        "candidate_match_ids": [],
+                        "added_match_ids": [],
+                        "removed_match_ids": [],
+                        "conflicts": ["official source lists one unresolved match"],
+                        "sources": [],
+                        "matches": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(JobError, "incomplete"):
+                validate_schedule_verification(verification_path, precheck_path)
+
+    def test_forecasts_must_equal_verified_schedule(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            forecasts_path = Path(directory) / "forecasts.jsonl"
+            forecasts_path.write_text(
+                json.dumps({"match_id": 124500}) + "\n", encoding="utf-8"
+            )
+            verification = {
+                "matches": [{"match_id": 124499}, {"match_id": 124500}]
+            }
+            with self.assertRaisesRegex(JobError, "exactly equal"):
+                validate_forecast_schedule(forecasts_path, verification)
 
     def test_settled_match_filter(self) -> None:
         matches = [
