@@ -1,0 +1,70 @@
+{
+  "matches": [
+    {
+      "id": "GE-FS",
+      "score_distribution": {
+        "a_2_0": 22,
+        "a_2_1": 31,
+        "b_2_1": 27,
+        "b_2_0": 20
+      },
+      "actual_score": "a_2_0",
+      "scenario_covered": false
+    },
+    {
+      "id": "TYL-NOVA",
+      "score_distribution": {
+        "a_2_0": 15,
+        "a_2_1": 31,
+        "b_2_1": 38,
+        "b_2_0": 16
+      },
+      "actual_score": "b_2_0",
+      "scenario_covered": false
+    },
+    {
+      "id": "T1-VARREL",
+      "score_distribution": {
+        "a_2_0": 29,
+        "a_2_1": 33,
+        "b_2_1": 24,
+        "b_2_0": 14
+      },
+      "actual_score": "b_2_0",
+      "scenario_covered": false
+    },
+    {
+      "id": "FPX-EDG",
+      "score_distribution": {
+        "a_2_0": 19,
+        "a_2_1": 35,
+        "b_2_1": 29,
+        "b_2_0": 17
+      },
+      "actual_score": "b_2_1",
+      "scenario_covered": false
+    },
+    {
+      "id": "EF-TH",
+      "score_distribution": {
+        "a_2_0": 16,
+        "a_2_1": 27,
+        "b_2_1": 33,
+        "b_2_0": 24
+      },
+      "actual_score": "b_2_0",
+      "scenario_covered": false
+    },
+    {
+      "id": "M8-NAVI",
+      "score_distribution": {
+        "a_2_0": 16,
+        "a_2_1": 29,
+        "b_2_1": 34,
+        "b_2_0": 21
+      },
+      "actual_score": "a_2_0",
+      "scenario_covered": false
+    }
+  ]
+}

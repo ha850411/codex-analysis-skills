@@ -1,0 +1,76 @@
+{
+  "matches": [
+    {
+      "id": "GE-FS",
+      "side_a_win_probability": 53,
+      "actual_score": "a_2_0",
+      "predicted_mode": "a_2_1",
+      "actual_score_probability": 22,
+      "sweep_probability": 42,
+      "scenario_covered": false
+    },
+    {
+      "id": "TYL-NOVA",
+      "side_a_win_probability": 46,
+      "actual_score": "b_2_0",
+      "predicted_mode": "b_2_1",
+      "actual_score_probability": 16,
+      "sweep_probability": 31,
+      "scenario_covered": false
+    },
+    {
+      "id": "T1-VARREL",
+      "side_a_win_probability": 62,
+      "actual_score": "b_2_0",
+      "predicted_mode": "a_2_1",
+      "actual_score_probability": 14,
+      "sweep_probability": 43,
+      "scenario_covered": false
+    },
+    {
+      "id": "FPX-EDG",
+      "side_a_win_probability": 54,
+      "actual_score": "b_2_1",
+      "predicted_mode": "a_2_1",
+      "actual_score_probability": 29,
+      "sweep_probability": 36,
+      "scenario_covered": false
+    },
+    {
+      "id": "EF-TH",
+      "side_a_win_probability": 43,
+      "actual_score": "b_2_0",
+      "predicted_mode": "b_2_1",
+      "actual_score_probability": 24,
+      "sweep_probability": 40,
+      "scenario_covered": false
+    },
+    {
+      "id": "M8-NAVI",
+      "side_a_win_probability": 45,
+      "actual_score": "a_2_0",
+      "predicted_mode": "b_2_1",
+      "actual_score_probability": 16,
+      "sweep_probability": 37,
+      "scenario_covered": false
+    }
+  ],
+  "summary": {
+    "match_count": 6,
+    "winner_correct": 3,
+    "exact_score_correct": 0,
+    "winner_brier": 0.266,
+    "winner_log_loss": 0.726,
+    "exact_score_log_loss": 1.6351,
+    "expected_sweeps": 2.29,
+    "actual_sweeps": 5,
+    "probability_at_least_actual_sweeps": 0.03255,
+    "two_one_mode_rate": 1,
+    "scenario_coverage_misses": 6
+  },
+  "warnings": [
+    "SCORE_MODE_CONCENTRATION: at least 80% of BO3 modes are 2-1; audit shared series-state and veto-scenario mixing.",
+    "SCENARIO_COVERAGE_MISS: at least one realized lineup/veto path was absent from the pre-match scenario mixture.",
+    "SMALL_SAMPLE: diagnostic batch only; do not claim long-run calibration from this cohort."
+  ]
+}
