@@ -107,9 +107,9 @@ agy 每次 stdout 都保存為 `red-team-attempt-<n>-raw.txt`；stderr 非空時
 - `medium`：可能影響解讀的重要限制。
 - `low`：措辭、追溯性或輕微精度問題。
 
-最終結果必須列出接受與否決的 finding ID。每個 finding 不分嚴重度都必須且只能出現在其中一邊，並在 `finding_adjudications` 逐項保存裁決、理由與最終處置。接受 finding 並修改數字時，還要在 `changes` 記錄修改前後值與理由。agy 的每個 `unresolved_questions` 都必須依原順序出現在 `question_resolutions`；可標示仍未解，但必須說明缺少的證據與對預測的影響。
+最終結果必須列出接受與否決的 finding ID。每個 finding 不分嚴重度都必須且只能出現在其中一邊，並在 `finding_adjudications` 逐項保存裁決、理由與最終處置。任何實際套用到最終輸出的修訂都必須在 `changes` 記錄，包括數字、thesis、正文補充或文字修正；文字類修訂的 `before`、`after` 使用簡短描述，不複製整段正文。agy 的每個 `unresolved_questions` 都必須依原順序出現在 `question_resolutions`；可標示仍未解，但必須說明缺少的證據與對預測的影響，並把會影響讀者決策的內容反映在最終正文的主要風險或尚缺資料。
 
-`prediction.md` 只渲染紅隊 verdict／summary、接受與否決數量、九項一致性稽核、問題回覆及實際修改紀錄；不得展開 `Findings 與逐條裁決`。`prediction.json.red_team` 與 `prediction.json.adjudication` 必須保存完整 review、逐條裁決、理由與處置，不得只保留 verdict／summary。
+`prediction.md` 的紅隊段落只以短列點簡述 `changes` 的修改欄位及修改前後；沒有修改時只寫「未修改；保留原預測。」不得渲染模型名稱、verdict／summary、接受與否決數量、九項一致性稽核、問題回覆、finding ID、理由長文或逐條裁決。`prediction.json.red_team` 與 `prediction.json.adjudication` 必須保存完整 review、逐條裁決、理由與處置，不得因對外報告精簡而刪減。
 
 ## 退出碼與修復方式
 

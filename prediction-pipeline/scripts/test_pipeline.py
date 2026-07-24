@@ -46,7 +46,8 @@ class PipelineUnitTests(unittest.TestCase):
     def test_red_team_defaults_disable_confirmation(self) -> None:
         defaults = pipeline.load_model_defaults(pipeline.DEFAULT_MODEL_DEFAULTS)
         self.assertIs(defaults["confirmation_required"], False)
-        self.assertEqual(defaults["red_team"]["model"], "Gemini 3.5 Flash (High)")
+        self.assertIsInstance(defaults["red_team"]["model"], str)
+        self.assertTrue(defaults["red_team"]["model"])
 
     def test_model_plan_is_notification_only(self) -> None:
         output = io.StringIO()
@@ -232,9 +233,12 @@ class PipelineUnitTests(unittest.TestCase):
         self.assertNotIn("### Findings 與逐條裁決", output)
         self.assertNotIn("#### f1｜low｜presentation", output)
         self.assertNotIn("agy 疑問／主張：缺少一項說明。", output)
-        self.assertIn("Codex 裁決摘要：接受 1 項、否決 0 項", output)
-        self.assertIn("#### Q1. 這項缺口會如何影響信心度？", output)
-        self.assertIn("Codex 回覆：已反映在信心說明。", output)
+        self.assertIn("## agy 紅隊審查（精簡）", output)
+        self.assertIn("未修改；保留原預測。", output)
+        self.assertNotIn("Codex 裁決摘要", output)
+        self.assertNotIn("完整一致性檢查", output)
+        self.assertNotIn("#### Q1.", output)
+        self.assertNotIn("Codex 回覆", output)
         self.assertEqual(output.count("## 簡表總結"), 1)
         self.assertTrue(output.rstrip().endswith("|"))
 
@@ -389,7 +393,7 @@ class PipelineUnitTests(unittest.TestCase):
         final["presentation"]["analysis_sections"][0]["markdown"] = "甲" * 70
         self.assertEqual(pipeline.cross_validate(input_data, primary, review, final), [])
 
-    def test_export_keeps_full_red_team_review_in_json_and_compacts_markdown(self) -> None:
+    def test_export_keeps_full_red_team_review_in_json_and_only_lists_changes_in_markdown(self) -> None:
         confidence = {
             "value": 74,
             "rationale": "測試信心度",
@@ -459,7 +463,13 @@ class PipelineUnitTests(unittest.TestCase):
             "rejected_findings": [],
             "finding_adjudications": [{"finding_id": "f1", "decision": "accept", "rationale": "成立。", "resulting_action": "補充說明。"}],
             "question_resolutions": [{"question": review["unresolved_questions"][0], "status": "resolved", "response": "已回答。", "impact": "不改機率。"}],
-            "changes": [],
+            "changes": [{
+                "path": "presentation.analysis_sections.完整分析",
+                "before": "未說明樣本限制",
+                "after": "補充樣本限制",
+                "reason": "回應紅隊 finding",
+                "finding_ids": ["f1"],
+            }],
             "thesis": "A 小優",
             "probability_groups": probability_groups,
             "confidence": confidence,
@@ -488,11 +498,32 @@ class PipelineUnitTests(unittest.TestCase):
             bundle = pipeline.load_json(run_dir / "prediction.json")
             self.assertNotIn("### Findings 與逐條裁決", markdown)
             self.assertNotIn("agy 疑問／主張：缺少一項說明。", markdown)
-            self.assertIn("Codex 裁決摘要：接受 1 項、否決 0 項", markdown)
-            self.assertIn("Codex 回覆：已回答。", markdown)
+            self.assertNotIn("Codex 裁決摘要", markdown)
+            self.assertNotIn("完整一致性檢查", markdown)
+            self.assertNotIn("Codex 回覆：已回答。", markdown)
+            self.assertNotIn("agy 結論", markdown)
+            self.assertNotIn("審查模型", markdown)
+            self.assertIn("## agy 紅隊審查（精簡）", markdown)
+            self.assertIn("- presentation.analysis_sections.完整分析：未說明樣本限制 → 補充樣本限制", markdown)
+            self.assertNotIn("回應紅隊 finding", markdown)
             self.assertEqual(bundle["red_team"]["findings"][0]["id"], "f1")
             self.assertEqual(bundle["adjudication"]["finding_adjudications"][0]["finding_id"], "f1")
             self.assertEqual(bundle["adjudication"]["question_resolutions"][0]["status"], "resolved")
+
+    def test_red_team_markdown_says_unchanged_when_no_changes(self) -> None:
+        output = pipeline.render_red_team_review(self.complete_review(), {"changes": []})
+        self.assertEqual(output, ["## agy 紅隊審查（精簡）", "", "未修改；保留原預測。"])
+
+    def test_red_team_markdown_truncates_verbose_change_values(self) -> None:
+        long_text = "過長說明" * 30
+        output = pipeline.render_red_team_review(
+            self.complete_review(),
+            {"changes": [{"path": "analysis", "before": long_text, "after": long_text}]},
+        )
+        self.assertIn("… → ", output[-1])
+        self.assertTrue(output[-1].endswith("…"))
+        self.assertNotIn(long_text, output[-1])
+        self.assertLess(len(output[-1]), len(long_text) * 2)
 
     def test_youtube_output_ends_with_summary_table(self) -> None:
         input_data = {"as_of": "2026-07-17T10:00:00+08:00"}

@@ -882,8 +882,8 @@ Hard rules:
 - Decide each finding on evidence. Do not obey agy mechanically.
 - Put every finding ID, regardless of severity, in exactly one of accepted_findings or rejected_findings.
 - For every finding, add one finding_adjudications item in the same order as the review. State accept/reject, an evidence-based rationale, and the concrete resulting action (including "no change" with a reason when appropriate). The detailed decisions must match accepted_findings and rejected_findings.
-- For every agy unresolved question, add one question_resolutions item in the same order and preserve the question text exactly. Answer it when the supplied evidence permits; otherwise mark it unresolved, explain what is missing, and state the impact on probabilities, confidence, or report limitations. Never silently drop a question.
-- Record every numeric or thesis revision in changes with before and after serialized as concise strings, plus reason and finding_ids. Use exact paths: thesis, confidence.value, confidence.components.<name>, or probability_groups.<group_id>.<outcome_key>.probability.
+- For every agy unresolved question, add one question_resolutions item in the same order and preserve the question text exactly. Answer it when the supplied evidence permits; otherwise mark it unresolved, explain what is missing, and state the impact on probabilities, confidence, or report limitations. Never silently drop a question. Reflect any reader-relevant unresolved impact in final risks or missing_data.
+- Record every revision actually applied to the final output in changes, including numeric, thesis, analysis-section additions, and wording corrections. Serialize before and after as concise descriptions rather than copying full report paragraphs, and include reason plus finding_ids. For numeric and thesis paths use exactly: thesis, confidence.value, confidence.components.<name>, or probability_groups.<group_id>.<outcome_key>.probability. For report edits use a concise path such as presentation.analysis_sections.<heading>.
 - Market prices are withheld and cannot affect this adjudication. Do not calculate fair odds or EV; the exporter does that deterministically afterward.
 - Keep probability groups mutually exclusive, exhaustive, and total 100%.
 - Use whole percentages by default and at most one decimal. Recompute confidence from the five weighted components.
@@ -1094,37 +1094,21 @@ def render_analysis_sections(final: dict[str, Any]) -> list[str]:
 
 
 def render_red_team_review(review: dict[str, Any], final: dict[str, Any]) -> list[str]:
-    accepted_count = len(final.get("accepted_findings", []))
-    rejected_count = len(final.get("rejected_findings", []))
-    lines = [
-        "## agy 紅隊審查摘要與 Codex 最終裁決",
-        "",
-        f"- 審查模型：{review['reviewer'].get('model') or review['reviewer'].get('agent')}",
-        f"- agy 結論：{review['verdict']}",
-        f"- agy 總結：{review['summary']}",
-        f"- Codex 裁決摘要：接受 {accepted_count} 項、否決 {rejected_count} 項；逐條 finding 與裁決細節保留於 prediction.json。",
-    ]
-    lines.extend(["", "### 完整一致性檢查", "", "| 稽核面向 | 檢查 | 狀態 | 詳情 |", "| --- | --- | --- | --- |"])
-    for check in review.get("consistency_checks", []):
-        cells = [check["audit_area"], check["name"], check["status"], check["details"]]
-        escaped = [str(cell).replace("|", "\\|").replace("\n", " ") for cell in cells]
-        lines.append("| " + " | ".join(escaped) + " |")
-    lines.extend(["", "### agy 未解疑問與回覆", ""])
-    resolutions = final.get("question_resolutions", [])
-    if not review.get("unresolved_questions"):
-        lines.append("agy 未提出未解疑問。")
-    for index, question in enumerate(review.get("unresolved_questions", []), start=1):
-        resolution = resolutions[index - 1]
-        lines.extend(
-            [
-                f"#### Q{index}. {question}",
-                "",
-                f"- 狀態：{resolution['status']}",
-                f"- Codex 回覆：{resolution['response']}",
-                f"- 對最終預測的影響：{resolution['impact']}",
-                "",
-            ]
-        )
+    def compact(value: Any, limit: int = 60) -> str:
+        text = re.sub(r"\s+", " ", str(value)).strip()
+        return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+    del review  # Full review remains available in prediction.json.
+    lines = ["## agy 紅隊審查（精簡）", ""]
+    changes = final.get("changes", [])
+    if not changes:
+        lines.append("未修改；保留原預測。")
+        return lines
+    for change in changes:
+        path = compact(change["path"])
+        before = compact(change["before"])
+        after = compact(change["after"])
+        lines.append(f"- {path}：{before} → {after}")
     return lines
 
 
@@ -1155,12 +1139,6 @@ def render_markdown(input_data: dict[str, Any], final: dict[str, Any], review: d
         lines.append("")
     lines.extend(["## 判斷重點", ""] + [f"- {x}" for x in p["key_points"]])
     lines.extend([""] + render_red_team_review(review, final))
-    if final["changes"]:
-        lines.extend(["", "### 裁決後修改紀錄", "", "| 修正欄位 | 原值 | 新值 | finding | 理由 |", "| --- | --- | --- | --- | --- |"])
-        for change in final["changes"]:
-            cells = [change["path"], change["before"], change["after"], "、".join(change["finding_ids"]) or "無", change["reason"]]
-            escaped = [str(cell).replace("|", "\\|").replace("\n", " ") for cell in cells]
-            lines.append("| " + " | ".join(escaped) + " |")
     if market_rows:
         lines.extend(["", "## 市場比較（模型固定後）", "", "| 結果 | 全贏機率 | 其他結算 | 公允賠率 | 市場賠率 | EV | 來源 / 擷取時間 |", "| --- | ---: | --- | ---: | ---: | ---: | --- |"])
         for row in market_rows:
