@@ -611,7 +611,7 @@ def main() -> int:
             print(f"Prediction complete: {prediction}")
             print(f"Notion: {notion_url}")
             return 0
-    except (ConfigError, JobError, OSError) as exc:
+    except Exception as exc:
         return fail(output_dir, "prediction", exc)
 
 

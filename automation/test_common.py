@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -148,6 +149,52 @@ class NotifyReviewByEmailTests(unittest.TestCase):
                 send_mock2.assert_not_called()
 
 
+class NotifyFailureByEmailTests(unittest.TestCase):
+    def test_notify_failure_by_email_creates_receipt_and_sends_email(self) -> None:
+        from unittest import mock
+        from automation.common import fail, notify_failure_by_email
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir) / "2026-07-22"
+            job_dir.mkdir()
+            exc = JobError("Schedule verification incomplete: missing source")
+
+            with mock.patch("automation.common.send_email", return_value=["user@example.com"]) as send_mock:
+                notify_failure_by_email(job_dir, "prediction", exc, module="lol")
+                send_mock.assert_called_once()
+                subject, body = send_mock.call_args[0]
+                self.assertIn("LOL 自動排程預測遇到問題｜2026-07-22", subject)
+                self.assertIn("Schedule verification incomplete: missing source", body)
+
+                receipt = job_dir / "email-failure-notification.json"
+                self.assertTrue(receipt.is_file())
+
+            # Second call with same error should skip sending email
+            with mock.patch("automation.common.send_email") as send_mock2:
+                notify_failure_by_email(job_dir, "prediction", exc, module="lol")
+                send_mock2.assert_not_called()
+
+    def test_fail_function_triggers_failure_notification(self) -> None:
+        from unittest import mock
+        from automation.common import fail
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir) / "2026-07-22"
+            job_dir.mkdir()
+            exc = RuntimeError("Unexpected engine crash")
+
+            with mock.patch("automation.common.send_email", return_value=["user@example.com"]) as send_mock:
+                code = fail(job_dir, "prediction", exc)
+                self.assertEqual(code, 1)
+                send_mock.assert_called_once()
+                subject, body = send_mock.call_args[0]
+                self.assertIn("自動排程預測遇到問題", subject)
+                self.assertIn("Unexpected engine crash", body)
+
+                status_json = json.loads((job_dir / "status.json").read_text(encoding="utf-8"))
+                self.assertEqual(status_json["status"], "failed")
+                self.assertIn("Unexpected engine crash", status_json["error"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

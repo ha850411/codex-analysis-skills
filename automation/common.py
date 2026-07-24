@@ -456,7 +456,69 @@ def load_jsonl(path: Path) -> list[dict[str, object]]:
     return records
 
 
+def notify_failure_by_email(
+    job_dir: Path,
+    job: str,
+    exc: BaseException,
+    module: str | None = None,
+) -> None:
+    """發送排程執行失敗／遇到問題之 Email 通知。"""
+    receipt = job_dir / "email-failure-notification.json"
+    if receipt.is_file():
+        try:
+            saved = json.loads(receipt.read_text(encoding="utf-8"))
+            if (
+                isinstance(saved, dict)
+                and saved.get("sent") is True
+                and saved.get("error") == str(exc)
+            ):
+                return
+        except json.JSONDecodeError:
+            pass
+
+    mod = (module or MODULE).strip().upper()
+    job_label = "預測" if job == "prediction" else ("復盤" if job == "review" else job)
+    target = (
+        job_dir.name
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", job_dir.name)
+        else target_date()
+    )
+
+    subject = f"{mod} 自動排程{job_label}遇到問題｜{target}"
+
+    body_lines = [
+        f"{target}（台灣時間）的 {mod} 自動排程{job_label}執行遇到問題，未完成分析報告。",
+        "",
+        "【錯誤訊息】",
+        f"{type(exc).__name__}: {exc}",
+        "",
+        f"輸出目錄：{job_dir}",
+        "",
+        f"此信由 {mod} 自動排程錯誤通知寄出。",
+    ]
+    body = "\n".join(body_lines)
+
+    try:
+        recipients = send_email(subject, body)
+        atomic_json(
+            receipt,
+            {
+                "sent": True,
+                "sent_at": datetime.now(TAIPEI).isoformat(),
+                "recipients": recipients,
+                "error": str(exc),
+            },
+        )
+    except Exception as email_exc:
+        print(
+            f"Failed to send failure notification email: {email_exc}",
+            file=sys.stderr,
+        )
+
+
 def fail(job_dir: Path, job: str, exc: BaseException) -> int:
     write_status(job_dir, job, "failed", error=str(exc))
     print(f"{job}: {exc}", file=sys.stderr)
+    notify_failure_by_email(job_dir, job, exc)
     return 1
+

@@ -251,7 +251,7 @@ def main() -> int:
             write_status(review_dir, "review", "complete", target_date=date, pr_created=True, pr_url=pr_url, email_notified=True)
             print(f"Review complete; PR created: {pr_url}")
             return 0
-    except (JobError, OSError) as exc:
+    except Exception as exc:
         return fail(review_dir, "review", exc)
 
 
