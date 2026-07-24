@@ -178,7 +178,7 @@ def main() -> int:
                 return 0
             records = load_jsonl(forecasts_file)
             forecast_ids = {value for record in records if isinstance((value := record.get("match_id")), int)}
-            settled = settled_match_ids(fetch_schedule(target), forecast_ids)
+            settled = settled_match_ids(fetch_schedule(target).matches, forecast_ids)
             if not settled:
                 write_status(review_dir, "review", "skipped", target_date=target, reason="no forecast matches have settled")
                 print(f"Review skipped; no forecast LoL S Tier matches have settled: {target}")

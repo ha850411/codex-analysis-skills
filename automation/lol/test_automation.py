@@ -420,6 +420,14 @@ class LolAutomationTests(unittest.TestCase):
             {"id": 3, "status": "finished", "winner_team_id": 30},
         ]
         self.assertEqual(settled_match_ids(matches, {1, 2}), {1})
+        schedule = ScheduleFetch(
+            matches=matches,
+            filtered_payload={},
+            unfiltered_payload={},
+            filtered_match_ids=[1],
+            client_filtered_match_ids=[1],
+        )
+        self.assertEqual(settled_match_ids(schedule.matches, {1, 2}), {1})
 
     def test_report_must_be_recent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
