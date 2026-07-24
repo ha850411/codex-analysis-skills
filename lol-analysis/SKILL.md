@@ -12,7 +12,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 ## 不可妥協的資料來源規則
 
-1. **賽程主要來源：** 優先採官方賽事頁、賽區公告或 Riot 賽事文章；再以 Leaguepedia（`lol.fandom.com`）與 Liquipedia 交叉查核賽程、階段與格式。bo3.gg、OP.GG Esports 與其他聚合站只能作為候選清單或補充來源，不得單獨決定整日賽程。
+1. **賽程主要來源：** 以 bo3.gg 與 Leaguepedia（`lol.fandom.com`）作為主要賽程來源與交叉驗證；再以 Liquipedia、官方賽事頁或 OP.GG Esports 補足與核對賽程、階段與格式。
 2. **名單主要來源：** 當場官方名單、賽區／隊伍公告優先；Leaguepedia 與 Liquipedia 用於交叉查核。來源衝突時採時間較新且更接近當場的官方資訊，不把任何社群 wiki 視為永遠優先。
 3. **版本主要來源：** 優先查賽事規章、官方公告或賽事頁；Leaguepedia／Liquipedia 補足比賽日版本與 Fearless Draft 規則。分析版本如何改變 BP 優先級、線路對位、物件節奏、英雄池與選邊價值。
 4. **數據與歷史對戰：** 可參考 `esports.op.gg/schedules`、近期比賽頁、局內數據與其他可信數據來源，但不可盲從。只看比分不足以支撐分析。
@@ -29,7 +29,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 「今天／明天／指定日期全部比賽」、`daily-summary` 或自動日報先讀 `references/source-priority.md`，再套用本閘門：
 
 1. 明確寫出台灣日曆日或自動化起訖時間；不得把滾動 24 小時默認成「今天」。
-2. 把外層預查與聚合站清單視為候選；用一個官方來源與一個不同營運方的獨立來源核對完整集合，補入漏場並移除誤列。
+2. 以 bo3.gg 與 Leaguepedia（`lol.fandom.com`）為主核對完整集合；可由 bo3.gg 作為主要來源，Leaguepedia / Liquipedia 作為獨立驗證來源，補入漏場並移除誤列。
 3. 逐場核對日期、隊伍、賽事與 BO；時間一律轉 UTC+8。無賽事也須雙來源支持。
 4. 來源集合或必要 match ID 有未解衝突時，停止預測、Notion 發布與寄信；降低信心度不能取代賽程完整性。
 5. 自動化保存原始候選回應、驗證時間、來源、候選／新增／移除 IDs 與衝突，供後續稽核。

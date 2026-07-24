@@ -2,15 +2,15 @@
 
 ## 優先順序
 
-1. 官方賽事與隊伍來源
+1. 賽程主要來源（bo3.gg 與 Leaguepedia / lol.fandom.com）
+   - bo3.gg 提供主要賽程、Match ID 與比賽頁對照。
+   - Leaguepedia（`lol.fandom.com`）與 Liquipedia 用於賽程、階段、版本、名單、Fearless Draft 與歷史資料交叉查核。
+   - 官方賽事與隊伍公告（LoL Esports / Riot 公告）作為補充核對來源。
+
+2. 官方賽事與隊伍來源
    - Riot／賽區官方賽程、賽制、版本與公告。
    - 當場名單、隊伍公告、替補與臨時異動。
    - 官方資訊對改期、賽制、版本與當場 roster 優先。
-   - 整日賽程盤點至少需要一個本層來源；聚合站不得取代官方賽程。
-
-2. Leaguepedia 與 Liquipedia
-   - Leaguepedia（`lol.fandom.com`）與 Liquipedia League of Legends 用於賽程、階段、版本、名單、Fearless Draft 與歷史資料交叉查核。
-   - 兩者衝突時，不預設任一社群 wiki 永遠正確；比較更新時間並回到官方來源。
 
 3. 官方賽區頻道與比賽 VOD
    - LCK: https://www.youtube.com/@LCKglobal
@@ -24,7 +24,6 @@
    - 可取得時使用官方 LoL Esports 比賽頁
    - 有幫助時使用 Oracle's Elixir、Games of Legends、Leaguepedia 衍生數據與其他可信數據網站
    - 季後賽預測時，優先查看最近兩個系列賽、同版本或相近版本的 pick/ban、每局勝方、選邊、時長、前期經濟與物件紀錄。
-   - bo3.gg 可提供候選賽程、match ID 與比賽頁，但屬聚合站；不得單獨證明指定日期的場次集合完整。
 
 5. 賽後檢討資料
    - 優先使用 LoL Fandom/Leaguepedia 的結果、版本、每局勝方、選邊與 VOD 連結。
