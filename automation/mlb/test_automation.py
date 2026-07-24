@@ -37,7 +37,13 @@ from predict_next_day import (
     validate_against_public_baseline,
     validate_notion_summary,
 )
-from review_today import is_recent_report, main as review_main, safe_date, validate_skill_frontmatter
+from review_today import (
+    is_recent_report,
+    main as review_main,
+    prompt_for,
+    safe_date,
+    validate_skill_frontmatter,
+)
 
 
 class AutomationTests(unittest.TestCase):
@@ -464,6 +470,20 @@ class AutomationTests(unittest.TestCase):
                 self.assertEqual(review_main(), 0)
             target_mock.assert_called_once_with(-1)
             self.assertTrue((state_root / "reviews/2026-07-21").is_dir())
+
+    def test_review_prompt_requires_accuracy_improvement_evidence(self) -> None:
+        prompt = prompt_for(
+            "2026-07-21",
+            Path("/prediction"),
+            Path("/review"),
+            Path("/worktree"),
+        )
+        self.assertIn("improvement-plan.json", prompt)
+        self.assertIn("baseline/challenger paired walk-forward", prompt)
+        self.assertIn("跨日 evaluated history", prompt)
+        self.assertIn("不可只看單日", prompt)
+        self.assertIn("不得作為 skill 修正或 PR 的唯一內容", prompt)
+        self.assertNotIn("保持最小差異", prompt)
 
     def test_report_must_be_within_24_hours(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

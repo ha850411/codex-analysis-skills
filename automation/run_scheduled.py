@@ -43,10 +43,10 @@ def main() -> int:
     args = parse_args()
     if args.phase == "prediction":
         is_dry_run = "--dry-run" in args.extra
-        cleaned = cleanup_old_reports(days=3, dry_run=is_dry_run)
+        cleaned = cleanup_old_reports(days=30, dry_run=is_dry_run)
         if cleaned:
             status = "Would clean" if is_dry_run else "Cleaned"
-            print(f"[cleanup] {status} {len(cleaned)} report item(s) older than 3 days.", flush=True)
+            print(f"[cleanup] {status} {len(cleaned)} report item(s) older than 30 days.", flush=True)
 
     try:
         modules = load_config()

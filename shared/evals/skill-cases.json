@@ -8,7 +8,9 @@
     "相依市場由同一主分布推導而不是分別手填",
     "模型信心度依五項組成加權且不含市場價格",
     "巢狀近期時間窗不重複計權，小樣本使用收縮",
-    "賽後使用 Brier 或 log loss，不因單場結果機械改權重"
+    "賽後使用 Brier 或 log loss，不因單場結果機械改權重",
+    "賽後檢討以基準版／挑戰版同批驗證提升精準度，降信心或注碼不算模型修正",
+    "evaluated forecasts 跨日保存並依版本與 snapshot 累積 cohort，不只評單日"
   ],
   "cases": [
     {
@@ -49,7 +51,7 @@
       "prompt": "檢討昨天 Dota 2 預測為什麼失準，重新看 draft 和分路。",
       "shouldTrigger": true,
       "mode": "postmortem",
-      "invariants": ["重建賽前資訊集", "區分模型錯誤與合理變異"]
+      "invariants": ["重建賽前資訊集", "區分模型錯誤與合理變異", "提出可否證修正並比較基準版與挑戰版", "不以降低信心或注碼代替模型改善"]
     },
     {
       "id": "dota-boundary",
@@ -145,7 +147,7 @@
       "prompt": "檢討上一場世界盃淘汰賽預測，區分 90 分鐘方向與晉級方向。",
       "shouldTrigger": true,
       "mode": "postmortem",
-      "invariants": ["分開 90 分鐘與晉級結算", "重建賽前資訊集"]
+      "invariants": ["分開 90 分鐘與晉級結算", "重建賽前資訊集", "不因單場結果機械加寬比分分布", "回報基準版／挑戰版驗證"]
     },
     {
       "id": "world-cup-boundary",
@@ -185,7 +187,7 @@
       "prompt": "檢討昨天 CS2 預測，重建 veto 並評估原本 2-0 機率。",
       "shouldTrigger": true,
       "mode": "postmortem",
-      "invariants": ["保留原預測快照", "獨贏與精確比分分開計分", "不以單場命中率硬設新上限"]
+      "invariants": ["保留原預測快照", "獨贏與精確比分分開計分", "不以單場命中率硬設新上限", "只採用通過同快照回測的候選修正"]
     },
     {
       "id": "nba-postmortem",
@@ -193,7 +195,7 @@
       "prompt": "檢討上一場 NBA 讓分與大小分失準，考慮 late scratch。",
       "shouldTrigger": true,
       "mode": "postmortem",
-      "invariants": ["重建 Injury Report 版本", "保留 push 結算", "區分三分變異與流程錯誤"]
+      "invariants": ["重建 Injury Report 版本", "保留 push 結算", "區分三分變異與流程錯誤", "提出賽前可觸發的 challenger 並驗證"]
     },
     {
       "id": "mlb-postmortem",
@@ -201,7 +203,7 @@
       "prompt": "檢討昨天 MLB 前五局看對但全場看錯的原因。",
       "shouldTrigger": true,
       "mode": "postmortem",
-      "invariants": ["分開前五局與全場分布", "檢查牛棚情境", "不推翻正確的先發投手模型"]
+      "invariants": ["分開前五局與全場分布", "檢查牛棚情境", "不推翻正確的先發投手模型", "confidence-only 變更不得視為精準度改善"]
     },
     {
       "id": "pipeline-push-ev",

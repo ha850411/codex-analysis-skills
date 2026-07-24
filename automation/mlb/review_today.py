@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -25,12 +26,15 @@ from common import (
     github_env,
     github_git_env,
     job_lock,
+    load_improvement_plan,
     load_jsonl,
     load_pr_summary,
+    merge_pull_request,
     notify_review_by_email,
     require_executable,
     review_branch,
     run,
+    sync_evaluated_history,
     target_date,
     write_status,
 )
@@ -49,12 +53,20 @@ def is_recent_report(path: Path, max_age_hours: float = 24.0) -> bool:
     return -300 <= age_seconds <= max_age_hours * 3600
 
 
-def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path) -> str:
+def prompt_for(
+    date: str,
+    prediction_dir: Path,
+    review_dir: Path,
+    worktree: Path,
+    history_file: Path | None = None,
+) -> str:
+    history_file = history_file or STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
     return f"""使用 `$mlb-analysis` 對 {date}（台灣時間 UTC+8）的排程預測做正式 postmortem，必要時修正 skill。
 
 原始不可覆寫資料：
 - 預測報告：{prediction_dir / 'prediction.md'}
 - 預測 JSONL：{prediction_dir / 'forecasts.jsonl'}
+- 跨日 evaluated history：{history_file}（若存在必須完整使用；外層會在本次完成後合併新紀錄，且不受 30 天原始報告清理影響）
 
 必須完整讀取 {worktree / 'mlb-analysis/SKILL.md'}、shared 契約、
 `mlb-analysis/references/postmortem-calibration.md` 與 `$skill-creator` 的更新原則。
@@ -62,12 +74,15 @@ def prompt_for(date: str, prediction_dir: Path, review_dir: Path, worktree: Path
 要求：
 1. 使用 MLB 官方 box score／Gameday 等即時來源查核每場最終結果與實際事件；保留當時可知資訊和賽後資訊的時間邊界。
 2. 將含 actual_away_runs、actual_home_runs 的完整紀錄寫到 {review_dir / 'evaluated-forecasts.jsonl'}，保留原預測欄位，不覆寫原檔。
-3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。若原紀錄未建模，保留原 N/A，不得賽後補造機率；改做 modeled coverage、status 與 missing_data 頻率稽核。
-4. 單場冷門、BABIP、單次全壘打等合理變異不得觸發 skill 修改。只有確認可重複的流程錯誤，或批次 paired walk-forward 證據通過升版門檻時，才可修改 {worktree / 'mlb-analysis'}。
-5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測。不得自行 commit、push 或建立 PR；外層程式會處理。
-6. 若修改 skill，鐵則是去蕪存菁：只保留能改善分析的指令，刪除或合併無效、重複、已被取代的規則，不得以賽後案例為由無限追加特例。新增規則時應同步取代舊規則，並保持最小差異、實際驗證所有受影響腳本。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `mlb-analysis/references/output-template.md`。在 postmortem.md 記錄證據、修改、測試、回退方式與仍未解問題。
-7. 若證據不足，明確寫「不修改 skill／不建立 PR」以及需要累積的 cohort，不為了產生 PR 而修改。
-8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
+3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。若歷史檔存在，再對歷史 + 本批依 status + model_version + snapshot 分 cohort 評估，另列跨日累積樣本與指標；不可只看單日。若原紀錄未建模，保留原 N/A，不得賽後補造機率；改做 modeled coverage、status 與 missing_data 頻率稽核。
+4. 檢討的首要目標是改善未來樣本的 Brier、log loss、得分誤差、bias 與 interval coverage，不是降低信心度、注碼、推薦資格或語氣。後四者可以是附帶風控，但不得作為 skill 修正或 PR 的唯一內容。
+5. 每個錯誤建立「賽前可觀察觸發條件 → 錯誤機制 → 候選修正 → 預期改善指標 → 可能退步 → 否決條件」。單場冷門、BABIP、單次全壘打等合理變異不得直接改生產權重；證據不足時建立 experiment-only 假設與待累積 cohort。
+6. 若修改特徵、權重、先驗或得分分布，必須用相同 game IDs、snapshot 與賽前資料做 baseline/challenger paired walk-forward；若修資料、結算或實作 bug，加入舊版失敗、新版通過的回歸測試。沒有通過驗證就不得修改 {worktree / 'mlb-analysis'}。
+7. 將改善裁決寫到 {review_dir / 'improvement-plan.json'}，格式與門檻依 `shared/postmortem-improvement.md`。不論是否修改 skill 都必須產生；confidence_or_stake_only 必須是 false。
+8. 不得修改 shared、其他 skill、automation、Git 設定或原始預測。不得自行 commit、push 或建立 PR；外層程式會處理。
+9. 若修改 skill，採「最小充分修改」：修正應完整涵蓋已證實的錯誤機制，不以行數小為目標，也不無限追加賽後特例。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `mlb-analysis/references/output-template.md`。在 postmortem.md 記錄 baseline/challenger、測試、回退方式與仍未解問題。
+10. 若證據不足，明確寫「不修改 skill／不建立 PR」、experiment-only 假設以及需要累積的 cohort，不建立只改 confidence、stake 或措辭的裝飾性 PR。
+11. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述錯誤機制、實際模型／流程修正與 baseline/challenger 驗證，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
 
 
@@ -196,14 +211,37 @@ def main() -> int:
     prediction_dir = STATE_ROOT / "predictions" / date
     review_dir = STATE_ROOT / "reviews" / date
     report = review_dir / "postmortem.md"
+    history_file = STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
+    history_snapshot = review_dir / "evaluated-history-snapshot.jsonl"
     worktree: Path | None = None
 
     try:
         with job_lock("review"):
             review_dir.mkdir(parents=True, exist_ok=True)
             if args.dry_run:
-                print(prompt_for(date, prediction_dir, review_dir, Path("<isolated-worktree>")))
+                print(
+                    prompt_for(
+                        date,
+                        prediction_dir,
+                        review_dir,
+                        Path("<isolated-worktree>"),
+                        history_file,
+                    )
+                )
                 return 0
+            history_file.parent.mkdir(parents=True, exist_ok=True)
+            prior_evaluated = sorted(
+                (STATE_ROOT / "reviews").glob("*/evaluated-forecasts.jsonl")
+            )
+            sync_evaluated_history(
+                history_file,
+                prior_evaluated,
+                key_fields=("game_id", "predicted_at", "snapshot", "model_version"),
+            )
+            history_snapshot_bytes: bytes | None = None
+            if history_file.is_file():
+                shutil.copyfile(history_file, history_snapshot)
+                history_snapshot_bytes = history_snapshot.read_bytes()
             prediction_report = prediction_dir / "prediction.md"
             forecasts_file = prediction_dir / "forecasts.jsonl"
             if not is_recent_report(prediction_report) or not is_recent_report(forecasts_file):
@@ -224,7 +262,13 @@ def main() -> int:
             write_status(review_dir, "review", "running", target_date=date)
             ensure_github_ready(base)
             worktree, branch = prepare_worktree(date, base)
-            prompt = prompt_for(date, prediction_dir, review_dir, worktree)
+            prompt = prompt_for(
+                date,
+                prediction_dir,
+                review_dir,
+                worktree,
+                history_snapshot,
+            )
             run(
                 codex_command(
                     worktree,
@@ -235,11 +279,28 @@ def main() -> int:
             )
             assert_nonempty(report)
             assert_nonempty(review_dir / "evaluated-forecasts.jsonl")
+            if (
+                history_snapshot_bytes is not None
+                and (
+                    not history_snapshot.is_file()
+                    or history_snapshot.read_bytes() != history_snapshot_bytes
+                )
+            ):
+                raise JobError("Postmortem modified the immutable evaluated history snapshot")
+            sync_evaluated_history(
+                history_file,
+                (review_dir / "evaluated-forecasts.jsonl",),
+                key_fields=("game_id", "predicted_at", "snapshot", "model_version"),
+            )
             run(
                 ["python3", "mlb-analysis/scripts/evaluate_forecasts.py", str(review_dir / "evaluated-forecasts.jsonl")],
                 cwd=worktree,
             )
             paths = changed_paths(worktree)
+            load_improvement_plan(
+                review_dir / "improvement-plan.json",
+                has_changes=bool(paths),
+            )
             if not paths:
                 notify_review_by_email("mlb", review_dir, date, pr_created=False)
                 write_status(review_dir, "review", "complete", target_date=date, pr_created=False, email_notified=True)
@@ -247,9 +308,32 @@ def main() -> int:
                 return 0
             validate_changes(worktree)
             pr_url = create_pr(worktree, branch, base, date, report, review_dir / "pr-summary.md")
-            notify_review_by_email("mlb", review_dir, date, pr_created=True, pr_url=pr_url)
-            write_status(review_dir, "review", "complete", target_date=date, pr_created=True, pr_url=pr_url, email_notified=True)
-            print(f"Review complete; PR created: {pr_url}")
+            merged = merge_pull_request(pr_url, worktree)
+            notify_review_by_email(
+                "mlb",
+                review_dir,
+                date,
+                pr_created=True,
+                pr_url=merged["pr_url"],
+                pr_merged=True,
+                merge_commit=merged["merge_commit"],
+            )
+            write_status(
+                review_dir,
+                "review",
+                "complete",
+                target_date=date,
+                pr_created=True,
+                pr_url=merged["pr_url"],
+                pr_merged=True,
+                merged_at=merged["merged_at"],
+                merge_commit=merged["merge_commit"],
+                email_notified=True,
+            )
+            print(
+                "Review complete; PR created and merged: "
+                f"{merged['pr_url']} ({merged['merge_commit']})"
+            )
             return 0
     except Exception as exc:
         return fail(review_dir, "review", exc)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -17,8 +18,9 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, codex_command, fail,
-    github_env, github_git_env, job_lock, load_jsonl, load_pr_summary, notify_review_by_email, require_executable, review_branch, run,
-    target_date, write_status,
+    github_env, github_git_env, job_lock, load_improvement_plan, load_jsonl,
+    load_pr_summary, notify_review_by_email, require_executable, review_branch, run,
+    merge_pull_request, sync_evaluated_history, target_date, write_status,
 )
 from predict_next_day import fetch_schedule
 
@@ -49,13 +51,22 @@ def settled_match_ids(matches: list[dict[str, object]], forecast_ids: set[int]) 
     return settled
 
 
-def prompt_for(target: str, prediction_dir: Path, review_dir: Path, worktree: Path, settled: set[int]) -> str:
+def prompt_for(
+    target: str,
+    prediction_dir: Path,
+    review_dir: Path,
+    worktree: Path,
+    settled: set[int],
+    history_file: Path | None = None,
+) -> str:
+    history_file = history_file or STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
     return f"""使用 `$lol-analysis` 對 {target}（台灣時間 UTC+8）的 LoL S Tier 預測做正式 postmortem，必要時修正 skill。
 
 原始不可覆寫資料：
 - 預測報告：{prediction_dir / 'prediction.md'}
 - 預測 JSONL：{prediction_dir / 'forecasts.jsonl'}
 - 本次已完賽 match IDs：{sorted(settled)}
+- 跨日 evaluated history：{history_file}（若存在必須完整使用；外層會在本次完成後合併新紀錄，且不受 30 天原始報告清理影響）
 
 必須完整讀取 {worktree / 'lol-analysis/SKILL.md'}、shared 契約、
 `lol-analysis/references/postmortem-calibration.md` 與 `$skill-creator` 更新原則。
@@ -63,12 +74,15 @@ def prompt_for(target: str, prediction_dir: Path, review_dir: Path, worktree: Pa
 要求：
 1. 只評估上述已完賽 match IDs。用 bo3.gg、官方聯賽來源、可信 box score/VOD 查核版本、名單、逐局勝方、選邊與 BP；保持預測時點和賽後資訊邊界。
 2. 將每場完整原預測欄位加上 actual_score、actual_winner、game_winners、result_sources，寫到 {review_dir / 'evaluated-forecasts.jsonl'}；不得覆寫原檔。
-3. 將逐場命中、Brier score、log loss、信心校準、BP/版本/名單歸因與 cohort 限制寫入 {review_dir / 'postmortem.md'}。
-4. 單場爆冷、單次 BP 或小樣本不得觸發 skill 修改。只有可重複的流程錯誤或足夠批次證據才可修改 {worktree / 'lol-analysis'}。
-5. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
-6. 若修改 skill，鐵則是去蕪存菁：只保留能改善分析的指令，刪除或合併無效、重複、已被取代的規則，不得以賽後案例為由無限追加特例。新增規則時應同步取代舊規則，並保持最小差異、驗證受影響內容。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `lol-analysis/references/output-template.md`。在 postmortem 記錄證據、修改、測試、回退方式與未解問題。
-7. 若證據不足，明確寫「不修改 skill／不建立 PR」與需要累積的 cohort，不為產生 PR 而修改。
-8. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述實際 skill 調整及促成調整的可重複流程問題，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
+3. 將逐場命中、Brier score、log loss、信心校準、BP/版本/名單歸因與 cohort 限制寫入 {review_dir / 'postmortem.md'}。若歷史檔存在，必須把歷史與本批依 model_version + snapshot + 賽制／版本分 cohort，另列跨日累積樣本與指標；不可只看單日。
+4. 檢討的首要目標是改善未來樣本的 Brier、log loss、精確比分分布與方向命中，不是降低信心度、注碼、推薦等級或語氣。後四者可以是附帶風控，但不得作為 skill 修正或 PR 的唯一內容。
+5. 每個錯誤建立「賽前可觀察觸發條件 → 錯誤機制 → 候選修正 → 預期改善指標 → 可能退步 → 否決條件」。單場爆冷、單次 BP 或小樣本不得直接改生產權重；證據不足時建立 experiment-only 假設與待累積 cohort。
+6. 若修改特徵、權重、情境或比分分布，必須用相同 match IDs、相同預測時點與相同資料做 baseline/challenger paired walk-forward；若修資料、結算或實作 bug，加入舊版失敗、新版通過的回歸測試。沒有通過驗證就不得修改 {worktree / 'lol-analysis'}。
+7. 將改善裁決寫到 {review_dir / 'improvement-plan.json'}，格式與門檻依 `shared/postmortem-improvement.md`。不論是否修改 skill 都必須產生；confidence_or_stake_only 必須是 false。
+8. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
+9. 若修改 skill，採「最小充分修改」：修正應完整涵蓋已證實的錯誤機制，不以行數小為目標，也不無限追加賽後特例。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `lol-analysis/references/output-template.md`。在 postmortem 記錄 baseline/challenger、測試、回退方式與未解問題。
+10. 若證據不足，明確寫「不修改 skill／不建立 PR」、experiment-only 假設以及需要累積的 cohort，不建立只改 confidence、stake 或措辭的裝飾性 PR。
+11. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述錯誤機制、實際模型／流程修正與 baseline/challenger 驗證，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
 
 
@@ -164,12 +178,36 @@ def main() -> int:
     prediction_dir = STATE_ROOT / "predictions" / target
     review_dir = STATE_ROOT / "reviews" / target
     report = review_dir / "postmortem.md"
+    history_file = STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
+    history_snapshot = review_dir / "evaluated-history-snapshot.jsonl"
     try:
         with job_lock("review"):
             review_dir.mkdir(parents=True, exist_ok=True)
             if args.dry_run:
-                print(prompt_for(target, prediction_dir, review_dir, Path("<isolated-worktree>"), set()))
+                print(
+                    prompt_for(
+                        target,
+                        prediction_dir,
+                        review_dir,
+                        Path("<isolated-worktree>"),
+                        set(),
+                        history_file,
+                    )
+                )
                 return 0
+            history_file.parent.mkdir(parents=True, exist_ok=True)
+            prior_evaluated = sorted(
+                (STATE_ROOT / "reviews").glob("*/evaluated-forecasts.jsonl")
+            )
+            sync_evaluated_history(
+                history_file,
+                prior_evaluated,
+                key_fields=("match_id", "predicted_at", "snapshot", "model_version"),
+            )
+            history_snapshot_bytes: bytes | None = None
+            if history_file.is_file():
+                shutil.copyfile(history_file, history_snapshot)
+                history_snapshot_bytes = history_snapshot.read_bytes()
             prediction_report = prediction_dir / "prediction.md"
             forecasts_file = prediction_dir / "forecasts.jsonl"
             if not is_recent_report(prediction_report) or not is_recent_report(forecasts_file):
@@ -186,13 +224,44 @@ def main() -> int:
             write_status(review_dir, "review", "running", target_date=target, settled_match_ids=sorted(settled))
             ensure_github_ready(base)
             worktree, branch = prepare_worktree(target, base)
-            run(codex_command(worktree, review_dir / "agent-last-message.md", prompt_for(target, prediction_dir, review_dir, worktree, settled), add_dirs=(review_dir,)))
+            run(
+                codex_command(
+                    worktree,
+                    review_dir / "agent-last-message.md",
+                    prompt_for(
+                        target,
+                        prediction_dir,
+                        review_dir,
+                        worktree,
+                        settled,
+                        history_snapshot,
+                    ),
+                    add_dirs=(review_dir,),
+                )
+            )
             assert_nonempty(report)
+            if (
+                history_snapshot_bytes is not None
+                and (
+                    not history_snapshot.is_file()
+                    or history_snapshot.read_bytes() != history_snapshot_bytes
+                )
+            ):
+                raise JobError("Postmortem modified the immutable evaluated history snapshot")
             evaluated = load_jsonl(review_dir / "evaluated-forecasts.jsonl")
             evaluated_ids = {value for record in evaluated if isinstance((value := record.get("match_id")), int)}
             if evaluated_ids != settled:
                 raise JobError(f"Evaluated match IDs {sorted(evaluated_ids)} do not match settled IDs {sorted(settled)}")
+            sync_evaluated_history(
+                history_file,
+                (review_dir / "evaluated-forecasts.jsonl",),
+                key_fields=("match_id", "predicted_at", "snapshot", "model_version"),
+            )
             paths = changed_paths(worktree)
+            load_improvement_plan(
+                review_dir / "improvement-plan.json",
+                has_changes=bool(paths),
+            )
             if not paths:
                 notify_review_by_email("lol", review_dir, target, pr_created=False)
                 write_status(review_dir, "review", "complete", target_date=target, pr_created=False, email_notified=True)
@@ -200,9 +269,32 @@ def main() -> int:
                 return 0
             validate_changes(worktree)
             pr_url = create_pr(worktree, branch, base, target, report, review_dir / "pr-summary.md")
-            notify_review_by_email("lol", review_dir, target, pr_created=True, pr_url=pr_url)
-            write_status(review_dir, "review", "complete", target_date=target, pr_created=True, pr_url=pr_url, email_notified=True)
-            print(f"Review complete; PR created: {pr_url}")
+            merged = merge_pull_request(pr_url, worktree)
+            notify_review_by_email(
+                "lol",
+                review_dir,
+                target,
+                pr_created=True,
+                pr_url=merged["pr_url"],
+                pr_merged=True,
+                merge_commit=merged["merge_commit"],
+            )
+            write_status(
+                review_dir,
+                "review",
+                "complete",
+                target_date=target,
+                pr_created=True,
+                pr_url=merged["pr_url"],
+                pr_merged=True,
+                merged_at=merged["merged_at"],
+                merge_commit=merged["merge_commit"],
+                email_notified=True,
+            )
+            print(
+                "Review complete; PR created and merged: "
+                f"{merged['pr_url']} ({merged['merge_commit']})"
+            )
             return 0
     except Exception as exc:
         return fail(review_dir, "review", exc)

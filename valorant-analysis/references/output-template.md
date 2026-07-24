@@ -119,4 +119,4 @@
 5. **被推翻的賽前假設：** Patch、同賽事樣本、H2H、post-veto 訊號、特務陣容、手槍/經濟、教練修正。
 6. **地圖逐張復盤：** pick owner、選邊、關鍵回合、原本誤判點。
 7. **錯誤歸因：** 依 `references/postmortem-calibration.md` 分類。
-8. **模型修正清單：** 下次同隊伍 / 同 Patch / 同類 BO5 / 已公布 veto 場景的機率與信心度上限。
+8. **可否證修正與驗證：** 賽前觸發條件、baseline/challenger、paired walk-forward 或回歸測試、主要指標差值、裁決與回退條件；附帶信心／注碼調整不得冒充精準度改善。

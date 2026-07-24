@@ -73,7 +73,7 @@ EV = 市場十進位賠率 * (模型機率百分比 / 100) - 1
 - `quick`：單一問題或使用者要求簡版。直接回答結論、核心證據、主要風險與資料狀態。
 - `full`：單場完整賽前分析。讀該 skill 的 `references/output-template.md`，保留所有必要機率與風險欄位。
 - `daily-summary`：先盤點指定台灣日期的全部目標賽事，再用精簡表格比較；只對入選場次展開分析。
-- `postmortem`：讀該 skill 的賽後校準 reference；重建賽前資訊集與實際事件，不用結果倒推當時必然可知。
+- `postmortem`：先讀 `postmortem-improvement.md`，再讀該 skill 的賽後校準 reference；重建賽前資訊集與實際事件，完成基準版／挑戰版／驗證／裁決閉環，不用結果倒推當時必然可知。
 
 使用者未指定時，單場分析預設 `full`，單一追問預設 `quick`，整日賽程預設 `daily-summary`。使用者明確要求的長度與欄位優先。
 

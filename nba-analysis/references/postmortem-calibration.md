@@ -1,5 +1,7 @@
 # NBA 賽後檢討與模型校準
 
+先套用 `../../shared/postmortem-improvement.md`。本文件補充 NBA 的快照、比賽內容與領域歸因；降信心或注碼不算精準度修正。
+
 ## 1. 重建賽前快照
 
 - 核對資料截止時間、官方 Injury Report 版本、Questionable／GTD、正式先發、minutes restriction 與 late scratch。
@@ -31,6 +33,5 @@
 
 - 流程錯誤立即修正；單場賽果不硬設下一場勝率或信心上限。
 - 若正式先發改變主分布，建立 post-lineup 新快照，保留 pre-lineup 版本供檢討。
-- 推薦失準時先降一級注碼；模型信心度仍依五項組成重算。
-- 輸出依序列出：賽果與來源、原預測 vs 實際、情境命中、機率評分、錯誤歸因、模型修正。
-
+- 對 pace、輪替分鐘、shot profile、傷兵情境或分差 × 總分分布提出 challenger，使用相同 Injury Report 版本與賽前快照做 paired walk-forward。
+- 輸出依序列出：賽果與來源、原預測 vs 實際、情境命中、機率評分、錯誤歸因、可否證假設、基準版／挑戰版、驗證與裁決。

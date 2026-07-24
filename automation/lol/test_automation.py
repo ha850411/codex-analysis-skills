@@ -28,7 +28,7 @@ from predict_next_day import (
     validate_forecasts,
     validate_schedule_verification,
 )
-from review_today import is_recent_report, main as review_main, settled_match_ids
+from review_today import is_recent_report, main as review_main, prompt_for, settled_match_ids
 
 
 class LolAutomationTests(unittest.TestCase):
@@ -267,6 +267,21 @@ class LolAutomationTests(unittest.TestCase):
                 self.assertEqual(review_main(), 0)
             target_mock.assert_called_once_with(-1)
             self.assertTrue((state_root / "reviews/2026-07-21").is_dir())
+
+    def test_review_prompt_requires_accuracy_improvement_evidence(self) -> None:
+        prompt = prompt_for(
+            "2026-07-21",
+            Path("/prediction"),
+            Path("/review"),
+            Path("/worktree"),
+            {1},
+        )
+        self.assertIn("improvement-plan.json", prompt)
+        self.assertIn("baseline/challenger paired walk-forward", prompt)
+        self.assertIn("跨日 evaluated history", prompt)
+        self.assertIn("不可只看單日", prompt)
+        self.assertIn("不得作為 skill 修正或 PR 的唯一內容", prompt)
+        self.assertNotIn("保持最小差異", prompt)
 
     def test_exact_score_contract(self) -> None:
         record = {

@@ -3,7 +3,9 @@
 本目錄包含兩個供 macOS `crontab` 使用、以台灣時區解讀的工作：
 
 - `predict_next_day.py`：在 `automation/modules.json` 的 `mlb.schedule.prediction` 時間，先查詢 MLB 賽程並確定性建立 `mlb-public-baseline-v1.1.0`，再啟動 Codex 整理全部賽事。沒有已驗證生產模型時仍交付方向性得分分布、勝率與逐場五項加權信心度，但清楚標示 `uncalibrated`、禁止下注且固定 0u；若 baseline 也失敗，流程拒絕發布全 N/A 報告。
-- `review_today.py`：在 `mlb.schedule.review` 時間檢查前一日報告產物是否在 24 小時內；評分不可覆寫的原始預測，只套用有證據支持的 `mlb-analysis` 修正，並在合理時建立 GitHub PR。
+- `review_today.py`：在 `mlb.schedule.review` 時間檢查前一日報告產物是否在 24 小時內；評分不可覆寫的原始預測，只套用通過驗證且有證據支持的 `mlb-analysis` 修正，建立並自動合併 GitHub PR。完成信件會附上 PR 網址與 merge commit。
+
+原始報告保留 30 天。已評分預測會依不可變預測鍵去重保存到 `.automation-state/mlb/history/evaluated-forecasts.jsonl` 並永久保留。此跨日 cohort 不受原始報告清理影響；每日檢討必須同時評估歷史與本批，不得只用單日結果修改模型。
 
 執行報告與 Log 位於 `.automation-state/mlb/`，且已由 Git 忽略。賽後檢討在隔離的 worktree 中修改，因此不會碰觸使用者目前分支或尚未提交的變更。
 

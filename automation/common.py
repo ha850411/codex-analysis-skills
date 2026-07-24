@@ -79,11 +79,11 @@ def target_date(offset_days: int = 0) -> str:
 
 
 def cleanup_old_reports(
-    days: int = 3,
+    days: int = 30,
     state_dir: Path | None = None,
     dry_run: bool = False,
 ) -> list[Path]:
-    """刪除指定天數（預設 3 天）以前的自動化報告與產物。"""
+    """刪除指定天數（預設 30 天）以前的自動化報告與產物。"""
     if state_dir is None:
         state_dir = REPO_ROOT / ".automation-state"
     state_dir = state_dir.expanduser().resolve()
@@ -296,6 +296,68 @@ def github_git_env() -> dict[str, str]:
     }
 
 
+def merge_pull_request(pr_url: str, worktree: Path) -> dict[str, str]:
+    """合併剛驗證並推送的 PR，且確認 GitHub 回報的最終狀態為 MERGED。"""
+    if not pr_url.strip():
+        raise JobError("Cannot merge a PR without its URL")
+    gh = require_executable("gh", "GH_BIN")
+    head = run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=worktree,
+        capture=True,
+    ).stdout
+    head_sha = (head or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        raise JobError(f"Cannot determine validated PR head commit: {head_sha!r}")
+
+    run(
+        [
+            gh,
+            "pr",
+            "merge",
+            pr_url,
+            "--merge",
+            "--match-head-commit",
+            head_sha,
+        ],
+        cwd=worktree,
+        capture=True,
+        env=github_env(),
+    )
+    result = run(
+        [
+            gh,
+            "pr",
+            "view",
+            pr_url,
+            "--json",
+            "state,mergedAt,mergeCommit,url",
+        ],
+        cwd=worktree,
+        capture=True,
+        env=github_env(),
+    )
+    try:
+        payload = json.loads(result.stdout or "")
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Cannot parse merged PR status for {pr_url}") from exc
+    if not isinstance(payload, dict) or payload.get("state") != "MERGED":
+        state = payload.get("state") if isinstance(payload, dict) else None
+        raise JobError(f"PR merge was not confirmed for {pr_url}; state={state!r}")
+    merge_commit = payload.get("mergeCommit")
+    merge_sha = merge_commit.get("oid") if isinstance(merge_commit, dict) else None
+    merged_at = payload.get("mergedAt")
+    confirmed_url = payload.get("url")
+    if not all(isinstance(value, str) and value for value in (merge_sha, merged_at, confirmed_url)):
+        raise JobError(f"Merged PR status is incomplete for {pr_url}")
+    return {
+        "pr_url": confirmed_url,
+        "head_commit": head_sha,
+        "merge_commit": merge_sha,
+        "merged_at": merged_at,
+    }
+
+
 def send_email(subject: str, body: str) -> list[str]:
     """透過已設定的 SMTP 寄送 UTF-8 純文字通知。"""
     import smtplib
@@ -358,8 +420,12 @@ def notify_review_by_email(
     target: str,
     pr_created: bool,
     pr_url: str | None = None,
+    pr_merged: bool = False,
+    merge_commit: str | None = None,
 ) -> None:
     """發送復盤結果與 PR 狀態之 Email 通知。"""
+    if pr_merged and (not pr_created or not pr_url or not merge_commit):
+        raise JobError("Merged PR notification requires PR URL and merge commit")
     receipt = review_dir / "email-notification.json"
     if receipt.is_file():
         try:
@@ -369,6 +435,8 @@ def notify_review_by_email(
                 and saved.get("sent") is True
                 and saved.get("pr_created") == pr_created
                 and saved.get("pr_url") == pr_url
+                and saved.get("pr_merged") == pr_merged
+                and saved.get("merge_commit") == merge_commit
             ):
                 return
         except json.JSONDecodeError:
@@ -378,13 +446,22 @@ def notify_review_by_email(
     report_file = review_dir / "postmortem.md"
     summary_file = review_dir / "pr-summary.md"
 
-    pr_status_str = "已建立 PR" if pr_created else "未建立 PR"
+    pr_status_str = "已合併 PR" if pr_merged else ("已建立 PR" if pr_created else "未建立 PR")
     subject = f"{module_upper} 復盤報告已完成（{pr_status_str}）｜{target}"
 
     body_lines = [
         f"{target}（台灣時間）的 {module_upper} 預測復盤報告已完成。",
         "",
-        f"PR 狀態：{f'已建立 PR - {pr_url}' if pr_created and pr_url else '未調整 Skill / 未建立 PR'}",
+        (
+            f"PR 狀態：已合併 - {pr_url}"
+            if pr_merged
+            else (
+                f"PR 狀態：已建立 - {pr_url}"
+                if pr_created and pr_url
+                else "PR 狀態：未調整 Skill / 未建立 PR"
+            )
+        ),
+        *([f"Merge commit：{merge_commit}"] if pr_merged else []),
         f"本地報告：{report_file}",
         "",
     ]
@@ -408,6 +485,8 @@ def notify_review_by_email(
             "recipients": recipients,
             "pr_created": pr_created,
             "pr_url": pr_url,
+            "pr_merged": pr_merged,
+            "merge_commit": merge_commit,
         },
     )
 
@@ -439,6 +518,122 @@ def load_pr_summary(path: Path, max_chars: int = 4_000) -> str:
     return summary
 
 
+def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]:
+    """驗證賽後檢討是否形成可稽核的精準度改善閉環。"""
+    assert_nonempty(path)
+    try:
+        plan = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid improvement plan JSON: {path}: {exc}") from exc
+    if not isinstance(plan, dict):
+        raise JobError(f"Improvement plan must be a JSON object: {path}")
+
+    required = {
+        "objective",
+        "change_type",
+        "decision",
+        "production_change",
+        "confidence_or_stake_only",
+        "predictive_mechanism",
+        "baseline",
+        "challenger",
+        "validation",
+        "evidence",
+        "rollback",
+    }
+    missing = sorted(required.difference(plan))
+    if missing:
+        raise JobError(f"Improvement plan missing keys {missing}: {path}")
+
+    if plan["objective"] != "out_of_sample_predictive_accuracy":
+        raise JobError("Improvement plan objective must be out_of_sample_predictive_accuracy")
+    change_types = {
+        "data_pipeline",
+        "feature_model",
+        "distribution",
+        "calibration",
+        "evaluation_infra",
+        "none",
+    }
+    if plan["change_type"] not in change_types:
+        raise JobError(f"Invalid improvement plan change_type: {plan['change_type']!r}")
+    if plan["decision"] not in {"merge", "experiment-only", "no-change"}:
+        raise JobError(f"Invalid improvement plan decision: {plan['decision']!r}")
+    if not isinstance(plan["production_change"], bool):
+        raise JobError("Improvement plan production_change must be boolean")
+    if plan["confidence_or_stake_only"] is not False:
+        raise JobError(
+            "Confidence-, stake-, recommendation-, or wording-only changes do not qualify "
+            "as predictive-accuracy improvements"
+        )
+    for key in ("predictive_mechanism", "rollback"):
+        if not isinstance(plan[key], str) or not plan[key].strip():
+            raise JobError(f"Improvement plan {key} must be a non-empty string")
+
+    for label in ("baseline", "challenger"):
+        artifact = plan[label]
+        if not isinstance(artifact, dict):
+            raise JobError(f"Improvement plan {label} must be an object")
+        if set(("model_version", "sample_size", "metrics")).difference(artifact):
+            raise JobError(
+                f"Improvement plan {label} requires model_version, sample_size, and metrics"
+            )
+        if not isinstance(artifact["model_version"], str) or not artifact["model_version"].strip():
+            raise JobError(f"Improvement plan {label}.model_version must be non-empty")
+        if (
+            not isinstance(artifact["sample_size"], int)
+            or isinstance(artifact["sample_size"], bool)
+            or artifact["sample_size"] < 0
+        ):
+            raise JobError(f"Improvement plan {label}.sample_size must be a non-negative integer")
+        if not isinstance(artifact["metrics"], dict):
+            raise JobError(f"Improvement plan {label}.metrics must be an object")
+
+    validation = plan["validation"]
+    if not isinstance(validation, dict):
+        raise JobError("Improvement plan validation must be an object")
+    if set(("method", "passed")).difference(validation):
+        raise JobError("Improvement plan validation requires method and passed")
+    if validation["method"] not in {
+        "paired_walk_forward",
+        "regression_test",
+        "forward_test",
+        "none",
+    }:
+        raise JobError(f"Invalid improvement validation method: {validation['method']!r}")
+    if not isinstance(validation["passed"], bool):
+        raise JobError("Improvement plan validation.passed must be boolean")
+
+    evidence = plan["evidence"]
+    if (
+        not isinstance(evidence, list)
+        or not evidence
+        or any(not isinstance(item, str) or not item.strip() for item in evidence)
+    ):
+        raise JobError("Improvement plan evidence must be a non-empty array of strings")
+
+    if has_changes:
+        if plan["decision"] != "merge" or plan["change_type"] == "none":
+            raise JobError("A postmortem PR requires decision=merge and a non-none change_type")
+        if validation["method"] == "none" or validation["passed"] is not True:
+            raise JobError("A postmortem PR requires a passed, non-none validation method")
+        if plan["change_type"] in {"feature_model", "distribution", "calibration"}:
+            if validation["method"] != "paired_walk_forward":
+                raise JobError(
+                    "Feature, distribution, and calibration production changes require "
+                    "paired_walk_forward validation"
+                )
+            for label in ("baseline", "challenger"):
+                if plan[label]["sample_size"] <= 0 or not plan[label]["metrics"]:
+                    raise JobError(
+                        f"{label} requires a positive sample_size and metrics for model changes"
+                    )
+    elif plan["decision"] == "merge":
+        raise JobError("Improvement plan cannot use decision=merge when no skill files changed")
+
+    return plan
+
+
 def load_jsonl(path: Path) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -454,6 +649,69 @@ def load_jsonl(path: Path) -> list[dict[str, object]]:
     if not records:
         raise JobError(f"No records found in {path}")
     return records
+
+
+def sync_evaluated_history(
+    history_path: Path,
+    source_paths: Sequence[Path],
+    *,
+    key_fields: Sequence[str],
+) -> dict[str, int]:
+    """把每日 evaluated forecasts 依不可變預測鍵合併到持久化 JSONL。"""
+    if not key_fields:
+        raise JobError("Evaluated history requires at least one key field")
+
+    ordered: list[dict[str, object]] = []
+    positions: dict[tuple[object, ...], int] = {}
+
+    def record_key(record: dict[str, object], source: Path) -> tuple[object, ...]:
+        values: list[object] = []
+        for field in key_fields:
+            value = record.get(field)
+            if value is None or isinstance(value, (dict, list)):
+                raise JobError(
+                    f"Evaluated history record in {source} has invalid key field "
+                    f"{field}={value!r}"
+                )
+            values.append(value)
+        return tuple(values)
+
+    candidates: list[Path] = []
+    if history_path.is_file():
+        candidates.append(history_path)
+    candidates.extend(
+        path
+        for path in source_paths
+        if path.is_file() and path.resolve() != history_path.resolve()
+    )
+
+    source_records = 0
+    for source in candidates:
+        records = load_jsonl(source)
+        if source != history_path:
+            source_records += len(records)
+        for record in records:
+            key = record_key(record, source)
+            if key in positions:
+                ordered[positions[key]] = record
+            else:
+                positions[key] = len(ordered)
+                ordered.append(record)
+
+    if not ordered:
+        return {"records": 0, "source_records": source_records}
+
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = history_path.with_suffix(history_path.suffix + ".tmp")
+    temporary.write_text(
+        "".join(
+            json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            for record in ordered
+        ),
+        encoding="utf-8",
+    )
+    temporary.replace(history_path)
+    return {"records": len(ordered), "source_records": source_records}
 
 
 def notify_failure_by_email(
@@ -521,4 +779,3 @@ def fail(job_dir: Path, job: str, exc: BaseException) -> int:
     print(f"{job}: {exc}", file=sys.stderr)
     notify_failure_by_email(job_dir, job, exc)
     return 1
-

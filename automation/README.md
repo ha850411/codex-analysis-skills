@@ -7,7 +7,8 @@
 - LoL 09:00：預測當日 09:00（含）至隔日 09:00（不含）的全部 S Tier 賽事。
 - LoL 08:30：檢討前一日 09:00 產生的報告。
 
-每次預測排程也會自動清理三天以前的舊報告與產物。
+每次預測排程會自動清理 30 天以前的原始報告與產物。已結算預測另存於各模組的
+`history/evaluated-forecasts.jsonl`，不受原始報告清理影響，作為跨日模型校準樣本永久保留。
 
 在 `automation/modules.json` 啟用或停用模組，並管理模型與排程時間：
 
@@ -93,4 +94,7 @@ python3 automation/run_scheduled.py review --module lol --dry-run
 - LoL：`feature/LOL-MMDD`，例如 `feature/LOL-0721`
 - MLB：`feature/MLB-MMDD`，例如 `feature/MLB-0721`
 
-只有檢討找到足以修改 Skill 的可重複流程問題時，才會提交、推送分支並建立以 `master` 為 base 的 PR。
+只有檢討找到足以修改 Skill 的可重複流程問題，且改善方案通過規定的回歸測試或
+paired walk-forward 驗證時，才會提交、推送並建立以 `master` 為 base 的 PR。PR 建立後會鎖定
+已驗證的 head commit 自動合併；完成信件會附上 PR 網址與 merge commit。合併失敗時整個檢討工作
+會標記失敗並寄出錯誤通知，不會把尚未合併的修改誤報為完成。

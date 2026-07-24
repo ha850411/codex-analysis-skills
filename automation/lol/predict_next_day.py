@@ -543,7 +543,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    cleanup_old_reports(days=3, dry_run=args.dry_run)
+    cleanup_old_reports(days=30, dry_run=args.dry_run)
     target = safe_date(args.date or target_date())
     output_dir = STATE_ROOT / "predictions" / target
     try:
