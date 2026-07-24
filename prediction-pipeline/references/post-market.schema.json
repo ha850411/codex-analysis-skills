@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "鎖定機率後的市場決策",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "prediction_id",
+    "stage",
+    "generated_at",
+    "model",
+    "reasoning_effort",
+    "market_coverage",
+    "recommendation_summary",
+    "decisions",
+    "summary_table_updates",
+    "risks"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "prediction_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "const": "post_market"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "model": {"type": "string", "minLength": 1},
+    "reasoning_effort": {
+      "type": ["string", "null"],
+      "enum": [null, "minimal", "low", "medium", "high", "max"]
+    },
+    "market_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "books", "requested_market_types", "collected_market_types", "unavailable_market_types", "note"],
+      "properties": {
+        "status": {"enum": ["complete", "partial", "unavailable"]},
+        "books": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "requested_market_types": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "collected_market_types": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "unavailable_market_types": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "recommendation_summary": {"type": "string", "minLength": 1},
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bet_id", "recommendation", "stake_units", "rationale"],
+        "properties": {
+          "bet_id": {"type": "string", "minLength": 1},
+          "recommendation": {"enum": ["bet", "lean", "pass", "live_only"]},
+          "stake_units": {"type": "number", "minimum": 0, "maximum": 2},
+          "rationale": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "summary_table_updates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["row_index", "column", "advice"],
+        "properties": {
+          "row_index": {"type": "integer", "minimum": 0},
+          "column": {"type": "string", "minLength": 1},
+          "advice": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "risks": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

@@ -10,6 +10,8 @@
 | `primary_prediction.json` | 主預測 Codex | agy、最終 Codex | 尚未接觸市場資訊、含完整分析正文的初始預測 |
 | `red_team_review.json` | agy | 最終 Codex | 獨立審查意見，不是替代預測 |
 | `final_prediction.json` | 最終 Codex | 驗證器／匯出器 | 已逐項裁決的最終預測 |
+| `market_comparison.json` | 確定性管線 | post-market Codex | 機率鎖定後的市場價格、公允賠率與 EV 快照 |
+| `post_market_decision.json` | post-market Codex | 驗證器／匯出器 | 不改機率的逐盤決策、玩法覆蓋與簡表投注建議 |
 | `prediction.json` | 匯出器 | 下游程式 | 含確定性市場計算的驗證結果 |
 | `prediction.md` | 匯出器 | 讀者 | 人類可讀報告 |
 | `youtube-script.md` | 匯出器 | 主持人 | YouTube 口播腳本 |
@@ -93,6 +95,10 @@
 全贏總返還為十進位賠率、半贏為 `(賠率 + 1) / 2`、走盤為 `1`、半輸為 `0.5`、全輸為 `0`。不得讓模型覆寫這些計算結果。
 
 `confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
+
+`market_data` 非空時，匯出前必須先產生 `market_comparison.json` 與符合 `post-market.schema.json` 的 `post_market_decision.json`。後者不得包含機率欄位；每個市場 `bet_id` 必須且只能裁決一次，每一列簡表也必須且只能回填一次。市場已取得時，回填建議不得仍寫「待市場價格」或「待即時價格」。只取得部分玩法時，`market_coverage.status` 使用 `partial`，並列出尚未取得的玩法。
+
+`market_data=[]` 不屬驗證失敗。匯出器在沒有可追溯即時價格時跳過 post-market artifact，仍正常輸出模型機率、公允賠率、價格門檻與0u建議；不得因 Stake 無法存取、未開盤或查無價格而中斷整份分析。
 
 `primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。裁決後正文的非空白字元不得少於主報告的 70%，避免修訂階段把全文壓成簡報式摘要。
 

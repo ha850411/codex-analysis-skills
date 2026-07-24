@@ -1,0 +1,47 @@
+{
+  "tolerance": 0.2,
+  "checks": [
+    {"name": "AL-LGD 系列勝方互補", "type": "sum", "values": [77, 23]},
+    {"name": "AL-LGD 精確比分完備", "type": "sum", "values": [45, 32, 15, 8]},
+    {"name": "AL 系列勝率由比分導出", "type": "equal", "left": 77, "right": [45, 32]},
+    {"name": "LGD 系列勝率由比分導出", "type": "equal", "left": 23, "right": [15, 8]},
+    {"name": "AL 至少一局互補", "type": "complement", "values": [92, 8]},
+    {"name": "LGD 至少一局互補", "type": "complement", "values": [55, 45]},
+    {"name": "WE-JDG 系列勝方互補", "type": "sum", "values": [37, 63]},
+    {"name": "WE-JDG 精確比分完備", "type": "sum", "values": [14, 23, 29, 34]},
+    {"name": "WE 系列勝率由比分導出", "type": "equal", "left": 37, "right": [14, 23]},
+    {"name": "JDG 系列勝率由比分導出", "type": "equal", "left": 63, "right": [29, 34]},
+    {"name": "WE 至少一局互補", "type": "complement", "values": [66, 34]},
+    {"name": "JDG 至少一局互補", "type": "complement", "values": [86, 14]},
+    {"name": "EDG-BLG 系列勝方互補", "type": "sum", "values": [15, 85]},
+    {"name": "EDG-BLG 精確比分完備", "type": "sum", "values": [5, 10, 30, 55]},
+    {"name": "EDG 系列勝率由比分導出", "type": "equal", "left": 15, "right": [5, 10]},
+    {"name": "BLG 系列勝率由比分導出", "type": "equal", "left": 85, "right": [30, 55]},
+    {"name": "EDG 至少一局互補", "type": "complement", "values": [45, 55]},
+    {"name": "BLG 至少一局互補", "type": "complement", "values": [95, 5]},
+    {"name": "AL 公允賠率", "type": "fair_odds", "probability": 77, "fairOdds": 1.2987},
+    {"name": "LGD 公允賠率", "type": "fair_odds", "probability": 23, "fairOdds": 4.3478},
+    {"name": "WE 公允賠率", "type": "fair_odds", "probability": 37, "fairOdds": 2.7027},
+    {"name": "JDG 公允賠率", "type": "fair_odds", "probability": 63, "fairOdds": 1.5873},
+    {"name": "EDG 公允賠率", "type": "fair_odds", "probability": 15, "fairOdds": 6.6667},
+    {"name": "BLG 公允賠率", "type": "fair_odds", "probability": 85, "fairOdds": 1.1765},
+    {"name": "AL 市場 EV", "type": "ev", "probability": 77, "marketOdds": 1.13, "ev": -0.1299},
+    {"name": "LGD 市場 EV", "type": "ev", "probability": 23, "marketOdds": 6.00, "ev": 0.38},
+    {"name": "WE 市場 EV", "type": "ev", "probability": 37, "marketOdds": 3.10, "ev": 0.147},
+    {"name": "JDG 市場 EV", "type": "ev", "probability": 63, "marketOdds": 1.38, "ev": -0.1306},
+    {"name": "EDG 市場 EV", "type": "ev", "probability": 15, "marketOdds": 7.00, "ev": 0.05},
+    {"name": "BLG 市場 EV", "type": "ev", "probability": 85, "marketOdds": 1.10, "ev": -0.065},
+    {
+      "name": "頂層信心加權一致",
+      "type": "weighted_confidence",
+      "value": 58,
+      "components": {
+        "dataCompleteness": 58,
+        "freshness": 58,
+        "lineupCertainty": 58,
+        "regimeRelevance": 58,
+        "modelStability": 58
+      }
+    }
+  ]
+}

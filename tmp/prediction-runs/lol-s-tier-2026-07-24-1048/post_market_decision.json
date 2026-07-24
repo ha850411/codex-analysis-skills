@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "prediction_id": "lol-s-tier-2026-07-24-1048",
+  "stage": "post_market",
+  "generated_at": "2026-07-24T11:20:00+08:00",
+  "model": "current-session Codex (GPT-5)",
+  "reasoning_effort": null,
+  "market_coverage": {
+    "status": "partial",
+    "books": ["Stake"],
+    "requested_market_types": [
+      "系列賽獨贏",
+      "地圖讓分",
+      "總局數",
+      "精確比分",
+      "首局"
+    ],
+    "collected_market_types": ["系列賽獨贏"],
+    "unavailable_market_types": [
+      "地圖讓分",
+      "總局數",
+      "精確比分",
+      "首局"
+    ],
+    "note": "本次快照只取得 Stake 六個系列賽獨贏價格；其餘玩法沒有可追溯價格，因此不得視為完整盤口分析。"
+  },
+  "recommendation_summary": "三支模型熱門在 Stake 現價均為負 EV。LGD 與 WE 的弱方獨贏雖顯示正 EV，但模型與市場分歧超過 10 個百分點，且 G1 選邊、同版本樣本及紅隊弱方反模型仍不完整；三場目前全部 0u。",
+  "decisions": [
+    {
+      "bet_id": "stake-al-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "AL 1.13 對應模型 EV -12.99%，價格低於1.30公允賠率。"
+    },
+    {
+      "bet_id": "stake-lgd-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "LGD 6.00 的表面 EV +38.00%，但市場分歧過大、模型信心僅55%，且選邊與同版本樣本不足，未通過分歧閘門。"
+    },
+    {
+      "bet_id": "stake-we-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "WE 3.10 的表面 EV +14.70%，但近期系列波動與G1選邊未定使優勢不足以轉成注碼。"
+    },
+    {
+      "bet_id": "stake-jdg-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "JDG 1.38 對應模型 EV -13.06%，不追低賠熱門。"
+    },
+    {
+      "bet_id": "stake-edg-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "EDG 7.00 僅有 +5.00% 表面 EV，不足覆蓋新中輔磨合、先發與版本不確定性。"
+    },
+    {
+      "bet_id": "stake-blg-ml",
+      "recommendation": "pass",
+      "stake_units": 0,
+      "rationale": "BLG 1.10 對應模型 EV -6.50%，且上路先發仍未確認。"
+    }
+  ],
+  "summary_table_updates": [
+    {
+      "row_index": 0,
+      "column": "投注建議",
+      "advice": "AL 1.13 負EV；LGD 6.00雖有表面價值但分歧閘門未過，0u"
+    },
+    {
+      "row_index": 1,
+      "column": "投注建議",
+      "advice": "JDG 1.38 負EV；WE 3.10僅觀察，樣本與選邊不足，0u"
+    },
+    {
+      "row_index": 2,
+      "column": "投注建議",
+      "advice": "BLG 1.10負EV；EDG 7.00優勢不足覆蓋不確定性，0u"
+    }
+  ],
+  "risks": [
+    "Stake 快照只涵蓋系列賽獨贏，地圖讓分、總局數、精確比分與首局均未取得。",
+    "正式先發、G1選邊或比賽版本確認後，現有市場決策需重新建立快照。",
+    "市場價格會變動；本決策只適用於2026-07-24 10:48（UTC+8）的價格。"
+  ]
+}

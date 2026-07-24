@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "prediction_id": "lol-s-tier-2026-07-24-1048",
+  "stage": "red_team",
+  "generated_at": "2026-07-24T10:57:14+08:00",
+  "reviewer": {
+    "tool": "agy",
+    "model": "gemini-3.6-flash-high"
+  },
+  "verdict": "revise",
+  "summary": "紅隊審查完成。主模型在賽程完整性、資料新鮮度、來源可追溯性、機率一致性與非補償式信心度上限算術上均通過驗證，且嚴格隔離市場賠率。然而，主要分析段落（analysis_sections）遺漏了 lol-analysis 領域模板規定的第 9 節「簡表總結」，且 JSON 頂層 confidence.components 將五項子指標均簡化寫為 58，缺乏細項可追溯性。建議補齊簡表總結並修正頂層指標呈現後予以採行。",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "medium",
+      "category": "presentation",
+      "claim": "主要分析段落（analysis_sections）遺漏了 lol-analysis 領域模板 (output-template.md) 要求的第 9 節「簡表總結」表格。",
+      "evidence_ids": [
+        "sched_bo3",
+        "sched_lpl_lp"
+      ],
+      "recommended_action": "在 analysis_sections 中補上第 9 節「簡表總結」，包含比賽時間、對戰組合、先發、版本、推薦方向、最可能比分、雙方至少贏一局機率、模型信心度、投注建議與主要風險之單一整合表格。"
+    },
+    {
+      "id": "f2",
+      "severity": "low",
+      "category": "traceability",
+      "claim": "頂層 JSON 的 confidence.components 物件將五個子項目（data_completeness, freshness, lineup_certainty, regime_relevance, model_stability）皆填入最終上限分數 58，而未保留正文中評估的原始各項得分（如 freshness: 94, completeness: 82）。",
+      "evidence_ids": [
+        "sched_bo3",
+        "patch_official"
+      ],
+      "recommended_action": "在 confidence.components 中保留各子項目的原始評分（如 completeness: 82, freshness: 94），並於 value 中保留非補償式上限計算後的最終得分，以維持評分的細項可追溯性。"
+    },
+    {
+      "id": "f3",
+      "severity": "medium",
+      "category": "reasoning",
+      "claim": "BLG 上路先發（Wenbo 或 Bin）尚未由官方當場名單最終確認，且 EDG 新中輔組合在 16.14 版本的陣容磨合風險較高，比分分布未顯式進行上路人選分支模擬。",
+      "evidence_ids": [
+        "edg_recent",
+        "blg_recent"
+      ],
+      "recommended_action": "於 EDG-BLG 分析中明確說明若 Bin 先發登場時 BLG 2-0 的權重變化，並於臨場先發公布後及時更新先發快照。"
+    },
+    {
+      "id": "f4",
+      "severity": "low",
+      "category": "data",
+      "claim": "7/24 逐場比賽官方頁面尚未正式填入 game_version，雖然以 7/23 比賽採 Patch 16.14 推估合理，但仍存在官方賽事房臨時採用舊版本的潛在風險。",
+      "evidence_ids": [
+        "patch_official"
+      ],
+      "recommended_action": "持續監測賽事官方房間實際比賽版本，若確認為 16.13 或其他熱修補版本時應立即觸發版本重新快照。"
+    }
+  ],
+  "consistency_checks": [
+    {
+      "audit_area": "event_identity",
+      "name": "賽事範圍與賽程完整性驗證",
+      "status": "pass",
+      "details": "核對 bo3.gg (IDs: 124501, 124502, 124503) 與 Liquipedia 賽程，確認 2026-07-24 台灣時間包含 AL-LGD、WE-JDG、EDG-BLG 共 3 場 LPL BO3。同時確認 Riot 7/13 官方公告 LCP 於 7/25 開幕，正確排除 LCP 賽事，符合賽程完整性閘門。"
+    },
+    {
+      "audit_area": "temporal_freshness",
+      "name": "時間新鮮度與資料截止點檢查",
+      "status": "pass",
+      "details": "檢查資料截止點 as_of (2026-07-24T10:48:00+08:00) 與比賽時間 (15:00, 17:00, 19:00 UTC+8) 一致，引用之 7/22 與 7/23 近期賽事數據與名單均為最新狀態。"
+    },
+    {
+      "audit_area": "source_traceability",
+      "name": "來源證據可追溯性審查",
+      "status": "pass",
+      "details": "查驗全部 15 筆證據項目 (sched_bo3, sched_lpl_lp, sched_lcp_official, patch_official, al_roster, lgd_recent, al_lgd_h2h, we_roster, jdg_roster, jdg_recent, we_playoffs, edg_recent, blg_recent, blg_edg_h2h, blg_ewc)，均具備明確來源標題、URL 與擷取時間，無未證實之主張。"
+    },
+    {
+      "audit_area": "evidence_sufficiency",
+      "name": "證據充分性與風險標示審查",
+      "status": "pass",
+      "details": "審查涵蓋近期狀態、H2H、名單與版本。缺漏資料（未完整複盤 VOD、三場 G1 選邊未定、BLG 上路當場先發未定）已於正文及風險欄位中明確列出並充份扣減信心度。"
+    },
+    {
+      "audit_area": "domain_report_coverage",
+      "name": "領域報告結構完整性審查",
+      "status": "fail",
+      "details": "對照 lol-analysis 技能規範 (output-template.md)，主要分析段落涵蓋了 1 至 8 節，但缺少第 9 節「簡表總結」表格，未完全滿足領域模板要求。"
+    },
+    {
+      "audit_area": "probability_coherence",
+      "name": "機率分布內部一致性與算術校核",
+      "status": "pass",
+      "details": "重新計算三場 BO3 精確比分與勝率分布。AL-LGD (77%/23%, 總和 100%), WE-JDG (37%/63%, 總和 100%), EDG-BLG (15%/85%, 總和 100%)。至少贏一局機率均等於 100% 減去被橫掃機率，公允賠率 100/p 計算正確。"
+    },
+    {
+      "audit_area": "confidence_calibration",
+      "name": "非補償式信心度上限校準",
+      "status": "pass",
+      "details": "驗證 LoL 領域非補償式信心上限公式 min(加權值, 完整度上限, 樣本上限, 穩定性上限+10)。各場最終信心度 (AL 55%, WE 58%, EDG 60%) 與全日平均 58% 均正確受限於樣本與穩定性上限。"
+    },
+    {
+      "audit_area": "market_leakage",
+      "name": "市場賠率隔離與無滲漏審查",
+      "status": "pass",
+      "details": "確認 market_data_visibility 為 withheld_from_all_probability_stages。主模型完全由精確比分主分布推導公允賠率與方向，無市場賠率倒推或價格滲漏跡象。"
+    },
+    {
+      "audit_area": "presentation_integrity",
+      "name": "呈現完整性與資料格式檢查",
+      "status": "fail",
+      "details": "發現兩處呈現瑕疵：1) 缺少領域模板規定的第 9 節簡表總結；2) 頂層 JSON 中 confidence.components 子項得分均被平鋪填為 58，遮蔽了各子項目的原始評分細節。"
+    }
+  ],
+  "unresolved_questions": [
+    "BLG 今日先發上路會在賽前官方名單中確認由 Wenbo 繼續上陣，還是由 Bin 登錄？",
+    "三場 BO3（AL-LGD、WE-JDG、EDG-BLG）的 Game 1 選邊權最終由哪一方獲得？",
+    "7/24 賽事官方房間實際載入之比賽版本是否確定為 Patch 16.14？"
+  ]
+}

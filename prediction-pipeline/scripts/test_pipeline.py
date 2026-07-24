@@ -154,6 +154,75 @@ class PipelineUnitTests(unittest.TestCase):
         self.assertIn("| 比賽 | 預測 | 機率 | 模型信心度 | 建議 |", lines)
         self.assertIn("A\\|B", lines[-1])
 
+    def test_post_market_updates_summary_without_changing_locked_final(self) -> None:
+        final = {"presentation": {"summary_table": {
+            "columns": ["比賽", "模型信心度", "投注建議"],
+            "rows": [["A vs B", "74%", "待市場價格"]],
+        }}}
+        post_market = {
+            "summary_table_updates": [{
+                "row_index": 0,
+                "column": "投注建議",
+                "advice": "A 1.50 為負 EV；不下注，0u",
+            }]
+        }
+        rendered = pipeline.apply_post_market_summary(final, post_market)
+        self.assertEqual(rendered["presentation"]["summary_table"]["rows"][0][2], "A 1.50 為負 EV；不下注，0u")
+        self.assertEqual(final["presentation"]["summary_table"]["rows"][0][2], "待市場價格")
+
+    def test_post_market_validation_rejects_pending_price_and_incomplete_market_decisions(self) -> None:
+        input_data = {
+            "prediction_id": "p1",
+            "market_data": [{
+                "bet_id": "a-ml",
+                "outcome_key": "a",
+                "decimal_odds": 1.5,
+                "book": "Stake",
+                "retrieved_at": "2026-07-17T10:00:00+08:00",
+            }],
+        }
+        final = {
+            "presentation": {
+                "summary_table": {
+                    "columns": ["比賽", "模型信心度", "投注建議"],
+                    "rows": [["A vs B", "74%", "待市場價格"]],
+                }
+            }
+        }
+        post_market = {
+            "schema_version": "1.0",
+            "prediction_id": "p1",
+            "stage": "post_market",
+            "generated_at": "2026-07-17T10:05:00+08:00",
+            "model": "test-model",
+            "reasoning_effort": "high",
+            "market_coverage": {
+                "status": "partial",
+                "books": ["Stake"],
+                "requested_market_types": ["moneyline", "map handicap"],
+                "collected_market_types": ["moneyline"],
+                "unavailable_market_types": ["map handicap"],
+                "note": "只取得獨贏盤。",
+            },
+            "recommendation_summary": "目前不下注。",
+            "decisions": [{
+                "bet_id": "a-ml",
+                "recommendation": "pass",
+                "stake_units": 0,
+                "rationale": "市場價格低於模型公允價。",
+            }],
+            "summary_table_updates": [{
+                "row_index": 0,
+                "column": "投注建議",
+                "advice": "待市場價格",
+            }],
+            "risks": [],
+        }
+        errors = pipeline.validate_post_market(post_market, input_data, final)
+        self.assertTrue(any("cannot say market price is pending" in error for error in errors))
+        post_market["summary_table_updates"][0]["advice"] = "A 1.50 為負 EV；不下注，0u"
+        self.assertEqual(pipeline.validate_post_market(post_market, input_data, final), [])
+
     def test_detailed_analysis_sections_are_rendered_verbatim(self) -> None:
         final = {"presentation": {"analysis_sections": [
             {"heading": "A vs B 完整分析", "markdown": "**逐圖分析：**\n\n| 地圖 | 傾向 |\n| --- | --- |\n| Split | A 55% |"},

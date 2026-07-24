@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "prediction_id": "valorant-vct-2026-07-23-pac-cn-emea",
+  "stage": "red_team",
+  "generated_at": "2026-07-23T13:21:54+08:00",
+  "reviewer": {
+    "tool": "agy",
+    "model": "gemini-3.6-flash-high"
+  },
+  "verdict": "revise",
+  "summary": "The primary prediction is evidence-bound, market-blind, and internally coherent across all six BO3 match probability distributions. However, revision is required due to the omission of the mandatory '今日 Valorant 賽事決策總結表' in daily-summary mode, arithmetic discrepancies between confidence score components and reported aggregate confidence values, and minor map naming non-compliance in narrative text.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "medium",
+      "category": "presentation",
+      "claim": "Primary analysis sections omit the mandatory '今日 Valorant 賽事決策總結表' (Daily Summary Decision Table) required by the valorant-analysis output template for daily-summary mode.",
+      "evidence_ids": [
+        "schedule-vlr",
+        "schedule-pac-liquipedia",
+        "schedule-cn-liquipedia",
+        "schedule-emea-liquipedia"
+      ],
+      "recommended_action": "Add the structured '今日 Valorant 賽事決策總結表' section at the end of analysis_sections covering all 6 matches with predicted scores, Win%, +1.5 map probabilities, recommendations, confidence scores, and key risks."
+    },
+    {
+      "id": "f2",
+      "severity": "medium",
+      "category": "arithmetic",
+      "claim": "The overall confidence score (81%) and several match-level confidence values do not equal the arithmetic average of their reported confidence components (e.g., overall components 84, 96, 83, 68, 62 average to 78.6%).",
+      "evidence_ids": [],
+      "recommended_action": "Re-align all reported confidence values with the exact weighted or unweighted mean of their 5 component scores (completeness, freshness, lineup certainty, regime relevance, model stability)."
+    },
+    {
+      "id": "f3",
+      "severity": "low",
+      "category": "presentation",
+      "claim": "Map references in narrative text descriptions and comparative matrices frequently omit mandatory Chinese translations in parentheses required by Rule 4.0 of the domain skill.",
+      "evidence_ids": [
+        "patch-map-pool"
+      ],
+      "recommended_action": "Ensure all map references in narrative text and data matrices strictly adhere to the format '英文名稱（中國國服譯名）', such as Sunset（日落之城） and Summit（天樞雲闕）."
+    },
+    {
+      "id": "f4",
+      "severity": "low",
+      "category": "traceability",
+      "claim": "The starting lineups for T1 vs VARREL and Eternal Fire's tactical role shifts under Spear's debut remain unconfirmed by official match-day announcements.",
+      "evidence_ids": [
+        "t1-varrel-rosters",
+        "ef-spear-change"
+      ],
+      "recommended_action": "Monitor official match-day announcements prior to match start to update lineup certainty and trigger post-lineup re-calculations if necessary."
+    }
+  ],
+  "consistency_checks": [
+    {
+      "audit_area": "event_identity",
+      "name": "Event Identity Verification",
+      "status": "pass",
+      "details": "Verified match identities for all 6 BO3 fixtures across VCT Pacific, China, and EMEA for 2026-07-23 (TW time). Participant names, competition stages, and timing align with official input data."
+    },
+    {
+      "audit_area": "temporal_freshness",
+      "name": "Temporal Freshness Verification",
+      "status": "pass",
+      "details": "Checked prediction timestamp (2026-07-23T12:55:31+08:00) against evidence retrieval dates. All recent form data (Patch 13.00/13.01) and roster updates (e.g., Spear replacing Izzy on 2026-07-23) are fresh and up to date."
+    },
+    {
+      "audit_area": "source_traceability",
+      "name": "Source Traceability Check",
+      "status": "pass",
+      "details": "Verified key factor evidence links. All reasoning steps correctly reference valid input evidence IDs (e.g., ge-current, fs-current, t1-current, ef-spear-change)."
+    },
+    {
+      "audit_area": "evidence_sufficiency",
+      "name": "Evidence Sufficiency Audit",
+      "status": "pass",
+      "details": "Audited supporting data for all match claims. Map win rates and player ACS statistics derive from current Stage 2 Patch matches; unannounced vetoes and roster uncertainties are explicitly noted."
+    },
+    {
+      "audit_area": "domain_report_coverage",
+      "name": "Domain Report Coverage Audit",
+      "status": "fail",
+      "details": "Audited primary analysis sections against the valorant-analysis skill and daily-summary mode. Failed because the mandatory '今日 Valorant 賽事決策總結表' decision table was omitted from analysis_sections."
+    },
+    {
+      "audit_area": "probability_coherence",
+      "name": "Probability Coherence Verification",
+      "status": "pass",
+      "details": "Recomputed exact score distributions and implied win/at-least-one-map probabilities for all 6 matches. All score distributions sum to 100.0%, win probabilities equal sum of 2-0 + 2-1, and at-least-one-map probabilities are fully derived from primary distributions."
+    },
+    {
+      "audit_area": "confidence_calibration",
+      "name": "Confidence Calibration Check",
+      "status": "fail",
+      "details": "Audited confidence calculation math. Failed because reported overall confidence (81%) does not match the arithmetic average of its five component scores (84, 96, 83, 68, 62 = 78.6%); minor aggregation mismatches exist in match-level scores."
+    },
+    {
+      "audit_area": "market_leakage",
+      "name": "Market Leakage Audit",
+      "status": "pass",
+      "details": "Verified complete market data isolation. Probabilities and reasoning are strictly content-bound and derived without relying on odds or market implied prices."
+    },
+    {
+      "audit_area": "presentation_integrity",
+      "name": "Presentation Integrity Audit",
+      "status": "fail",
+      "details": "Audited presentation formatting. Failed due to missing required decision table section and inconsistent map naming convention in text narrative (omitting Chinese translations in parentheses)."
+    }
+  ],
+  "unresolved_questions": [
+    "Will stax or DH start for T1, and will Klaus or Foxy9 start for VARREL in their match?",
+    "How will Spear's VCT debut on Eternal Fire impact team communication and role allocations against Team Heretics?",
+    "How will the Summit（天樞雲闕） permaban collision resolve in official vetoes for TYLOO vs Nova Esports and FPX vs EDward Gaming?",
+    "What will be the official map pick/ban orders, side selections, and pistol/eco conversion rates across all six matches once vetoes conclude?"
+  ]
+}

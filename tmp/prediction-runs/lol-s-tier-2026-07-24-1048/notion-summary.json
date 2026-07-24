@@ -1,0 +1,25 @@
+{
+  "title": "LoL 2026-07-24 S Tier 今日深度分析（agy 紅隊）",
+  "sport": "LoL",
+  "module": "lol-analysis",
+  "event": "LPL 2026 Split 3 — AL vs LGD／WE vs JDG／EDG vs BLG",
+  "startTime": "2026-07-24T15:00:00+08:00",
+  "bo": "3 × BO3",
+  "prediction": "AL 2-0；JDG 2-0；BLG 2-0",
+  "winner": "AL／JDG／BLG",
+  "winProbability": "AL 77%／JDG 63%／BLG 85%",
+  "recommendation": "現價三支熱門 ML 均為負 EV；LGD 與 WE 雖呈模型正 EV，但市場分歧、G1 選邊與同版本樣本不足，先觀察、不直接下注。",
+  "stake": "0u；正式先發、選邊與版本確認後再建立新版快照",
+  "confidence": "55%／58%／60%",
+  "risk": "三場 G1 選邊未定；今日 game_version 尚未正式落頁；BLG 上路 Wenbo／Bin 未定；agy 未逐場完整重建兩條弱方取勝路徑。",
+  "sourceStatus": "賽程閘門已通過；LCP 日期衝突以 Riot 2026-07-13 最新公告消解；LPL 賽程、名單、近期系列與 Patch 26.14 已交叉查核。",
+  "analysisType": "daily-summary",
+  "tags": [
+    "LoL",
+    "LPL",
+    "S Tier",
+    "daily-summary",
+    "agy red team",
+    "2026-07-24"
+  ]
+}
