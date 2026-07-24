@@ -483,6 +483,9 @@ class AutomationTests(unittest.TestCase):
         self.assertIn("跨日 evaluated history", prompt)
         self.assertIn("不可只看單日", prompt)
         self.assertIn("不得作為 skill 修正或 PR 的唯一內容", prompt)
+        self.assertIn("factor-registry.json", prompt)
+        self.assertIn("無增量效益", prompt)
+        self.assertIn("retired 因子之後不再抓取、判斷或報告", prompt)
         self.assertNotIn("保持最小差異", prompt)
 
     def test_report_must_be_within_24_hours(self) -> None:

@@ -12,6 +12,7 @@ from automation.common import (
     TAIPEI,
     JobError,
     cleanup_old_reports,
+    load_factor_registry,
     load_improvement_plan,
     load_pr_summary,
     recreate_dated_output_dir,
@@ -72,6 +73,14 @@ class ImprovementPlanTests(unittest.TestCase):
                 "metrics": {"brier": 0.21},
             },
             "validation": {"method": "regression_test", "passed": True},
+            "factor_audit": {
+                "omission_search": "檢查資料缺口、交互作用與版本切換，未發現可直接上線的新因子",
+                "noise_review": "檢查既有因子的增量效益與時序，未做因子異動",
+                "new_candidates": [],
+                "activated": [],
+                "retired": [],
+                "restored": [],
+            },
             "evidence": ["test_probable_pitcher_snapshot"],
             "rollback": "回復 v1 並停用新 freshness gate",
         }
@@ -93,12 +102,117 @@ class ImprovementPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(JobError, "do not qualify"):
             load_improvement_plan(self.write(plan), has_changes=True)
 
+    def test_registry_only_retirement_requires_paired_validation(self) -> None:
+        plan = self.plan()
+        plan.update({
+            "change_type": "feature_model",
+            "decision": "apply-registry",
+            "validation": {"method": "paired_walk_forward", "passed": True},
+        })
+        plan["factor_audit"]["retired"] = ["recent-win-rate"]
+        loaded = load_improvement_plan(
+            self.write(plan),
+            has_changes=False,
+            factor_transitions={
+                "new_candidates": [],
+                "activated": [],
+                "retired": ["recent-win-rate"],
+                "restored": [],
+            },
+        )
+        self.assertEqual(loaded["decision"], "apply-registry")
+
+    def test_rejects_unvalidated_factor_restore(self) -> None:
+        plan = self.plan()
+        plan.update({
+            "change_type": "feature_model",
+            "decision": "apply-registry",
+            "validation": {"method": "none", "passed": False},
+        })
+        plan["factor_audit"]["restored"] = ["travel-fatigue"]
+        with self.assertRaisesRegex(JobError, "paired_walk_forward"):
+            load_improvement_plan(
+                self.write(plan),
+                has_changes=False,
+                factor_transitions={
+                    "new_candidates": [],
+                    "activated": [],
+                    "retired": [],
+                    "restored": ["travel-fatigue"],
+                },
+            )
+
     def test_model_change_requires_paired_walk_forward(self) -> None:
         plan = self.plan()
         plan["change_type"] = "feature_model"
         with self.assertRaisesRegex(JobError, "paired_walk_forward"):
             load_improvement_plan(self.write(plan), has_changes=True)
 
+
+class FactorRegistryTests(unittest.TestCase):
+    @staticmethod
+    def factor(factor_id: str, status: str = "active") -> dict[str, object]:
+        return {
+            "factor_id": factor_id,
+            "name": factor_id,
+            "kind": "predictive_factor",
+            "status": status,
+            "used_for_prediction": status == "active",
+            "mechanism": "可重複的賽前機制",
+            "pre_match_observable": "只使用預測快照前可取得資料",
+            "evidence": ["paired cohort"],
+            "decision_reason": "目前生命週期裁決",
+            "revisit_triggers": ["資料品質修復"] if status == "retired" else [],
+            "last_reviewed": "2026-07-24T08:30:00+08:00",
+        }
+
+    def write(self, payload: dict[str, object], name: str) -> Path:
+        directory = getattr(self, "_directory", None)
+        if directory is None:
+            directory = tempfile.TemporaryDirectory()
+            self._directory = directory
+            self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / name
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def registry(self, factors: list[dict[str, object]]) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "updated_at": "2026-07-24T08:30:00+08:00",
+            "factors": factors,
+        }
+
+    def test_detects_retired_factor_without_deleting_history(self) -> None:
+        prior = self.write(
+            self.registry([self.factor("recent-win-rate")]),
+            "prior.json",
+        )
+        retired = self.factor("recent-win-rate", "retired")
+        current = self.write(self.registry([retired]), "current.json")
+        _, transitions = load_factor_registry(current, prior_path=prior)
+        self.assertEqual(transitions["retired"], ["recent-win-rate"])
+
+    def test_new_factor_must_start_as_candidate(self) -> None:
+        prior = self.write(self.registry([self.factor("elo")]), "prior.json")
+        current = self.write(
+            self.registry([
+                self.factor("elo"),
+                self.factor("travel-fatigue", "active"),
+            ]),
+            "current.json",
+        )
+        with self.assertRaisesRegex(JobError, "must enter.*candidate"):
+            load_factor_registry(current, prior_path=prior)
+
+    def test_rejects_deleting_retired_record(self) -> None:
+        prior = self.write(
+            self.registry([self.factor("travel-fatigue", "retired")]),
+            "prior.json",
+        )
+        current = self.write(self.registry([]), "current.json")
+        with self.assertRaisesRegex(JobError, "append-only"):
+            load_factor_registry(current, prior_path=prior)
 
 class EvaluatedHistoryTests(unittest.TestCase):
     def test_history_upserts_by_immutable_prediction_key(self) -> None:

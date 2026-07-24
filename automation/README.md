@@ -9,6 +9,9 @@
 
 每次預測排程會自動清理 30 天以前的原始報告與產物。已結算預測另存於各模組的
 `history/evaluated-forecasts.jsonl`，不受原始報告清理影響，作為跨日模型校準樣本永久保留。
+每個模組另保存 `history/factor-registry.json`：每日複盤同時搜尋漏掉的有效因子與既有噪音
+因子。新項目先進 candidate；只有樣本外驗證通過才啟用、停用或恢復。retired 項目不再進入
+日常抓取與判斷，但保留證據和重啟條件，且不受報告清理影響。
 
 在 `automation/modules.json` 啟用或停用模組，並管理模型與排程時間：
 

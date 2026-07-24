@@ -191,6 +191,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 - bo3.gg 候選賽程：{output_dir / 'schedule-precheck.json'}
 - bo3.gg 原始伺服器端 S-tier 回應：{output_dir / 'bo3-filtered-response.json'}
 - bo3.gg 原始未套 tier 回應：{output_dir / 'bo3-unfiltered-response.json'}
+- 歷史因子登錄檔：{STATE_ROOT / 'history/factor-registry.json'}（若存在）
 
 要求：
 1. 以 bo3.gg 與 Leaguepedia（lol.fandom.com）為主要賽程來源進行盤點與核對；將 bo3.gg 作為 role="official" 來源，Leaguepedia / Liquipedia 作為 role="independent" 獨立核對來源。
@@ -204,7 +205,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 3. 以 bo3.gg 與 Leaguepedia / Liquipedia 雙來源核對；發現候選外賽事時補入，候選誤列時移除並說明。雙來源支持相同集合、所有 match ID 已取得且 conflicts 為空時寫 complete=true。無賽事也須雙來源確認。
 4. 若來源不一致或有未解場次，寫 complete=false 與 conflicts 後停止；不要建立預測、Notion summary 或可發布報告。外層會以失敗狀態停止發布與寄信。
 5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露候選／新增／移除場次及驗證來源。
-6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
+6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響機率；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
 7. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
 8. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
 9. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：

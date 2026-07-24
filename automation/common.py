@@ -518,7 +518,153 @@ def load_pr_summary(path: Path, max_chars: int = 4_000) -> str:
     return summary
 
 
-def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]:
+def load_factor_registry(
+    path: Path,
+    *,
+    prior_path: Path | None = None,
+) -> tuple[dict[str, object], dict[str, list[str]]]:
+    """驗證因子登錄檔，並回傳相對於前版的生命週期異動。"""
+    assert_nonempty(path)
+    try:
+        registry = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid factor registry JSON: {path}: {exc}") from exc
+    if not isinstance(registry, dict):
+        raise JobError(f"Factor registry must be a JSON object: {path}")
+    if registry.get("schema_version") != 1:
+        raise JobError("Factor registry schema_version must be 1")
+    if not isinstance(registry.get("updated_at"), str) or not registry["updated_at"].strip():
+        raise JobError("Factor registry updated_at must be a non-empty string")
+    factors = registry.get("factors")
+    if not isinstance(factors, list):
+        raise JobError("Factor registry factors must be an array")
+
+    required = {
+        "factor_id",
+        "name",
+        "kind",
+        "status",
+        "used_for_prediction",
+        "mechanism",
+        "pre_match_observable",
+        "evidence",
+        "decision_reason",
+        "revisit_triggers",
+        "last_reviewed",
+    }
+    factor_map: dict[str, dict[str, object]] = {}
+    for index, factor in enumerate(factors):
+        if not isinstance(factor, dict):
+            raise JobError(f"Factor registry item {index} must be an object")
+        missing = sorted(required.difference(factor))
+        if missing:
+            raise JobError(f"Factor registry item {index} missing keys {missing}")
+        factor_id = factor["factor_id"]
+        if (
+            not isinstance(factor_id, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", factor_id)
+        ):
+            raise JobError(f"Invalid factor_id at item {index}: {factor_id!r}")
+        if factor_id in factor_map:
+            raise JobError(f"Duplicate factor_id in registry: {factor_id}")
+        if factor["kind"] not in {"predictive_factor", "predictive_source"}:
+            raise JobError(f"Invalid factor kind for {factor_id}: {factor['kind']!r}")
+        status = factor["status"]
+        if status not in {"active", "candidate", "retired"}:
+            raise JobError(f"Invalid factor status for {factor_id}: {status!r}")
+        if not isinstance(factor["used_for_prediction"], bool):
+            raise JobError(f"used_for_prediction must be boolean for {factor_id}")
+        if factor["used_for_prediction"] != (status == "active"):
+            raise JobError(
+                f"{factor_id}: only active factors may use used_for_prediction=true"
+            )
+        for key in (
+            "name",
+            "mechanism",
+            "pre_match_observable",
+            "decision_reason",
+            "last_reviewed",
+        ):
+            if not isinstance(factor[key], str) or not factor[key].strip():
+                raise JobError(f"{factor_id}.{key} must be a non-empty string")
+        evidence = factor["evidence"]
+        if (
+            not isinstance(evidence, list)
+            or not evidence
+            or any(not isinstance(item, str) or not item.strip() for item in evidence)
+        ):
+            raise JobError(f"{factor_id}.evidence must be a non-empty string array")
+        triggers = factor["revisit_triggers"]
+        if not isinstance(triggers, list) or any(
+            not isinstance(item, str) or not item.strip() for item in triggers
+        ):
+            raise JobError(f"{factor_id}.revisit_triggers must be a string array")
+        if status == "retired" and not triggers:
+            raise JobError(f"Retired factor {factor_id} requires revisit_triggers")
+        factor_map[factor_id] = factor
+
+    transitions = {
+        "new_candidates": [],
+        "activated": [],
+        "retired": [],
+        "restored": [],
+    }
+    prior_map: dict[str, dict[str, object]] = {}
+    if prior_path is not None and prior_path.is_file():
+        prior_registry, _ = load_factor_registry(prior_path)
+        prior_map = {
+            str(item["factor_id"]): item
+            for item in prior_registry["factors"]
+            if isinstance(item, dict)
+        }
+        removed = sorted(set(prior_map).difference(factor_map))
+        if removed:
+            raise JobError(
+                "Factor registry records are append-only; missing prior factors: "
+                + ", ".join(removed)
+            )
+
+    if prior_map:
+        for factor_id, factor in factor_map.items():
+            if factor_id not in prior_map:
+                if factor["status"] != "candidate":
+                    raise JobError(
+                        f"New factor {factor_id} must enter the registry as candidate"
+                    )
+                transitions["new_candidates"].append(factor_id)
+                continue
+            before = prior_map[factor_id]["status"]
+            after = factor["status"]
+            if before == after:
+                continue
+            if before == "candidate" and after == "active":
+                transitions["activated"].append(factor_id)
+            elif before in {"active", "candidate"} and after == "retired":
+                transitions["retired"].append(factor_id)
+            elif before == "retired" and after == "active":
+                transitions["restored"].append(factor_id)
+            else:
+                raise JobError(
+                    f"Unsupported factor transition for {factor_id}: {before} -> {after}"
+                )
+    else:
+        transitions["new_candidates"] = sorted(
+            factor_id
+            for factor_id, factor in factor_map.items()
+            if factor["status"] == "candidate"
+        )
+
+    for values in transitions.values():
+        values.sort()
+    return registry, transitions
+
+
+def load_improvement_plan(
+    path: Path,
+    *,
+    has_changes: bool,
+    factor_transitions: dict[str, list[str]] | None = None,
+) -> dict[str, object]:
     """驗證賽後檢討是否形成可稽核的精準度改善閉環。"""
     assert_nonempty(path)
     try:
@@ -538,6 +684,7 @@ def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]
         "baseline",
         "challenger",
         "validation",
+        "factor_audit",
         "evidence",
         "rollback",
     }
@@ -557,7 +704,12 @@ def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]
     }
     if plan["change_type"] not in change_types:
         raise JobError(f"Invalid improvement plan change_type: {plan['change_type']!r}")
-    if plan["decision"] not in {"merge", "experiment-only", "no-change"}:
+    if plan["decision"] not in {
+        "merge",
+        "apply-registry",
+        "experiment-only",
+        "no-change",
+    }:
         raise JobError(f"Invalid improvement plan decision: {plan['decision']!r}")
     if not isinstance(plan["production_change"], bool):
         raise JobError("Improvement plan production_change must be boolean")
@@ -604,6 +756,56 @@ def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]
     if not isinstance(validation["passed"], bool):
         raise JobError("Improvement plan validation.passed must be boolean")
 
+    factor_audit = plan["factor_audit"]
+    if not isinstance(factor_audit, dict):
+        raise JobError("Improvement plan factor_audit must be an object")
+    factor_audit_keys = {
+        "omission_search",
+        "noise_review",
+        "new_candidates",
+        "activated",
+        "retired",
+        "restored",
+    }
+    missing_factor_keys = sorted(factor_audit_keys.difference(factor_audit))
+    if missing_factor_keys:
+        raise JobError(
+            f"Improvement plan factor_audit missing keys {missing_factor_keys}"
+        )
+    for key in ("omission_search", "noise_review"):
+        if not isinstance(factor_audit[key], str) or not factor_audit[key].strip():
+            raise JobError(f"Improvement plan factor_audit.{key} must be non-empty")
+    action_ids: set[str] = set()
+    for key in ("new_candidates", "activated", "retired", "restored"):
+        values = factor_audit[key]
+        if (
+            not isinstance(values, list)
+            or any(
+                not isinstance(item, str)
+                or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", item)
+                for item in values
+            )
+            or len(values) != len(set(values))
+        ):
+            raise JobError(
+                f"Improvement plan factor_audit.{key} must be a unique factor_id array"
+            )
+        overlap = action_ids.intersection(values)
+        if overlap:
+            raise JobError(
+                "Factor IDs cannot have multiple lifecycle actions: "
+                + ", ".join(sorted(overlap))
+            )
+        action_ids.update(values)
+    if factor_transitions is not None:
+        for key in ("new_candidates", "activated", "retired", "restored"):
+            expected = sorted(factor_transitions.get(key, []))
+            actual = sorted(factor_audit[key])
+            if actual != expected:
+                raise JobError(
+                    f"factor_audit.{key} {actual} does not match registry transition {expected}"
+                )
+
     evidence = plan["evidence"]
     if (
         not isinstance(evidence, list)
@@ -611,6 +813,23 @@ def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]
         or any(not isinstance(item, str) or not item.strip() for item in evidence)
     ):
         raise JobError("Improvement plan evidence must be a non-empty array of strings")
+
+    factor_production_change = any(
+        factor_audit[key] for key in ("activated", "retired", "restored")
+    )
+    if factor_production_change:
+        if plan["production_change"] is not True:
+            raise JobError("Active factor lifecycle changes require production_change=true")
+        if validation["method"] != "paired_walk_forward" or validation["passed"] is not True:
+            raise JobError(
+                "Activating, retiring, or restoring a factor requires passed "
+                "paired_walk_forward validation"
+            )
+        for label in ("baseline", "challenger"):
+            if plan[label]["sample_size"] <= 0 or not plan[label]["metrics"]:
+                raise JobError(
+                    f"{label} requires positive sample_size and metrics for factor changes"
+                )
 
     if has_changes:
         if plan["decision"] != "merge" or plan["change_type"] == "none":
@@ -628,8 +847,15 @@ def load_improvement_plan(path: Path, *, has_changes: bool) -> dict[str, object]
                     raise JobError(
                         f"{label} requires a positive sample_size and metrics for model changes"
                     )
-    elif plan["decision"] == "merge":
-        raise JobError("Improvement plan cannot use decision=merge when no skill files changed")
+    elif factor_production_change:
+        if plan["decision"] != "apply-registry" or plan["change_type"] == "none":
+            raise JobError(
+                "A registry-only production factor change requires decision=apply-registry"
+            )
+    elif plan["decision"] in {"merge", "apply-registry"}:
+        raise JobError(
+            "Improvement plan cannot apply a production decision without corresponding changes"
+        )
 
     return plan
 

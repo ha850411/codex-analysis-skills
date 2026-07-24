@@ -175,20 +175,22 @@ def prompt_for(date: str, output_dir: Path) -> str:
 這是無人值守排程。必須完整讀取並遵守：
 - {REPO_ROOT / 'mlb-analysis/SKILL.md'}
 - skill 指定的 shared 契約與 MLB references
+- 歷史因子登錄檔：{STATE_ROOT / 'history/factor-registry.json'}（若存在）
 
 要求：
 1. 只能分析 {output_dir / 'schedule-precheck.json'} 鎖定在上述視窗內的比賽，再用即時網路來源查核雙重賽、延賽、TBD 先發及美國跨日；不得依台灣日曆日自行增減比賽。
-2. 先讀取排程已確定性建立的 {output_dir / 'public-baseline.json'}。逐場保留其中的
+2. 因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響補充判斷；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。賽程、正式先發／打線、規則與結算等完整性資料仍須查核，不受因子退休影響。
+3. 先讀取排程已確定性建立的 {output_dir / 'public-baseline.json'}。逐場保留其中的
    model_version、status=baseline、run means、主隊勝率、前五局三路、區間、逐場信心度、
    五項信心組成、信心診斷值與 validation_status，不得改成 N/A，也不得用市場價格修改。
    信心度不設硬上限，禁止以模型層級或全日摘要數字把逐場信心度改成同一值。可用即時資料補充風險與等待條件。
    public baseline 是未完成 walk-forward 校準的方向性數值層：可報機率與公允價格，
    但 recommendation_eligible=false，全部注碼固定 0u，不得寫主推或可打。
-3. 嚴格先鎖定模型機率，再查市場。只有 public-baseline.json 明確缺少某 game ID 時，
+4. 嚴格先鎖定模型機率，再查市場。只有 public-baseline.json 明確缺少某 game ID 時，
    才能把該場標成 unmodeled；不得因缺少付費投影或正式打線，把已存在的 baseline 整場清空。
-4. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
-5. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的 daily-summary 輸出契約：不要為 17 場重複完整單場模板；先給全日結論與賽程盤點，再以一張數值比較表列全場，只展開最多 3 場觀察名單，且全文最後只有一個「簡表總結」。
-6. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
+5. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
+6. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的 daily-summary 輸出契約：不要為 17 場重複完整單場模板；先給全日結論與賽程盤點，再以一張數值比較表列全場，只展開最多 3 場觀察名單，且全文最後只有一個「簡表總結」。
+7. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    game_id, predicted_at, first_pitch, snapshot, model_version, away_team, home_team,
    away_f5_runs_mean, home_f5_runs_mean, away_late_runs_mean, home_late_runs_mean,
    away_runs_mean, home_runs_mean, home_win_prob（0..1）, model_confidence（0..1）,
@@ -199,17 +201,17 @@ def prompt_for(date: str, output_dir: Path) -> str:
    若比賽存在但無法可靠建模，仍保留紀錄並以 status 與 missing_data 說明；不得捏造缺失值。
    這類紀錄仍須保存 game_id、時間、快照、模型狀態、主客隊、來源與非空 missing_data，數值欄位可為 null。
    若官方確認該 24 小時視窗完全無賽事，寫一筆 {{"status":"no-games","date":"{date}","sources":[...]}}。
-7. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
+8. 將機率檢查資料寫到 {output_dir / 'probability-checks.json'}，並實際執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
    每一場 baseline 都必須包含 `weighted_confidence` 檢查，使用 public-baseline.json 的
    model_confidence（轉為整數百分比）與五項 confidence_components 回算。
-8. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 建立 {output_dir / 'notion-summary.json'}，供整日賽程建立一筆 Notion daily-summary。至少包含：
+9. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 建立 {output_dir / 'notion-summary.json'}，供整日賽程建立一筆 Notion daily-summary。至少包含：
    title, sport="MLB", module="mlb-analysis", event, startTime（+08:00）, prediction,
    winner, winProbability, recommendation, stake, confidence, risk, sourceStatus,
    analysisType="daily-summary", tags。confidence 必須寫逐場實際最小值–最大值；若剛好相同才寫單一值，
    不得寫成「baseline 上限」。
-9. 只建立本地 Notion summary，不要自行發布；外層程式會在驗證成功後發布並寄 Email。
-10. 最後自行檢查 prediction.md、forecasts.jsonl 與 notion-summary.json 均已建立；不要只在最終訊息貼報告。
+10. 只建立本地 Notion summary，不要自行發布；外層程式會在驗證成功後發布並寄 Email。
+11. 最後自行檢查 prediction.md、forecasts.jsonl 與 notion-summary.json 均已建立；不要只在最終訊息貼報告。
 """
 
 

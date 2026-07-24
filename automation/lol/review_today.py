@@ -17,10 +17,11 @@ if str(AUTOMATION_DIR) not in sys.path:
 os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
-    REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, codex_command, fail,
-    github_env, github_git_env, job_lock, load_improvement_plan, load_jsonl,
-    load_pr_summary, notify_review_by_email, require_executable, review_branch, run,
-    merge_pull_request, sync_evaluated_history, target_date, write_status,
+    REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, atomic_json, codex_command,
+    fail, github_env, github_git_env, job_lock, load_factor_registry,
+    load_improvement_plan, load_jsonl, load_pr_summary, notify_review_by_email,
+    require_executable, review_branch, run, merge_pull_request,
+    sync_evaluated_history, target_date, write_status,
 )
 from predict_next_day import fetch_schedule
 
@@ -58,8 +59,14 @@ def prompt_for(
     worktree: Path,
     settled: set[int],
     history_file: Path | None = None,
+    factor_registry_file: Path | None = None,
 ) -> str:
     history_file = history_file or STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
+    factor_registry = (
+        str(factor_registry_file)
+        if factor_registry_file is not None
+        else "不存在（本次須盤點既有正式因子並建立初版）"
+    )
     return f"""使用 `$lol-analysis` 對 {target}（台灣時間 UTC+8）的 LoL S Tier 預測做正式 postmortem，必要時修正 skill。
 
 原始不可覆寫資料：
@@ -67,6 +74,7 @@ def prompt_for(
 - 預測 JSONL：{prediction_dir / 'forecasts.jsonl'}
 - 本次已完賽 match IDs：{sorted(settled)}
 - 跨日 evaluated history：{history_file}（若存在必須完整使用；外層會在本次完成後合併新紀錄，且不受 30 天原始報告清理影響）
+- 前版因子登錄檔快照：{factor_registry}（只讀；不得覆寫）
 
 必須完整讀取 {worktree / 'lol-analysis/SKILL.md'}、shared 契約、
 `lol-analysis/references/postmortem-calibration.md` 與 `$skill-creator` 更新原則。
@@ -76,13 +84,14 @@ def prompt_for(
 2. 將每場完整原預測欄位加上 actual_score、actual_winner、game_winners、result_sources，寫到 {review_dir / 'evaluated-forecasts.jsonl'}；不得覆寫原檔。
 3. 將逐場命中、Brier score、log loss、信心校準、BP/版本/名單歸因與 cohort 限制寫入 {review_dir / 'postmortem.md'}。若歷史檔存在，必須把歷史與本批依 model_version + snapshot + 賽制／版本分 cohort，另列跨日累積樣本與指標；不可只看單日。
 4. 檢討的首要目標是改善未來樣本的 Brier、log loss、精確比分分布與方向命中，不是降低信心度、注碼、推薦等級或語氣。後四者可以是附帶風控，但不得作為 skill 修正或 PR 的唯一內容。
-5. 每個錯誤建立「賽前可觀察觸發條件 → 錯誤機制 → 候選修正 → 預期改善指標 → 可能退步 → 否決條件」。單場爆冷、單次 BP 或小樣本不得直接改生產權重；證據不足時建立 experiment-only 假設與待累積 cohort。
+5. 每次都深查可能漏掉的賽前因子，也檢查既有因子／預測性來源是否無增量效益、重複計數、易造成過度反應或含時序洩漏。每個錯誤建立「賽前可觀察觸發條件 → 錯誤機制 → 候選修正 → 預期改善指標 → 可能退步 → 否決條件」。不得因資料越多越好就新增；單場爆冷、單次 BP 或小樣本不得直接改生產權重。
 6. 若修改特徵、權重、情境或比分分布，必須用相同 match IDs、相同預測時點與相同資料做 baseline/challenger paired walk-forward；若修資料、結算或實作 bug，加入舊版失敗、新版通過的回歸測試。沒有通過驗證就不得修改 {worktree / 'lol-analysis'}。
-7. 將改善裁決寫到 {review_dir / 'improvement-plan.json'}，格式與門檻依 `shared/postmortem-improvement.md`。不論是否修改 skill 都必須產生；confidence_or_stake_only 必須是 false。
-8. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
-9. 若修改 skill，採「最小充分修改」：修正應完整涵蓋已證實的錯誤機制，不以行數小為目標，也不無限追加賽後特例。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `lol-analysis/references/output-template.md`。在 postmortem 記錄 baseline/challenger、測試、回退方式與未解問題。
-10. 若證據不足，明確寫「不修改 skill／不建立 PR」、experiment-only 假設以及需要累積的 cohort，不建立只改 confidence、stake 或措辭的裝飾性 PR。
-11. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述錯誤機制、實際模型／流程修正與 baseline/challenger 驗證，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
+7. 依 `shared/postmortem-improvement.md` 建立完整 {review_dir / 'factor-registry.json'}。新因子先設 candidate 且不得影響正式機率；active 因子只有在 ablation 顯示移除較佳時才能 retired。retired 因子之後不再抓取、判斷或報告，但必須保留停用證據與明確 revisit_triggers；只有觸發條件成立且重新通過 paired walk-forward 才能 restored。賽程、身分、正式名單、版本、結算與賽果等完整性資料不屬可退休預測因子。
+8. 將改善裁決寫到 {review_dir / 'improvement-plan.json'}，格式與門檻依 `shared/postmortem-improvement.md`，其中 factor_audit 必須與登錄檔狀態異動完全一致。不論是否修改 skill 都必須產生；confidence_or_stake_only 必須是 false。
+9. 不得修改 shared、其他 skill、automation、Git 設定或原始預測；不得自行 commit、push 或開 PR，外層程式會處理。
+10. 若修改 skill，採「最小充分修改」：修正應完整涵蓋已證實的錯誤機制，不以行數小為目標，也不無限追加賽後特例。既有輸出章節、表格、欄位、順序與 JSON key 不得新增、刪除、改名或重排，也不得修改 `lol-analysis/references/output-template.md`。在 postmortem 記錄 baseline/challenger、測試、回退方式與未解問題。
+11. 若證據不足，明確寫「不修改 skill／不建立 PR」、experiment-only 假設以及需要累積的 cohort，不建立只改 confidence、stake 或措辭的裝飾性 PR。
+12. 另外將 PR 短摘要寫到 {review_dir / 'pr-summary.md'}，只能包含 `## 本次調整` 與 `## 發現的問題` 兩節；各用 1–3 點簡述錯誤機制、實際模型／流程修正與 baseline/challenger 驗證，總長不得超過 2,000 字。若未修改 skill，仍說明本次未調整及證據不足的問題。
 """
 
 
@@ -180,6 +189,8 @@ def main() -> int:
     report = review_dir / "postmortem.md"
     history_file = STATE_ROOT / "history" / "evaluated-forecasts.jsonl"
     history_snapshot = review_dir / "evaluated-history-snapshot.jsonl"
+    factor_registry_file = STATE_ROOT / "history" / "factor-registry.json"
+    factor_registry_snapshot = review_dir / "factor-registry-snapshot.json"
     try:
         with job_lock("review"):
             review_dir.mkdir(parents=True, exist_ok=True)
@@ -192,6 +203,7 @@ def main() -> int:
                         Path("<isolated-worktree>"),
                         set(),
                         history_file,
+                        factor_registry_file if factor_registry_file.is_file() else None,
                     )
                 )
                 return 0
@@ -208,6 +220,10 @@ def main() -> int:
             if history_file.is_file():
                 shutil.copyfile(history_file, history_snapshot)
                 history_snapshot_bytes = history_snapshot.read_bytes()
+            factor_registry_snapshot_bytes: bytes | None = None
+            if factor_registry_file.is_file():
+                shutil.copyfile(factor_registry_file, factor_registry_snapshot)
+                factor_registry_snapshot_bytes = factor_registry_snapshot.read_bytes()
             prediction_report = prediction_dir / "prediction.md"
             forecasts_file = prediction_dir / "forecasts.jsonl"
             if not is_recent_report(prediction_report) or not is_recent_report(forecasts_file):
@@ -235,6 +251,9 @@ def main() -> int:
                         worktree,
                         settled,
                         history_snapshot,
+                        factor_registry_snapshot
+                        if factor_registry_snapshot.is_file()
+                        else None,
                     ),
                     add_dirs=(review_dir,),
                 )
@@ -248,6 +267,15 @@ def main() -> int:
                 )
             ):
                 raise JobError("Postmortem modified the immutable evaluated history snapshot")
+            if (
+                factor_registry_snapshot_bytes is not None
+                and (
+                    not factor_registry_snapshot.is_file()
+                    or factor_registry_snapshot.read_bytes()
+                    != factor_registry_snapshot_bytes
+                )
+            ):
+                raise JobError("Postmortem modified the immutable factor registry snapshot")
             evaluated = load_jsonl(review_dir / "evaluated-forecasts.jsonl")
             evaluated_ids = {value for record in evaluated if isinstance((value := record.get("match_id")), int)}
             if evaluated_ids != settled:
@@ -258,18 +286,40 @@ def main() -> int:
                 key_fields=("match_id", "predicted_at", "snapshot", "model_version"),
             )
             paths = changed_paths(worktree)
-            load_improvement_plan(
+            next_registry, factor_transitions = load_factor_registry(
+                review_dir / "factor-registry.json",
+                prior_path=(
+                    factor_registry_snapshot
+                    if factor_registry_snapshot.is_file()
+                    else None
+                ),
+            )
+            plan = load_improvement_plan(
                 review_dir / "improvement-plan.json",
                 has_changes=bool(paths),
+                factor_transitions=factor_transitions,
             )
             if not paths:
+                atomic_json(factor_registry_file, next_registry)
                 notify_review_by_email("lol", review_dir, target, pr_created=False)
-                write_status(review_dir, "review", "complete", target_date=target, pr_created=False, email_notified=True)
-                print(f"Review complete; no skill change justified: {report}")
+                write_status(
+                    review_dir,
+                    "review",
+                    "complete",
+                    target_date=target,
+                    pr_created=False,
+                    factor_registry_decision=plan["decision"],
+                    email_notified=True,
+                )
+                print(
+                    "Review complete; factor audit saved and no skill change justified: "
+                    f"{report}"
+                )
                 return 0
             validate_changes(worktree)
             pr_url = create_pr(worktree, branch, base, target, report, review_dir / "pr-summary.md")
             merged = merge_pull_request(pr_url, worktree)
+            atomic_json(factor_registry_file, next_registry)
             notify_review_by_email(
                 "lol",
                 review_dir,
