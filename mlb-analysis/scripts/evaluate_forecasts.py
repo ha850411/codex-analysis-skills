@@ -302,7 +302,7 @@ def availability_audit(records: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts = Counter(record["status"] for record in records)
     missing_data_counts = Counter(
         item
-        for record in unscored
+        for record in records
         for item in record.get("missing_data", [])
     )
     snapshots: dict[str, dict[str, int]] = defaultdict(
