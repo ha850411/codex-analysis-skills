@@ -18,6 +18,7 @@ AUTOMATION_DIR = Path(__file__).resolve().parents[1]
 if str(AUTOMATION_DIR) not in sys.path:
     sys.path.insert(0, str(AUTOMATION_DIR))
 os.environ["AUTOMATION_MODULE"] = "lol"
+os.environ["AUTOMATION_EMAIL_TRANSPORT"] = "mock"
 
 from common import JobError
 from predict_next_day import (

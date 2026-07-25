@@ -90,6 +90,10 @@ python3 automation/run_scheduled.py review --module lol --dry-run
 
 兩個模組都將報告寄到唯一的 `AUTOMATION_NOTIFICATION_EMAIL`。如需多位收件者，使用逗號分隔；不提供模組專屬收件信箱設定。
 
+正式排程預設使用 `AUTOMATION_EMAIL_TRANSPORT=smtp`。測試或本地演練應明確設定
+`AUTOMATION_EMAIL_TRANSPORT=mock`，此時不會建立 SMTP 連線；若另設
+`AUTOMATION_EMAIL_MOCK_OUTBOX=/path/to/outbox.jsonl`，模擬信件會逐行保存為 JSON。
+
 ## 賽後檢討分支
 
 賽後檢討固定先抓取 `origin/master`，再從該基準建立 feature 分支：

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import time
 from datetime import datetime, timedelta
+
+os.environ["AUTOMATION_EMAIL_TRANSPORT"] = "mock"
 
 from automation.common import (
     TAIPEI,
@@ -16,6 +20,7 @@ from automation.common import (
     load_improvement_plan,
     load_pr_summary,
     recreate_dated_output_dir,
+    send_email,
     sync_evaluated_history,
 )
 
@@ -507,6 +512,64 @@ class NotifyFailureByEmailTests(unittest.TestCase):
                 status_json = json.loads((job_dir / "status.json").read_text(encoding="utf-8"))
                 self.assertEqual(status_json["status"], "failed")
                 self.assertIn("Unexpected engine crash", status_json["error"])
+
+
+class SendEmailTransportTests(unittest.TestCase):
+    def test_mock_transport_never_opens_smtp_and_can_record_outbox(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            outbox = Path(temp_dir) / "mail" / "outbox.jsonl"
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "AUTOMATION_EMAIL_TRANSPORT": "mock",
+                        "AUTOMATION_NOTIFICATION_EMAIL": "user@example.com",
+                        "AUTOMATION_EMAIL_MOCK_OUTBOX": str(outbox),
+                    },
+                    clear=False,
+                ),
+                mock.patch("smtplib.SMTP") as smtp_mock,
+                mock.patch("smtplib.SMTP_SSL") as smtp_ssl_mock,
+            ):
+                recipients = send_email("測試主旨", "測試內容")
+
+            self.assertEqual(recipients, ["user@example.com"])
+            smtp_mock.assert_not_called()
+            smtp_ssl_mock.assert_not_called()
+            messages = [
+                json.loads(line)
+                for line in outbox.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(messages), 1)
+            self.assertEqual(messages[0]["subject"], "測試主旨")
+            self.assertEqual(messages[0]["body"], "測試內容")
+
+    def test_mock_transport_uses_non_routable_default_recipient(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "AUTOMATION_EMAIL_TRANSPORT": "mock",
+                "AUTOMATION_NOTIFICATION_EMAIL": "",
+                "AUTOMATION_EMAIL_MOCK_OUTBOX": "",
+            },
+            clear=False,
+        ):
+            self.assertEqual(
+                send_email("測試主旨", "測試內容"),
+                ["mock@example.invalid"],
+            )
+
+    def test_rejects_unknown_email_transport(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"AUTOMATION_EMAIL_TRANSPORT": "unexpected"},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                JobError,
+                "AUTOMATION_EMAIL_TRANSPORT must be smtp or mock",
+            ):
+                send_email("測試主旨", "測試內容")
 
 
 if __name__ == "__main__":

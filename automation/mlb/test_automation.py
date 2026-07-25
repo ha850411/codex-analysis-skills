@@ -19,6 +19,7 @@ MLB_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "mlb-analysis" / "script
 if str(MLB_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(MLB_SCRIPTS_DIR))
 os.environ["AUTOMATION_MODULE"] = "mlb"
+os.environ["AUTOMATION_EMAIL_TRANSPORT"] = "mock"
 
 from common import JobError, atomic_json, codex_command, load_jsonl, review_branch, send_email
 from build_public_baseline import (
@@ -515,6 +516,7 @@ class AutomationTests(unittest.TestCase):
     def test_email_uses_starttls_and_auth(self, smtp_class: mock.Mock) -> None:
         smtp = smtp_class.return_value.__enter__.return_value
         settings = {
+            "AUTOMATION_EMAIL_TRANSPORT": "smtp",
             "SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587",
             "SMTP_SECURITY": "starttls", "SMTP_USERNAME": "sender@example.com",
             "SMTP_PASSWORD": "secret", "SMTP_FROM": "sender@example.com",

@@ -29,6 +29,8 @@ def load_repo_env() -> None:
         "GITHUB_PAT",
         "MLB_AUTOMATION_STATE_DIR",
         "LOL_AUTOMATION_STATE_DIR",
+        "AUTOMATION_EMAIL_MOCK_OUTBOX",
+        "AUTOMATION_EMAIL_TRANSPORT",
         "AUTOMATION_NOTIFICATION_EMAIL",
         "CODEX_BIN",
         "GH_BIN",
@@ -359,10 +361,14 @@ def merge_pull_request(pr_url: str, worktree: Path) -> dict[str, str]:
 
 
 def send_email(subject: str, body: str) -> list[str]:
-    """透過已設定的 SMTP 寄送 UTF-8 純文字通知。"""
+    """透過 SMTP 寄信；測試可用明確的 mock transport 攔截通知。"""
     import smtplib
     import ssl
     from email.message import EmailMessage
+
+    transport = os.environ.get("AUTOMATION_EMAIL_TRANSPORT", "smtp").strip().lower()
+    if transport not in {"smtp", "mock"}:
+        raise JobError("AUTOMATION_EMAIL_TRANSPORT must be smtp or mock")
 
     host = os.environ.get("SMTP_HOST", "").strip()
     recipient_setting = os.environ.get("AUTOMATION_NOTIFICATION_EMAIL", "").strip()
@@ -371,6 +377,28 @@ def send_email(subject: str, body: str) -> list[str]:
         for address in recipient_setting.split(",")
         if address.strip()
     ]
+    if transport == "mock":
+        if not recipients:
+            recipients = ["mock@example.invalid"]
+        outbox_setting = os.environ.get("AUTOMATION_EMAIL_MOCK_OUTBOX", "").strip()
+        if outbox_setting:
+            outbox = Path(outbox_setting).expanduser()
+            outbox.parent.mkdir(parents=True, exist_ok=True)
+            with outbox.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "sent_at": datetime.now(TAIPEI).isoformat(),
+                            "recipients": recipients,
+                            "subject": subject,
+                            "body": body,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+        return recipients
+
     username = os.environ.get("SMTP_USERNAME", "").strip()
     password = os.environ.get("SMTP_PASSWORD", "")
     sender = os.environ.get("SMTP_FROM", "").strip() or username
