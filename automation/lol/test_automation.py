@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
 import tempfile
 import time
 import unittest
+import urllib.parse
 from argparse import Namespace
 from contextlib import nullcontext
 from datetime import time as datetime_time
@@ -20,10 +22,12 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 from common import JobError
 from predict_next_day import (
     ScheduleFetch,
+    _fetch_schedule_payload,
     extract_taipei_s_matches,
     fetch_schedule,
     forecast_window,
     main as prediction_main,
+    prompt_for as prediction_prompt_for,
     validate_forecast_schedule,
     validate_forecasts,
     validate_schedule_verification,
@@ -252,6 +256,27 @@ class LolAutomationTests(unittest.TestCase):
             result.client_filtered_match_ids, [124499, 124500]
         )
 
+    def test_schedule_api_receives_utc_window_boundaries(self) -> None:
+        payload = io.BytesIO(
+            json.dumps({"results": [], "total": {"count": 0}}).encode("utf-8")
+        )
+        with mock.patch(
+            "predict_next_day.urllib.request.urlopen",
+            return_value=payload,
+        ) as urlopen_mock:
+            _fetch_schedule_payload("2026-07-25", tier_filtered=True)
+
+        request = urlopen_mock.call_args.args[0]
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+        self.assertEqual(
+            query["filter[matches.start_date][gt]"],
+            ["2026-07-25T01:59:59Z"],
+        )
+        self.assertEqual(
+            query["filter[matches.start_date][lt]"],
+            ["2026-07-26T02:00:00Z"],
+        )
+
     def test_review_defaults_to_previous_report_date(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state_root = Path(directory)
@@ -285,6 +310,18 @@ class LolAutomationTests(unittest.TestCase):
         self.assertIn("無增量效益", prompt)
         self.assertIn("retired 因子之後不再抓取、判斷或報告", prompt)
         self.assertNotIn("保持最小差異", prompt)
+
+    def test_prediction_prompt_resolves_stale_wiki_with_current_official_source(
+        self,
+    ) -> None:
+        prompt = prediction_prompt_for(
+            "2026-07-25",
+            Path("/predictions/2026-07-25"),
+        )
+        self.assertIn("Riot／LoL Esports 當場官方賽程", prompt)
+        self.assertIn("不得要求每一個第三方 wiki 都一致", prompt)
+        self.assertIn("已確認過期的 wiki 單獨", prompt)
+        self.assertIn("只有來源不一致且依上述優先序仍無法消解", prompt)
 
     def test_exact_score_contract(self) -> None:
         record = {

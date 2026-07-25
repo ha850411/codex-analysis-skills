@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type, datetime, timedelta, timezone
 from pathlib import Path
 
 AUTOMATION_DIR = Path(__file__).resolve().parents[1]
@@ -92,8 +92,15 @@ def _fetch_schedule_payload(target: str, *, tier_filtered: bool) -> dict[str, ob
     start, end = forecast_window(target)
     params = {
         "filter[matches.discipline_id][eq]": "3",
-        "filter[matches.start_date][gt]": (start - timedelta(seconds=1)).isoformat(),
-        "filter[matches.start_date][lt]": end.isoformat(),
+        # bo3.gg compares offset-bearing timestamps by their displayed clock time
+        # instead of normalizing the offset first. Always send UTC boundaries so
+        # early UTC matches inside the Taipei window are not silently excluded.
+        "filter[matches.start_date][gt]": (
+            start - timedelta(seconds=1)
+        ).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "filter[matches.start_date][lt]": (
+            end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "sort": "start_date",
         "page[limit]": "100",
     }
@@ -194,7 +201,10 @@ def prompt_for(target: str, output_dir: Path) -> str:
 - 歷史因子登錄檔：{STATE_ROOT / 'history/factor-registry.json'}（若存在）
 
 要求：
-1. 以 bo3.gg 與 Leaguepedia（lol.fandom.com）為主要賽程來源進行盤點與核對；將 bo3.gg 作為 role="official" 來源，Leaguepedia / Liquipedia 作為 role="independent" 獨立核對來源。
+1. 以 bo3.gg 候選與 Match ID 為主清單，Leaguepedia（lol.fandom.com）／Liquipedia
+   作為獨立核對，並以 Riot／LoL Esports 當場官方賽程處理改期或 wiki 衝突。
+   JSON schema 中將 bo3.gg 與 Riot／LoL Esports 記為 role="official"，Leaguepedia /
+   Liquipedia / 其他非 Riot 賽程記為 role="independent"。
 2. 建立 {output_dir / 'schedule-verification.json'}，至少包含：
    verified_at, timezone="Asia/Taipei", window_start, window_end,
    complete, no_matches, candidate_match_ids, added_match_ids,
@@ -202,8 +212,16 @@ def prompt_for(target: str, output_dir: Path) -> str:
    sources 每筆包含 role="official" 或 role="independent"、url、checked_at；
    matches 每筆包含 match_id, start_time, tier="s", bo_type, team1, team2,
    tournament, source_urls。match_id 必須能回查 bo3.gg。
-3. 以 bo3.gg 與 Leaguepedia / Liquipedia 雙來源核對；發現候選外賽事時補入，候選誤列時移除並說明。雙來源支持相同集合、所有 match ID 已取得且 conflicts 為空時寫 complete=true。無賽事也須雙來源確認。
-4. 若來源不一致或有未解場次，寫 complete=false 與 conflicts 後停止；不要建立預測、Notion summary 或可發布報告。外層會以失敗狀態停止發布與寄信。
+3. 完整集合須至少由一個當前官方來源與一個當前獨立來源支持。發現候選外賽事時補入，
+   候選誤列時移除並說明。若 Liquipedia／Leaguepedia 的舊頁面與較新的 Riot 官方賽程
+   衝突，依 source-priority 契約採用較新且更接近當場的 Riot 資訊；再以另一個當前獨立
+   來源交叉確認。不得要求每一個第三方 wiki 都一致，也不得讓已確認過期的 wiki 單獨
+   阻擋流程。被較新官方資訊消解的差異要記錄來源與裁決，但不是未解 conflicts。
+   當前官方＋當前獨立來源支持相同集合、所有 match ID 已取得且沒有未解衝突時寫
+   complete=true。無賽事也須雙來源確認。
+4. 只有來源不一致且依上述優先序仍無法消解，或仍有未解場次時，才寫 complete=false
+   與 conflicts 後停止；不要建立預測、Notion summary 或可發布報告。外層會以失敗狀態
+   停止發布與寄信。
 5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露候選／新增／移除場次及驗證來源。
 6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響機率；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
 7. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
