@@ -155,7 +155,7 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
    python3 prediction-pipeline/scripts/pipeline.py export --run-dir <執行目錄>
    ```
 
-9. 讀取已驗證的 `prediction.md`，將其完整正文放入最終聊天回覆，並提供 `prediction.json` 與 `youtube-script.md` 的檔案連結。檔案連結放在完整正文之前，讓 `prediction.md` 的簡表仍是回覆最後一段。Markdown 的 agy 紅隊段落只簡述實際修改了什麼；若沒有修改，只寫明未修改。紅隊結論、裁決數量、九項一致性檢查、未解疑問回覆、逐條 finding 與裁決理由只保留在 `prediction.json`，不得在 Markdown 展開。禁止另寫一份簡易摘要取代正文、只列結論、只列產物路徑，或把完整報告留在暫存檔而不交付。若介面長度限制真的截斷，必須明說截斷位置並立即續貼，不能自行濃縮。
+9. 讀取已驗證的 `prediction.md`，聊天回覆應提供核心結論、重點依據、簡表總結與 `prediction.md` / `prediction.json` 的檔案連結（若有生成 `youtube-script.md` 亦附上連結）。完整的長篇分析已寫入 `prediction.md`，對話回覆無需重複貼出幾千字完整正文，以節省 Token 費用與回應時間。紅隊結論、裁決數量、九項一致性檢查、未解疑問回覆與逐條 finding 摘要保留在 `prediction.json`。
 
 ## 階段規則
 
@@ -217,14 +217,12 @@ python3 prediction-pipeline/scripts/pipeline.py run \
 
 ## 完成條件
 
-只有符合以下條件才回報完成：
-
 - 所有必要階段 JSON 都存在且 `prediction_id` 一致；
 - 機率合計、信心度、finding 裁決與市場算術全部驗證成功；
 - 有市場資料時，post-market 已逐盤裁決、回填全部簡表列，且不再殘留待價格占位文字；
 - 市場玩法覆蓋已明示完整／部分／無法取得，不能把只取得獨贏寫成完整盤口分析；
-- Markdown、JSON、YouTube 腳本三種輸出都已產生；
-- `prediction.md` 已渲染 `presentation.analysis_sections` 的全部完整正文，且不存在只剩摘要的內容退化；
+- Markdown 與 JSON 輸出都已產生（若有 YouTube 需求亦包含影音腳本）；
+- `prediction.md` 已渲染 `presentation.analysis_sections` 的全部完整正文；
 - `prediction.md` 的 agy 紅隊段落只簡述實際修改，沒有修改時只寫明未修改；完整紅隊審查與逐條裁決保存在 `prediction.json`，不在 Markdown 展開；
 - `prediction.md` 只含一個置底簡表，且該表格是最後一個非空白內容；
-- 最終回覆包含 `prediction.md` 完整正文，不是另寫摘要，並揭露未解決的高風險事項與執行目錄。
+- 最終回覆包含核心結論與置底簡表，提供 `prediction.md` 檔案連結，並揭露未解決的高風險事項與執行目錄。

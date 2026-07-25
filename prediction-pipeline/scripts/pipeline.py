@@ -486,7 +486,7 @@ def validate_prediction(data: Any, stage: str) -> list[str]:
         if not isinstance(presentation, dict):
             errors.append("final.presentation must be an object")
         else:
-            need(presentation, ["headline", "executive_summary", "analysis_sections", "key_points", "disclaimer", "summary_table", "youtube"], "final.presentation", errors)
+            need(presentation, ["headline", "executive_summary", "analysis_sections", "key_points", "disclaimer", "summary_table"], "final.presentation", errors)
             for field in ("headline", "executive_summary", "disclaimer"):
                 if not isinstance(presentation.get(field), str):
                     errors.append(f"final.presentation.{field} must be a string")
@@ -509,20 +509,21 @@ def validate_prediction(data: Any, stage: str) -> list[str]:
                     for i, row in enumerate(rows):
                         if not isinstance(row, list) or len(row) != len(columns) or any(not isinstance(item, str) for item in row):
                             errors.append(f"final.presentation.summary_table.rows[{i}] must contain {len(columns)} strings")
-            youtube = presentation.get("youtube")
-            if not isinstance(youtube, dict):
-                errors.append("final.presentation.youtube must be an object")
-            else:
-                need(youtube, ["title", "hook", "sections", "closing"], "final.presentation.youtube", errors)
-                for field in ("title", "hook", "closing"):
-                    if not isinstance(youtube.get(field), str) or not youtube.get(field, "").strip():
-                        errors.append(f"final.presentation.youtube.{field} must be a non-empty string")
-                if not isinstance(youtube.get("sections"), list):
-                    errors.append("final.presentation.youtube.sections must be an array")
+            if "youtube" in presentation and presentation["youtube"] is not None:
+                youtube = presentation.get("youtube")
+                if not isinstance(youtube, dict):
+                    errors.append("final.presentation.youtube must be an object")
                 else:
-                    for i, section in enumerate(youtube["sections"]):
-                        if not isinstance(section, dict) or any(not isinstance(section.get(field), str) for field in ("heading", "script")):
-                            errors.append(f"final.presentation.youtube.sections[{i}] must contain heading and script strings")
+                    need(youtube, ["title", "hook", "sections", "closing"], "final.presentation.youtube", errors)
+                    for field in ("title", "hook", "closing"):
+                        if not isinstance(youtube.get(field), str) or not youtube.get(field, "").strip():
+                            errors.append(f"final.presentation.youtube.{field} must be a non-empty string")
+                    if not isinstance(youtube.get("sections"), list):
+                        errors.append("final.presentation.youtube.sections must be an array")
+                    else:
+                        for i, section in enumerate(youtube["sections"]):
+                            if not isinstance(section, dict) or any(not isinstance(section.get(field), str) for field in ("heading", "script")):
+                                errors.append(f"final.presentation.youtube.sections[{i}] must contain heading and script strings")
     return errors
 
 
@@ -1482,7 +1483,8 @@ def export_run(run_dir: Path) -> None:
     }
     atomic_json(run_dir / "prediction.json", bundle)
     atomic_text(run_dir / "prediction.md", render_markdown(input_data, final, review, rows, post_market))
-    atomic_text(run_dir / "youtube-script.md", render_youtube(input_data, final, post_market))
+    if final.get("presentation", {}).get("youtube"):
+        atomic_text(run_dir / "youtube-script.md", render_youtube(input_data, final, post_market))
 
 
 def command_collect(args: argparse.Namespace) -> None:
