@@ -98,6 +98,18 @@
 
 `market_data` 非空時，匯出前必須先產生 `market_comparison.json` 與符合 `post-market.schema.json` 的 `post_market_decision.json`。後者不得包含機率欄位；每個市場 `bet_id` 必須且只能裁決一次，每一列簡表也必須且只能回填一次。市場已取得時，回填建議不得仍寫「待市場價格」或「待即時價格」。只取得部分玩法時，`market_coverage.status` 使用 `partial`，並列出尚未取得的玩法。
 
+## Odds-API.io 賽前盤快照
+
+賠率不是模型輸入。主預測、agy、最終裁決完成後，使用 `shared/markets/collect_odds_api_lol.mjs` 建立由 Odds-API.io 提供、bookmaker 為 Stake 的快照，再執行：
+
+```bash
+python3 prediction-pipeline/scripts/pipeline.py attach-market --run-dir <run> --snapshot odds-snapshot.json
+python3 prediction-pipeline/scripts/pipeline.py post-market --run-dir <run> --domain-skill lol-analysis/SKILL.md
+python3 prediction-pipeline/scripts/pipeline.py export --run-dir <run>
+```
+
+`attach-market` 只重建市場盲的 `model-input.json` 與確定性市場比較；它不重跑 `primary_prediction.json`、`red_team_review.json` 或 `final_prediction.json`。快照必須帶有 bookmaker `Stake`、Odds-API.io provider、Stake 深連結、provider event ID、ISO 8601 擷取時間、原始回應雜湊、事件／玩法／選項與十進位價格。無來源時間戳、非指定 bookmaker、未映射 outcome key 或 API 錯誤一律不合格。
+
 `market_data=[]` 不屬驗證失敗。匯出器在沒有可追溯即時價格時跳過 post-market artifact，仍正常輸出模型機率、公允賠率、價格門檻與0u建議；不得因 Stake 無法存取、未開盤或查無價格而中斷整份分析。
 
 `primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。裁決後正文的非空白字元不得少於主報告的 70%，避免修訂階段把全文壓成簡報式摘要。

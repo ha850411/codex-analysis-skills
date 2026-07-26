@@ -10,7 +10,7 @@
     "model": "gemini-3.6-flash-high"
   },
   "final_adjudication": {
-    "mode": "new_session",
+    "mode": "codex_cli",
     "model": null,
     "reasoning_effort": null
   },

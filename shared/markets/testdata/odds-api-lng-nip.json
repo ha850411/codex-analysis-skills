@@ -1,0 +1,15 @@
+{
+  "id": 4242135875,
+  "home": "LNG Esports",
+  "away": "Ninjas in Pyjamas",
+  "date": "2026-07-26T07:00:00Z",
+  "status": "pending",
+  "league": { "name": "League of Legends - Split 3" },
+  "urls": { "Stake": "https://stake.com/sports/740793-lng-esports-ninjas-in-pyjamas" },
+  "bookmakers": {
+    "Stake": [
+      { "name": "ML", "updatedAt": "2026-07-26T02:51:39.241Z", "odds": [{ "home": "1.95", "away": "1.75" }] },
+      { "name": "1st Map Moneyline", "updatedAt": "2026-07-26T02:51:39.241Z", "odds": [{ "home": "1.92", "away": "1.78" }] }
+    ]
+  }
+}

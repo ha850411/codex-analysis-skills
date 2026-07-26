@@ -1589,6 +1589,85 @@ def command_market(args: argparse.Namespace) -> None:
     atomic_json(run_dir / "market_comparison.json", market_snapshot(input_data, final))
 
 
+def command_attach_market(args: argparse.Namespace) -> None:
+    """Attach a traceable, post-lock market snapshot without rerunning probabilities."""
+    run_dir = args.run_dir
+    input_data = load_json(run_dir / "input.json")
+    model_input = load_json(run_dir / "model-input.json")
+    primary = load_json(run_dir / "primary_prediction.json")
+    review = load_json(run_dir / "red_team_review.json")
+    final = load_json(run_dir / "final_prediction.json")
+    fail_on(
+        validate_input(input_data)
+        + validate_model_input(input_data, model_input)
+        + validate_prediction(primary, "primary")
+        + validate_review(review)
+        + validate_prediction(final, "final")
+        + cross_validate(input_data, primary, review, final)
+    )
+    snapshot = load_json(args.snapshot)
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("market_data"), list):
+        raise PipelineError("market snapshot must be an object containing market_data[]", EXIT_USAGE)
+    source = snapshot.get("source")
+    if not isinstance(source, dict) or source.get("book") != "Stake":
+        raise PipelineError("market snapshot source.book must be Stake", EXIT_USAGE)
+    if not isinstance(source.get("source_url"), str) or not re.match(r"^https://((?:[a-z0-9-]+\.)?stake\.com|api\.odds-api\.io)/", source["source_url"], re.I):
+        raise PipelineError("market snapshot source_url must be a Stake or Odds-API.io HTTPS URL", EXIT_USAGE)
+    candidate = copy.deepcopy(input_data)
+    candidate["market_data"] = snapshot["market_data"]
+    errors = validate_input(candidate) + cross_validate(candidate, primary, review, final)
+    fail_on(errors)
+    prepare(candidate, run_dir)
+    atomic_json(run_dir / "market_comparison.json", market_snapshot(candidate, final))
+    stale_post_market = run_dir / "post_market_decision.json"
+    if stale_post_market.exists():
+        stale_post_market.unlink()
+    print(f"attached {len(candidate['market_data'])} traceable Stake prices; probability artifacts were not rerun")
+
+
+def command_post_market(args: argparse.Namespace) -> None:
+    """Make decisions after probabilities are locked; never rerun primary/final prediction."""
+    run_dir = args.run_dir
+    input_data = load_json(run_dir / "input.json")
+    model_input = load_json(run_dir / "model-input.json")
+    primary = load_json(run_dir / "primary_prediction.json")
+    review = load_json(run_dir / "red_team_review.json")
+    final = load_json(run_dir / "final_prediction.json")
+    errors = (
+        validate_input(input_data)
+        + validate_model_input(input_data, model_input)
+        + validate_prediction(primary, "primary")
+        + validate_review(review)
+        + validate_prediction(final, "final")
+        + cross_validate(input_data, primary, review, final)
+    )
+    fail_on(errors)
+    if not input_data.get("market_data"):
+        raise PipelineError("post-market requires non-empty input.market_data", EXIT_USAGE)
+    snapshot = market_snapshot(input_data, final)
+    atomic_json(run_dir / "market_comparison.json", snapshot)
+    defaults = load_model_defaults(args.model_defaults)
+    final_defaults = defaults["final_adjudication"]
+    final_model = args.final_codex_model if args.final_codex_model is not None else final_defaults["model"]
+    final_effort = args.final_reasoning_effort if args.final_reasoning_effort is not None else final_defaults["reasoning_effort"]
+    print(f"模型執行階段 - 鎖定機率後市場決策：{final_model or 'Codex CLI 設定／預設模型'}（推理強度：{final_effort or '沿用設定'}）")
+    if args.dry_run:
+        atomic_text(run_dir / "post-market-prompt.txt", post_market_prompt(input_data, final, snapshot, args.domain_skill))
+        print("dry-run: 已寫入 post-market-prompt.txt，未呼叫 Codex")
+        return
+    workspace = Path(args.workspace or os.getcwd()).resolve()
+    post_market = invoke_codex(
+        post_market_prompt(input_data, final, snapshot, args.domain_skill),
+        REFS / "post-market.schema.json",
+        run_dir / "post_market_decision.json",
+        workspace,
+        final_model,
+        final_effort,
+        args.timeout,
+    )
+    fail_on(validate_post_market(post_market, input_data, final))
+
+
 def print_model_plan(primary_model: str | None, primary_effort: str | None, agy_model: str | None, final_model: str | None, final_effort: str | None) -> None:
     print("模型執行計畫")
     print(f"- Codex 主預測：{primary_model or 'Codex CLI 設定／預設模型'}（推理強度：{primary_effort or '沿用設定'}）")
@@ -1735,6 +1814,22 @@ def parser() -> argparse.ArgumentParser:
     market = sub.add_parser("market", help="lock deterministic market calculations for post-market decisions")
     market.add_argument("--run-dir", type=Path, required=True)
     market.set_defaults(func=command_market)
+
+    attach = sub.add_parser("attach-market", help="attach a traceable Stake snapshot after final probabilities are locked")
+    attach.add_argument("--run-dir", type=Path, required=True)
+    attach.add_argument("--snapshot", type=Path, required=True)
+    attach.set_defaults(func=command_attach_market)
+
+    post_market = sub.add_parser("post-market", help="make post-lock market decisions without rerunning probabilities")
+    post_market.add_argument("--run-dir", type=Path, required=True)
+    post_market.add_argument("--domain-skill", required=True)
+    post_market.add_argument("--workspace")
+    post_market.add_argument("--model-defaults", type=Path, default=DEFAULT_MODEL_DEFAULTS)
+    post_market.add_argument("--final-codex-model")
+    post_market.add_argument("--final-reasoning-effort", choices=["minimal", "low", "medium", "high", "max"])
+    post_market.add_argument("--timeout", type=int, default=600)
+    post_market.add_argument("--dry-run", action="store_true")
+    post_market.set_defaults(func=command_post_market)
 
     adjudicate = sub.add_parser("adjudicate", help="use a selected Codex model for final adjudication")
     adjudicate.add_argument("--run-dir", type=Path, required=True)

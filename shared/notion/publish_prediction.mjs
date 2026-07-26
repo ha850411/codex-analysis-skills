@@ -115,6 +115,7 @@ Useful options:
   --data-source-id <id>
   --database-id <id>
   --page-id <id>
+  --replace-page-id <id>   Replace root content of an existing page safely
   --property-map '{"prediction":"預測比分","confidence":"信心度"}'
   --dry-run
 `;
@@ -1034,6 +1035,56 @@ async function createPage({ token, notionVersion, parent, properties, blocks }) 
   return page;
 }
 
+async function listRootBlocks({ pageId, token, notionVersion }) {
+  const blocks = [];
+  let cursor;
+  do {
+    const query = new URLSearchParams({ page_size: "100" });
+    if (cursor) query.set("start_cursor", cursor);
+    const response = await notionRequest({
+      method: "GET",
+      path: `/blocks/${pageId}/children?${query.toString()}`,
+      token,
+      notionVersion,
+    });
+    blocks.push(...(response.results ?? []));
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+  return blocks;
+}
+
+async function replacePageContent({ pageId, token, notionVersion, blocks }) {
+  const existing = await listRootBlocks({ pageId, token, notionVersion });
+  const activeBlocks = existing.filter((block) => !block.archived);
+  const protectedChildren = activeBlocks.filter((block) => ["child_page", "child_database"].includes(block.type));
+  if (protectedChildren.length) {
+    throw new Error("Refusing to replace page content because it has child pages or databases. Update the page manually or preserve those children explicitly.");
+  }
+  const deletionBatch = activeBlocks.slice(0, 50);
+  for (let index = 0; index < deletionBatch.length; index += 10) {
+    await Promise.all(deletionBatch.slice(index, index + 10).map(async (block) => {
+      try {
+        await notionRequest({ method: "DELETE", path: `/blocks/${block.id}`, token, notionVersion });
+      } catch (error) {
+        if (!/already archived|block that is archived/i.test(error.message)) throw error;
+      }
+    }));
+  }
+  if (activeBlocks.length > deletionBatch.length) {
+    return { id: pageId, clearing: true, deleted: deletionBatch.length, remaining: activeBlocks.length - deletionBatch.length };
+  }
+  for (let index = 0; index < blocks.length; index += APPEND_CHILD_LIMIT) {
+    await notionRequest({
+      method: "PATCH",
+      path: `/blocks/${pageId}/children`,
+      token,
+      notionVersion,
+      body: { children: blocks.slice(index, index + APPEND_CHILD_LIMIT) },
+    });
+  }
+  return { id: pageId };
+}
+
 function pageUrl(page) {
   if (page?.url) {
     return page.url;
@@ -1070,16 +1121,31 @@ async function main() {
   const summary = await readJsonFile(args.summary);
   const markdown = args.markdown ? await readTextFile(args.markdown) : String(summary.markdown ?? "");
   const record = normalizeRecord(summary, markdown, args);
-  const target = configuredTarget(args);
-  const propertyMap = parsePropertyMap(args);
   const tableLayout = normalizeTableLayout(args.tableLayout || process.env.NOTION_TABLE_LAYOUT);
-  const resolved = await resolveTarget({ target, token, notionVersion, dryRun });
-  const properties = buildProperties(record, resolved.schema, propertyMap);
   const bodyBlocks = [
     ...summaryBlocks(record),
     ...makeTextBlocks("heading_2", "完整分析"),
     ...markdownToBlocks(markdown, { tableLayout }),
   ];
+
+  if (args.replacePageId) {
+    if (dryRun) {
+      process.stdout.write(`${JSON.stringify({ dryRun: true, replacePageId: args.replacePageId, title: record.title, tableLayout, blockCount: bodyBlocks.length }, null, 2)}\n`);
+      return;
+    }
+    const page = await replacePageContent({ token, notionVersion, pageId: args.replacePageId, blocks: bodyBlocks });
+    if (page.clearing) {
+      process.stdout.write(`${JSON.stringify({ ok: true, clearing: true, id: page.id, deleted: page.deleted, remaining: page.remaining }, null, 2)}\n`);
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({ ok: true, replaced: true, id: page.id, url: pageUrl(page), title: record.title, tableLayout, blockCount: bodyBlocks.length }, null, 2)}\n`);
+    return;
+  }
+
+  const target = configuredTarget(args);
+  const propertyMap = parsePropertyMap(args);
+  const resolved = await resolveTarget({ target, token, notionVersion, dryRun });
+  const properties = buildProperties(record, resolved.schema, propertyMap);
 
   if (dryRun) {
     process.stdout.write(
