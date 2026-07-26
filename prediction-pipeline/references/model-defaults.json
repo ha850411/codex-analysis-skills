@@ -11,8 +11,8 @@
   },
   "final_adjudication": {
     "mode": "codex_cli",
-    "model": null,
-    "reasoning_effort": null
+    "model": "gpt-3.6-terra",
+    "reasoning_effort": "high"
   },
   "confirmation_required": false
 }
