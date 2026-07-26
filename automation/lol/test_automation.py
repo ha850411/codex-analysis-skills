@@ -75,7 +75,7 @@ class LolAutomationTests(unittest.TestCase):
             ):
                 self.assertEqual(prediction_main(), 0)
 
-            run_mock.assert_called_once_with(["codex", "exec"])
+            run_mock.assert_called_once_with(["codex", "exec"], timeout=None)
             self.assertFalse((output_dir / "prediction.md").exists())
             self.assertFalse((output_dir / "forecasts.jsonl").exists())
             self.assertFalse((output_dir / "email-notification.json").exists())
@@ -195,7 +195,7 @@ class LolAutomationTests(unittest.TestCase):
                 ) as finalize_mock,
             ):
                 self.assertEqual(prediction_main(), 0)
-            run_mock.assert_called_once_with(["codex", "exec"])
+            run_mock.assert_called_once_with(["codex", "exec"], timeout=None)
             finalize_mock.assert_not_called()
 
     def test_filters_tier_and_rolling_1000_window(self) -> None:

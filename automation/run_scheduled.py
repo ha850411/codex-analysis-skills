@@ -22,11 +22,14 @@ PHASE_SCRIPTS = {
     "prediction": "predict_next_day.py",
     "review": "review_today.py",
 }
-def module_environment(settings: dict[str, object]) -> dict[str, str]:
+def module_environment(settings: dict[str, object], phase: str) -> dict[str, str]:
     """將單一模組的模型設定轉成子程序專用環境變數。"""
     env = os.environ.copy()
     env["AUTOMATION_CODEX_MODEL"] = str(settings["model"]).strip()
     env["AUTOMATION_REASONING_EFFORT"] = str(settings["reasoning_effort"])
+    limits = settings.get("max_runtime_minutes", {})
+    if isinstance(limits, dict) and phase in limits:
+        env["AUTOMATION_CODEX_TIMEOUT_SECONDS"] = str(int(limits[phase]) * 60)
     return env
 
 
@@ -74,7 +77,7 @@ def main() -> int:
             [sys.executable, str(script), *args.extra],
             cwd=REPO_ROOT,
             check=False,
-            env=module_environment(modules[name]),
+            env=module_environment(modules[name], args.phase),
         )
         if result.returncode:
             failures.append(name)

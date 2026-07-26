@@ -22,7 +22,7 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, TAIPEI, JobError, atomic_json, assert_nonempty,
-    cleanup_old_reports, codex_command, fail, job_lock, load_jsonl,
+    cleanup_old_reports, codex_command, codex_timeout_seconds, fail, job_lock, load_jsonl,
     recreate_dated_output_dir, run, send_email, target_date, write_status,
 )
 from config import ConfigError, module_schedule_time
@@ -603,7 +603,10 @@ def main() -> int:
             }
             atomic_json(output_dir / "schedule-precheck.json", snapshot)
             write_status(output_dir, "prediction", "running", target_date=target)
-            run(codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)))
+            run(
+                codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)),
+                timeout=codex_timeout_seconds(),
+            )
             verification = validate_schedule_verification(
                 output_dir / "schedule-verification.json",
                 output_dir / "schedule-precheck.json",

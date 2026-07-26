@@ -84,7 +84,7 @@ class DispatcherConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_config(invalid_effort)
 
-    def test_schedule_requires_strict_hhmm_and_review_before_prediction(self) -> None:
+    def test_schedule_requires_strict_hhmm(self) -> None:
         invalid_format = self.write(
             {
                 "timezone": "Asia/Taipei",
@@ -94,14 +94,13 @@ class DispatcherConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "HH:MM"):
             load_config(invalid_format)
 
-        invalid_order = self.write(
+        later_review = self.write(
             {
                 "timezone": "Asia/Taipei",
                 "modules": {"mlb": self.module(prediction="09:00", review="09:30")},
             }
         )
-        with self.assertRaisesRegex(ConfigError, "earlier than prediction"):
-            load_config(invalid_order)
+        self.assertEqual(load_config(later_review)["mlb"]["schedule"]["review"], "09:30")
 
     def test_module_schedule_time_is_loaded_from_json(self) -> None:
         path = self.write(
@@ -133,9 +132,17 @@ class DispatcherConfigTests(unittest.TestCase):
         self.assertIn("review --module mlb", crontab)
 
     def test_module_environment_passes_codex_settings(self) -> None:
-        env = module_environment({"model": "gpt-5.6-sol", "reasoning_effort": "high"})
+        env = module_environment(
+            {
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "max_runtime_minutes": {"prediction": 180, "review": 240},
+            },
+            "prediction",
+        )
         self.assertEqual(env["AUTOMATION_CODEX_MODEL"], "gpt-5.6-sol")
         self.assertEqual(env["AUTOMATION_REASONING_EFFORT"], "high")
+        self.assertEqual(env["AUTOMATION_CODEX_TIMEOUT_SECONDS"], "10800")
 
     def test_module_filter_is_parsed_without_consuming_job_arguments(self) -> None:
         with mock.patch.object(

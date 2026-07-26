@@ -81,10 +81,17 @@ def load_config(path: Path | None = None) -> dict[str, dict[str, object]]:
             )
             for phase in SCHEDULE_PHASES
         }
-        if parsed_times["review"] >= parsed_times["prediction"]:
-            raise ConfigError(
-                f"modules.{name}.schedule.review must be earlier than prediction"
-            )
+        limits = settings.get("max_runtime_minutes")
+        if limits is not None:
+            if not isinstance(limits, dict) or set(limits) != set(SCHEDULE_PHASES):
+                raise ConfigError(
+                    f"modules.{name}.max_runtime_minutes must define prediction and review"
+                )
+            for phase, minutes in limits.items():
+                if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes < 1:
+                    raise ConfigError(
+                        f"modules.{name}.max_runtime_minutes.{phase} must be a positive integer"
+                    )
 
         if name == "lol" and settings.get("enabled"):
             if (

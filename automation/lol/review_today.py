@@ -18,6 +18,7 @@ os.environ["AUTOMATION_MODULE"] = "lol"
 
 from common import (
     REPO_ROOT, STATE_ROOT, JobError, assert_nonempty, atomic_json, codex_command,
+    codex_timeout_seconds,
     fail, github_env, github_git_env, job_lock, load_factor_registry,
     load_improvement_plan, load_jsonl, load_pr_summary, notify_review_by_email,
     require_executable, review_branch, run, merge_pull_request,
@@ -256,7 +257,8 @@ def main() -> int:
                         else None,
                     ),
                     add_dirs=(review_dir,),
-                )
+                ),
+                timeout=codex_timeout_seconds(),
             )
             assert_nonempty(report)
             if (

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -174,6 +175,20 @@ def require_executable(name: str, env_name: str | None = None) -> str:
     return executable
 
 
+def codex_timeout_seconds() -> int | None:
+    """Return the configured hard limit for a Codex job, if one is set."""
+    value = os.environ.get("AUTOMATION_CODEX_TIMEOUT_SECONDS", "").strip()
+    if not value:
+        return None
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise JobError("AUTOMATION_CODEX_TIMEOUT_SECONDS must be a whole number") from exc
+    if seconds < 60:
+        raise JobError("AUTOMATION_CODEX_TIMEOUT_SECONDS must be at least 60")
+    return seconds
+
+
 def run(
     argv: Sequence[str],
     *,
@@ -181,19 +196,44 @@ def run(
     check: bool = True,
     capture: bool = False,
     env: dict[str, str] | None = None,
+    timeout: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)
-    result = subprocess.run(
-        list(argv),
-        cwd=cwd,
-        env=merged_env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
-    )
+    if timeout is None:
+        result = subprocess.run(
+            list(argv),
+            cwd=cwd,
+            env=merged_env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.STDOUT if capture else None,
+        )
+    else:
+        process = subprocess.Popen(
+            list(argv),
+            cwd=cwd,
+            env=merged_env,
+            text=True,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.STDOUT if capture else None,
+            start_new_session=True,
+        )
+        try:
+            output, _ = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+            raise JobError(
+                f"Command timed out after {timeout} seconds: {' '.join(argv)}"
+            ) from exc
+        result = subprocess.CompletedProcess(list(argv), process.returncode, output)
     if check and result.returncode != 0:
         detail = f"\n{result.stdout.strip()}" if capture and result.stdout else ""
         raise JobError(f"Command failed ({result.returncode}): {' '.join(argv)}{detail}")
@@ -216,12 +256,28 @@ def job_lock(name: str) -> Iterator[None]:
     try:
         lock.mkdir()
     except FileExistsError as exc:
-        raise JobError(f"Job is already running: {name} ({lock})") from exc
+        owner = lock / "owner.pid"
+        try:
+            pid = int(owner.read_text(encoding="ascii").strip())
+            os.kill(pid, 0)
+        except (FileNotFoundError, ProcessLookupError, ValueError):
+            # A killed cron process cannot run the context manager's cleanup.
+            # Only reclaim locks whose recorded owner no longer exists.
+            shutil.rmtree(lock)
+            try:
+                lock.mkdir()
+            except FileExistsError as retry_exc:
+                raise JobError(f"Job is already running: {name} ({lock})") from retry_exc
+        except PermissionError:
+            raise JobError(f"Job is already running: {name} ({lock})") from exc
+        else:
+            raise JobError(f"Job is already running: {name} ({lock})") from exc
+    (lock / "owner.pid").write_text(str(os.getpid()), encoding="ascii")
     try:
         yield
     finally:
         try:
-            lock.rmdir()
+            shutil.rmtree(lock)
         except FileNotFoundError:
             pass
 
