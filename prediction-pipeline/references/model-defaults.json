@@ -3,16 +3,16 @@
   "description": "agy 紅隊流程的預選模型；每次執行先告知模型計畫後自動開始。",
   "primary_prediction": {
     "mode": "current_session",
-    "model": "gpt-5.6-terra",
-    "reasoning_effort": "high"
+    "model": null,
+    "reasoning_effort": null
   },
   "red_team": {
     "model": "gemini-3.6-flash-high"
   },
   "final_adjudication": {
     "mode": "new_session",
-    "model": "gpt-5.6-terra",
-    "reasoning_effort": "high"
+    "model": null,
+    "reasoning_effort": null
   },
   "confirmation_required": false
 }

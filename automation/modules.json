@@ -3,7 +3,7 @@
   "modules": {
     "mlb": {
       "enabled": true,
-      "model": "gpt-5.6-sol",
+      "model": "gpt-5.6-terra",
       "reasoning_effort": "high",
       "schedule": {
         "prediction": "21:00",
@@ -12,7 +12,7 @@
     },
     "lol": {
       "enabled": true,
-      "model": "gpt-5.6-sol",
+      "model": "gpt-5.6-terra",
       "reasoning_effort": "high",
       "schedule": {
         "prediction": "10:00",
