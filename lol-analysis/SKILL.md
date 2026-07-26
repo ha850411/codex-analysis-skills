@@ -88,7 +88,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 7. **賠率與投注建議**
    - 報告中的市場賠率、公允賠率與價格門檻只可使用十進位格式。
-   - 機率鎖定後，預設以 `../shared/markets/collect_odds_api_lol.mjs` 從 Odds-API.io 建立 bookmaker 指定快照，預設 bookmaker 為 Stake；保存 provider event ID、Stake 深連結、擷取時間與原始回應雜湊。金鑰只從已忽略的 `.env` 的 `ODDS_API_KEY` 讀取，不得傳入 CLI、寫入輸出或版控；若 API 回傳授權、額度、事件或玩法錯誤，明確標為無法擷取。
+   - 機率鎖定後，預設以 `../shared/markets/collect_odds_api.mjs --sport esports` 從 Odds-API.io 建立 bookmaker 指定快照，預設 bookmaker 為 Stake；保存 provider event ID、Stake 深連結、擷取時間與原始回應雜湊。金鑰只從已忽略的 `.env` 的 `ODDS_API_KEY` 讀取，不得傳入 CLI、寫入輸出或版控；若 API 回傳授權、額度、事件或玩法錯誤，明確標為無法擷取。測試只能使用本地 mock response，禁止呼叫真實 API。
    - 如果可取得 Stake 賠率，或使用者提供 Stake 賠率，將市場賠率與模型公允賠率比較。使用者要求投注決策或「玩法」時，依 Stake 當場實際提供情況檢查系列賽獨贏、地圖讓分、總局數、精確比分、首局等相關市場；不得只取得獨贏就宣稱盤口分析完整。
    - 機率鎖定後另做 post-market 決策，逐盤套用推薦閘門並回填最終表格的投注建議。只要已取得任何市場價格，最終表格不得仍顯示「待市場價格」或「待即時價格」。
    - 無法取得部分 Stake 玩法時，明列已取得與未取得的市場類型，將市場覆蓋標為部分；缺盤不得用推估賠率補寫。

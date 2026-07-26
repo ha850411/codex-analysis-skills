@@ -31,7 +31,7 @@ description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、�
 2. HLTV.org：Match Page、近期戰績、地圖紀錄、選手數據、預計陣容與賽程交叉查核。
 3. Liquipedia Counter-Strike：賽事頁、賽制、分組、roster、stand-in 與 veto 規則補充。
 4. 最近一場正式賽與可靠隊記：只在官方／比賽頁尚未更新時補足，並標記推估。
-5. 盤口：Stake 或使用者提供的即時賠率優先；其他市場只作模型完成後的價格比較，不得作為勝負訊號。
+5. 盤口：機率鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport esports` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。API 無法擷取、未開盤或使用者提供更新 Stake 價格時才改用使用者價格；其他市場只作模型完成後的價格比較，不得作為勝負訊號。
 
 更詳細的來源衝突處理見 `references/source-priority.md`。
 
@@ -191,7 +191,7 @@ BO1 只能分析單圖落點與 BO1 高變異，不做 +1.5 maps。
 
 先依可能 veto／選邊情境估計各圖勝率，再建立精確比分主分布；獨贏、至少一圖、橫掃與總地圖數必須由該分布推導。不得把三張單圖勝率視為獨立同分布，也不得分別手填衍生市場。
 
-若 Stake 無法存取或使用者沒有提供賠率，先給模型公允賠率，再請使用者提供即時盤口以精確比較 EV。
+若 Odds-API.io 的 Stake 快照無法擷取、Stake 未開盤且使用者也沒有提供賠率，先給模型公允賠率與價格門檻、標記 0u，再請使用者提供即時 Stake 盤口以精確比較 EV。只取得 ML 時必須標為部分覆蓋。
 
 ## 7. 必要輸出結構
 

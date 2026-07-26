@@ -1,0 +1,9 @@
+[
+  {
+    "id": 4242135875,
+    "home": "LNG Esports",
+    "away": "Ninjas in Pyjamas",
+    "status": "pending",
+    "sport": { "slug": "esports" }
+  }
+]

@@ -49,7 +49,7 @@
 
 ## 盤口
 
-- 盤口優先使用 Odds-API.io 的 bookmaker 指定快照；執行 `shared/markets/collect_odds_api_lol.mjs`，預設只收帳戶已選的 `Stake` 價格，保存 provider event ID、Stake 深連結、擷取時間、原始回應 SHA-256、事件名稱、玩法與十進位價格。不得把其他 bookmaker 的價格標成 Stake。
+- 盤口優先使用 Odds-API.io 的 bookmaker 指定快照；執行 `shared/markets/collect_odds_api.mjs --sport esports`，預設只收帳戶已選的 `Stake` 價格，保存 provider event ID、Stake 深連結、擷取時間、原始回應 SHA-256、事件名稱、玩法與十進位價格。不得把其他 bookmaker 的價格標成 Stake。
 - API 金鑰只能放在已忽略的 `.env` 的 `ODDS_API_KEY`，由收集器讀取；不得傳入 CLI、寫進程式、測資、輸出、日誌或版控。API 401、403、429、找不到事件、未開盤／未覆蓋玩法都必須明確失敗或標記缺失。
 - 收集器目前把 `ML` 轉為可投注的 pipeline `market_data`，並在快照中列出 API 回傳但尚未映射的首局、讓分、總局與精確比分等玩法；不得將未映射的價格納入 EV 或宣稱完整盤口分析。
 - 只在主預測、agy 與最終裁決都鎖定機率後才附加 `market_data`，接著以 `prediction-pipeline/scripts/pipeline.py attach-market` 和 `post-market` 產出市場決策；不得為了取得新價格重跑機率模型。

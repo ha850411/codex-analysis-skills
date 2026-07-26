@@ -71,9 +71,12 @@ Probable pitcher 改變、opener／bullpen game 公告或球數限制更新後�
 
 ## 盤口
 
-1. 使用者提供的 Stake 即時賠率
-2. 使用者指定的 sportsbook
-3. 多市場平均價格作參考
+1. Odds-API.io 的 Stake bookmaker 指定快照（`shared/markets/collect_odds_api.mjs --sport mlb`）
+2. 使用者提供且較新的 Stake 即時賠率
+3. 使用者指定的 sportsbook
+4. 多市場平均價格作參考
+
+在模型鎖定後擷取快照並保存 provider event ID、Stake 深連結、擷取時間與原始回應 SHA-256。無法擷取或未開盤時才改用使用者／指定來源；只取得 ML 必須標為部分覆蓋，不能暗示前五局、讓分、大小分或球員盤已檢查。
 
 分析時以模型機率為主，再比較市場價格。不要把賠率變動直接解讀為必然資訊優勢。
 

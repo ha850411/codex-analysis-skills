@@ -33,6 +33,7 @@ description: "分析 Valorant／特戰英豪電競賽事的賽程、陣容、版
 1. 官方賽事頁、Valorant Esports、各聯賽／隊伍官方社群：確認改期、當場 roster、Patch、Map Pool 與賽制。
 2. VLR.gg：賽程、BO、倒數時間、Match Page、Recent Matches、地圖紀錄。
 3. Liquipedia：賽事頁、賽程、Roster、賽制補充與交叉查核。
+4. 盤口：機率鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport esports` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。API 無法擷取、未開盤或使用者提供更新 Stake 價格時才改用使用者價格，且市場價格不得影響模型機率或信心度。
 
 建議搜尋語句，請替換日期：
 

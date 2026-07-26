@@ -32,7 +32,7 @@ description: "分析 MLB／美國職棒賽事的賽程、先發投手、打線�
 5. Baseball-Reference / ESPN：game logs、傷兵與比分交叉確認；原始對戰紀錄不作主要特徵。
 6. RotoWire / 官方 beat reporters / 球隊公告：當日先發打線、球數限制、傷兵與休兵資訊。
 7. Weather.gov／球場官方資訊：逐時天氣、風向、屋頂與延賽風險。
-8. 盤口：使用者提供的即時價格或指定 sportsbook 優先；只能在模型鎖定後比較，不可進入模型。
+8. 盤口：模型鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport mlb` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。僅在 API 無法擷取、Stake 未開盤或使用者提供更新 Stake 價格時改用使用者／指定 sportsbook 價格；不可進入模型。
 
 更詳細的來源衝突處理見 `references/source-priority.md`。
 
@@ -103,7 +103,7 @@ python mlb-analysis/scripts/build_public_baseline.py \
 
 完整分析至少提供雙方期望得分與 50%／80% 區間、全場獨贏方向性勝率與公允賠率、前五局三路（具體標明隊名）、基準線大小分勝率預測，以及模型信心度。精確比分不是主要目標；只有使用者要求時才列最可能比分及其個別機率。
 
-依 `references/modeling-framework.md` 執行推薦閘門：正式打線、先發工作量、勝利組可用性或關鍵屋頂／天氣未核對，且缺口足以翻轉方向時，輸出等待條件與價格門檻，不硬給下注。模型機率鎖定後才讀市場；無可追溯即時價格不得給注碼。`public-data-baseline` 雖然注碼固定 0u，但必須明確提供：
+依 `references/modeling-framework.md` 執行推薦閘門：正式打線、先發工作量、勝利組可用性或關鍵屋頂／天氣未核對，且缺口足以翻轉方向時，輸出等待條件與價格門檻，不硬給下注。模型機率鎖定後優先讀 Odds-API.io Stake 快照；無可追溯即時價格不得給注碼，且只取得 ML 時標為部分覆蓋。`public-data-baseline` 雖然注碼固定 0u，但必須明確提供：
 1. **方向性傾向與公允賠率**（如：`水手 ML 54.92%, 公允賠率 1.821`）。
 2. **進場門檻價格**（如：`賠率 >= 1.85 時具邊際價值`）。
 3. **觀測 Tier 分類**（`Tier 1 觀測首選`、`Tier 2 方向性觀察`、`Tier 3 偏五五開/觀望`）。

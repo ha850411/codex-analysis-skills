@@ -1,0 +1,14 @@
+{
+  "id": 981273,
+  "home": "Home Nation",
+  "away": "Away Nation",
+  "date": "2026-07-26T07:00:00Z",
+  "status": "pending",
+  "league": { "name": "FIFA World Cup" },
+  "urls": { "Stake": "https://stake.com/sports/home-away" },
+  "bookmakers": {
+    "Stake": [
+      { "name": "ML", "updatedAt": "2026-07-26T02:51:39.241Z", "odds": [{ "home": "2.15", "draw": "3.20", "away": "3.40" }] }
+    ]
+  }
+}

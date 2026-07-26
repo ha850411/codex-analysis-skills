@@ -38,7 +38,7 @@ description: "分析 Dota 2 電競賽事的賽程、陣容、版本、英雄池�
 2. 官方賽事頁 / 主辦方公告 / 官方社群：ESL、PGL、BLAST、FISSURE、EWC/Riyadh、Valve / Dota 2 official，用於確認改期、賽制、替補、patch 與 rulebook。
 3. STRATZ、DatDota、DOTABUFF Esports、OpenDota：隊伍與選手近期戰績、英雄池、BP、分路、KDA/GPM/XPM、tower/Roshan、比賽 replay 資料。
 4. 官方 VOD / Twitch / YouTube / DotaTV replay：用於確認 Draft、分路、關鍵團戰、Roshan、買活與高地決策。
-5. 盤口：Stake 或使用者提供的即時賠率優先；其他市場只作參考。
+5. 盤口：機率鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport esports` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。API 無法擷取、未開盤或使用者提供更新 Stake 價格時才改用使用者價格；其他市場只作參考。
 
 建議搜尋語句，替換日期或賽事名稱：
 
@@ -174,7 +174,7 @@ Draft 推估要點：
 
 先以可能 draft、選邊與局間調整情境建立逐局勝率，再形成精確比分主分布；系列賽勝率、至少一局、+1.5 maps 與總局數都從同一分布推導。BO2 的 2-0／1-1／0-2 是主分布，不可再獨立估計互相矛盾的「不敗率」。
 
-若 Stake 無法存取或使用者沒有提供賠率，先給模型公允賠率，再請使用者提供即時盤口以精確比較 EV。
+若 Odds-API.io 的 Stake 快照無法擷取、Stake 未開盤且使用者也沒有提供賠率，先給模型公允賠率與價格門檻、標記 0u，再請使用者提供即時 Stake 盤口以精確比較 EV。只取得 ML 時必須標為部分覆蓋。
 
 ## 8. 必要輸出結構
 

@@ -29,7 +29,7 @@ description: "分析 NBA／美國職籃賽事的賽程、傷兵、先發、輪�
 2. 官方 Injury Report / 球隊公告 / beat reporters：球員出賽狀態、輪休、minutes restriction、starting lineup。
 3. ESPN / Rotowire / Underdog NBA / FantasyLabs：傷兵、先發與臨場消息交叉確認。
 4. Basketball-Reference / NBA.com/stats / PBPStats / Cleaning the Glass：攻防效率、pace、lineup、on/off、shot profile 與 advanced stats。
-5. 盤口：Stake 或使用者提供的即時賠率優先；其他市場只作參考，不可把市場價格當成模型結論。
+5. 盤口：機率鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport nba` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。API 無法擷取、未開盤或使用者提供更新 Stake 價格時才改用使用者價格；其他市場只作參考，不可把市場價格當成模型結論。
 
 更詳細的來源衝突處理見 `references/source-priority.md`。
 
@@ -121,6 +121,8 @@ description: "分析 NBA／美國職籃賽事的賽程、傷兵、先發、輪�
 - 模型信心度百分比。只反映資料品質、傷兵與先發確定性、樣本相關性及模型一致性；投注價值另列，不得混入信心度。
 
 對 Questionable／GTD、minutes restriction 與 late scratch 建立可解釋的上場情境，先估計回合數與雙方每回合得分，再形成得分差 × 總分的聯合分布；獨贏、讓分、大小分與隊伍總分都從同一分布推導。半場、首節與球員盤若沒有相應的輪替／分鐘分布，填 `N/A（資料不足）`，不得從全場機率直接縮放。
+
+完成機率鎖定後才取得市場：優先 Odds-API.io Stake 快照，未取得時輸出公允賠率、價格門檻與 0u；只取得 ML 時不得宣稱已完成讓分、大小分、節次或球員盤的檢查。
 
 ## 5. 必要輸出結構
 

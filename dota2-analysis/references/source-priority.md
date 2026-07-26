@@ -18,7 +18,7 @@
    - 用於確認 draft、分路、rune、stack、smoke、Roshan、buyback、高地與關鍵團戰。
 
 5. 盤口
-   - Stake 或使用者提供的即時賠率優先；其他市場只作參考。
+   - 機率鎖定後，優先以 Odds-API.io 的 Stake bookmaker 指定快照（`shared/markets/collect_odds_api.mjs --sport esports`）；API 無法擷取、未開盤或使用者提供較新 Stake 價格時才改用使用者價格。保存 event ID、Stake 深連結、擷取時間與回應 SHA-256；只取得 ML 必須標為部分覆蓋。其他市場只作參考。
    - 盤口只用於 EV 與價格門檻，不得用來反推勝率或賽果方向。
 
 ## 衝突處理

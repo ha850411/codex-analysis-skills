@@ -54,9 +54,12 @@ LAN 表現、online ping、跨洲旅行、簽證與時差都可能影響判斷�
 
 ## 盤口
 
-1. 使用者提供的 Stake 即時賠率
-2. 使用者指定的 sportsbook
-3. 多市場平均價格作參考
+1. Odds-API.io 的 Stake bookmaker 指定快照（`shared/markets/collect_odds_api.mjs --sport esports`）
+2. 使用者提供且較新的 Stake 即時賠率
+3. 使用者指定的 sportsbook
+4. 多市場平均價格作參考
+
+先在模型鎖定後擷取快照，保存 provider event ID、Stake 深連結、擷取時間與原始回應 SHA-256。API 無法擷取、未開盤或未覆蓋玩法時明確標記；只取得 ML 即為部分覆蓋，不能宣稱已完成其他玩法。測試只能使用本地 mock response，禁止真實 API 呼叫。
 
 必須先以賽事證據獨立完成模型機率，再比較市場價格。盤口升降只能用於記錄價格變化與投注時機風險，不得作為勝負訊號、反證、模型機率或模型信心度的校準依據。
 

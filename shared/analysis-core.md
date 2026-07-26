@@ -60,6 +60,8 @@
 
 Stake 無法存取、尚未開盤或查無可追溯價格時，分析與匯出照常完成；市場資料缺失不是停止條件。此時列出模型公允賠率、最低可接受價格、缺價原因與0u，不建立虛構市場價格。
 
+所有現有賽事模組的預設 Stake 價格來源是 Odds-API.io bookmaker 指定快照，且必須在機率鎖定後優先嘗試擷取。使用 `shared/markets/collect_odds_api.mjs`，並依模組傳入 sport：CS2／Dota 2／LoL／Valorant=`esports`、MLB=`mlb`、NBA=`nba`、世界盃=`football`。快照必須保存 provider event ID、Stake 深連結、擷取時間與原始回應 SHA-256；只有 API 無法擷取、未開盤或使用者提供了更新的 Stake 價格時，才可改用使用者價格，並明示來源與覆蓋範圍。測試只能使用本地 mock response，禁止呼叫真實 API。
+
 所有賠率使用十進位。不得承諾獲利、鼓勵追損或建議 all-in。
 
 ```text

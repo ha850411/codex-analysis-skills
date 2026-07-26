@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/** Collect bookmaker-specific LoL prices from Odds-API.io without exposing its API key. */
+/** Collect bookmaker-specific Odds-API.io prices without exposing its API key.
+ * Defaults to esports for backward compatibility with the LoL workflow. */
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -12,17 +13,20 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const args = { bookmaker: 'Stake', markets: [] };
+  const args = { bookmaker: 'Stake', markets: [], sport: 'esports' };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--help' || token === '-h') args.help = true;
     else if (token === '--event') args.event = argv[++index];
     else if (token === '--event-id') args.eventId = argv[++index];
     else if (token === '--bookmaker') args.bookmaker = argv[++index];
+    else if (token === '--sport') args.sport = argv[++index];
     else if (token === '--market') args.markets.push(argv[++index]);
     else if (token === '--home-outcome') args.homeOutcome = argv[++index];
     else if (token === '--away-outcome') args.awayOutcome = argv[++index];
+    else if (token === '--draw-outcome') args.drawOutcome = argv[++index];
     else if (token === '--env-file') args.envFile = argv[++index];
+    else if (token === '--events-response') args.eventsResponse = argv[++index];
     else if (token === '--response') args.response = argv[++index];
     else if (token === '--output') args.output = argv[++index];
     else fail(`unknown argument: ${token}`);
@@ -32,14 +36,16 @@ function parseArgs(argv) {
 
 function usage() {
   return `Usage:
-  node collect_odds_api_lol.mjs --event "LNG Esports - Ninjas in Pyjamas" \\
+  node collect_odds_api.mjs --sport esports --event "LNG Esports - Ninjas in Pyjamas" \\
     --home-outcome lng_ml --away-outcome nip_ml --output odds-snapshot.json
 
-  node collect_odds_api_lol.mjs --event-id 4242135875 --bookmaker Stake \\
-    --market ML --home-outcome lng_ml --away-outcome nip_ml --output odds-snapshot.json
+  node collect_odds_api.mjs --sport football --event-id 4242135875 --bookmaker Stake \\
+    --home-outcome home_ml --draw-outcome draw_ml --away-outcome away_ml \\
+    --market ML --output odds-snapshot.json
 
 The API key is read only from ODDS_API_KEY in .env (or the process environment).
-The default bookmaker is Stake. --response is a saved raw /v3/odds response for tests.`;
+The default bookmaker is Stake. --response and --events-response are local mocked
+/v3/odds and /v3/events responses for tests; they never make network requests.`;
 }
 
 function normalise(value) {
@@ -85,10 +91,11 @@ function eventName(event) {
   return `${event.home} - ${event.away}`;
 }
 
-async function resolveEvent(args, apiKey) {
+async function resolveEvent(args, apiKey, mockedEvents = null) {
   if (args.eventId) return Number(args.eventId);
   if (!args.event) fail('provide --event or --event-id');
-  const { data } = await apiJson('/events', { sport: 'esports', bookmaker: args.bookmaker, status: 'pending', limit: 500 }, apiKey);
+  const data = mockedEvents ?? (await apiJson('/events', { sport: args.sport, bookmaker: args.bookmaker, status: 'pending', limit: 500 }, apiKey)).data;
+  if (!Array.isArray(data)) fail('events response is not an array');
   const matches = data.filter((item) => normalise(eventName(item)) === normalise(args.event));
   if (matches.length !== 1) fail(matches.length ? `event is ambiguous: ${args.event}; pass --event-id` : `event was not found for ${args.bookmaker}: ${args.event}`);
   return matches[0].id;
@@ -109,10 +116,17 @@ function marketDataForMl(event, bookmaker, market, args, retrievedAt, sourceUrl)
   const row = market.odds?.[0];
   if (!row || row.home == null || row.away == null) fail(`${bookmaker} ML response is missing home/away prices`);
   const prefix = `odds-api:${event.id}:${slug(bookmaker)}:${slug(market.name)}`;
-  return [
+  const data = [
     { bet_id: `${prefix}:home`, outcome_key: args.homeOutcome, decimal_odds: oddsNumber(row.home, 'home odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.home}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name },
     { bet_id: `${prefix}:away`, outcome_key: args.awayOutcome, decimal_odds: oddsNumber(row.away, 'away odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.away}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name }
   ];
+  if (row.draw != null) {
+    if (!args.drawOutcome) fail('three-way ML import requires --draw-outcome from final_prediction.json');
+    data.splice(1, 0, { bet_id: `${prefix}:draw`, outcome_key: args.drawOutcome, decimal_odds: oddsNumber(row.draw, 'draw odds'), book: bookmaker, label: `${bookmaker} ${market.name} — draw`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name });
+  } else if (args.drawOutcome) {
+    fail('draw outcome was supplied but the ML response has no draw price');
+  }
+  return data;
 }
 
 async function main() {
@@ -122,8 +136,19 @@ async function main() {
   let event;
   let remaining = null;
   if (args.response) {
-    event = JSON.parse(await readFile(args.response, 'utf8'));
+    if (args.eventsResponse) {
+      const mockedEvents = JSON.parse(await readFile(args.eventsResponse, 'utf8'));
+      const resolvedId = await resolveEvent(args, null, mockedEvents);
+      const mockedOdds = JSON.parse(await readFile(args.response, 'utf8'));
+      if (Number(mockedOdds.id) !== resolvedId) fail('mocked events and odds responses resolve to different event IDs');
+      event = mockedOdds;
+    } else if (args.event) {
+      fail('--event with --response requires --events-response so the event lookup remains mocked');
+    } else {
+      event = JSON.parse(await readFile(args.response, 'utf8'));
+    }
   } else {
+    if (args.eventsResponse) fail('--events-response is only valid together with --response');
     await loadEnv(args.envFile || '.env');
     const apiKey = process.env.ODDS_API_KEY;
     if (!apiKey) fail('ODDS_API_KEY is missing; add it to ignored .env or export it in the process environment');
@@ -141,7 +166,7 @@ async function main() {
   const raw = JSON.stringify(event);
   const result = {
     schema_version: '1.0',
-    source: { book: args.bookmaker, provider: 'Odds-API.io', source_url: sourceUrl, provider_url: `${API_BASE}/odds`, retrieved_at: retrievedAt, response_sha256: createHash('sha256').update(raw).digest('hex'), rate_limit_remaining: remaining },
+    source: { book: args.bookmaker, provider: 'Odds-API.io', sport: args.sport, source_url: sourceUrl, provider_url: `${API_BASE}/odds`, retrieved_at: retrievedAt, response_sha256: createHash('sha256').update(raw).digest('hex'), rate_limit_remaining: remaining },
     event: { provider_event_id: event.id, display_name: eventName(event), participants: [event.home, event.away], start_time: event.date, competition: event.league?.name ?? null, status: event.status },
     coverage: { status: 'partial', captured_market_types: selected.map((market) => market.name), available_market_types: all.map((market) => market.name), unavailable_or_not_mapped: all.filter((market) => !selected.includes(market)).map((market) => market.name) },
     market_data: marketData
