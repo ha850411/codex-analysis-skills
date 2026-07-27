@@ -189,7 +189,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
 4. 嚴格先鎖定模型機率，再查市場。只有 public-baseline.json 明確缺少某 game ID 時，
    才能把該場標成 unmodeled；不得因缺少付費投影或正式打線，把已存在的 baseline 整場清空。
 5. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
-6. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的 daily-summary 輸出契約：不要為 17 場重複完整單場模板；先給全日結論與賽程盤點，再以一張數值比較表列全場，只展開最多 3 場觀察名單，且全文最後只有一個「簡表總結」。
+6. 寫入 {output_dir / 'prediction.md'}，必須符合 skill 的 daily-summary 輸出契約：不要為多場比賽重複完整單場模板；先給全日總覽，接著提供「🔥 每日精選 Top 3 最穩推薦 (Solid Picks)」，全賽程比較表與簡表總結一律【依模型信心度由高至低降序排序】（不按開賽時間排序），所有數據與數值（勝率%、公允賠率、預估得分、門檻價格等）統一計算並四捨五入至小數點第二位 (2 decimal places)，只展開最多 3 場重點觀察名單，且全文最後只有一個「簡表總結」。
 7. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    game_id, predicted_at, first_pitch, snapshot, model_version, away_team, home_team,
    away_f5_runs_mean, home_f5_runs_mean, away_late_runs_mean, home_late_runs_mean,
