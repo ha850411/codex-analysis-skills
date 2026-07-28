@@ -51,6 +51,31 @@ class AvailabilityAuditTests(unittest.TestCase):
         self.assertEqual(audit["unscored_records"], 1)
         self.assertEqual(audit["missing_data_counts"], {"lineup": 2, "weather": 1})
 
+    def test_postponed_baseline_is_retained_but_excluded_from_scoring(self) -> None:
+        record = _validate_record(
+            {
+                "game_id": "postponed-1",
+                "snapshot": "pre-lineup",
+                "model_version": "baseline-v1",
+                "status": "baseline",
+                "home_win_prob": 0.55,
+                "away_runs_mean": 4.1,
+                "home_runs_mean": 4.4,
+                "missing_data": ["lineup"],
+                "actual_away_runs": None,
+                "actual_home_runs": None,
+                "actual_status": "Postponed",
+            },
+            1,
+        )
+
+        audit = availability_audit([record])
+
+        self.assertFalse(record["_scorable"])
+        self.assertTrue(record["_settlement_excluded"])
+        self.assertEqual(audit["scorable_records"], 0)
+        self.assertEqual(audit["settlement_excluded_records"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

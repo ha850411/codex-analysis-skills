@@ -70,8 +70,26 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     if not isinstance(status, str) or not status.strip():
         raise ValueError(f"record {line_number}: status must be non-empty")
     status = status.strip()
-    scorable = status in {"modeled", "baseline"}
+    actual_status = record.get("actual_status")
+    settlement_excluded = isinstance(actual_status, str) and actual_status.strip().lower() in {
+        "postponed",
+        "cancelled",
+        "canceled",
+        "suspended",
+        "no contest",
+    }
+    scorable = status in {"modeled", "baseline"} and not settlement_excluded
     required = REQUIRED_FIELDS if scorable else UNMODELED_REQUIRED_FIELDS
+    if settlement_excluded:
+        required = {
+            "game_id",
+            "snapshot",
+            "model_version",
+            "status",
+            "actual_away_runs",
+            "actual_home_runs",
+            "actual_status",
+        }
     missing = sorted(required - record.keys())
     if missing:
         raise ValueError(f"record {line_number} missing: {', '.join(missing)}")
@@ -101,16 +119,23 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
         if not all(isinstance(value, str) and value.strip() for value in missing_data):
             raise ValueError(f"record {line_number}: missing_data values must be non-empty strings")
 
-    for key in ("actual_away_runs", "actual_home_runs"):
-        cleaned[key] = _number(cleaned, key)
-        if cleaned[key] < 0:
-            raise ValueError(f"record {line_number}: {key} cannot be negative")
-    for key in ("actual_away_runs", "actual_home_runs"):
-        if not cleaned[key].is_integer():
-            raise ValueError(f"record {line_number}: {key} must be an integer")
-        cleaned[key] = int(cleaned[key])
-    if cleaned["actual_away_runs"] == cleaned["actual_home_runs"]:
-        raise ValueError(f"record {line_number}: settled MLB games cannot end tied")
+    if settlement_excluded:
+        if cleaned["actual_away_runs"] is not None or cleaned["actual_home_runs"] is not None:
+            raise ValueError(
+                f"record {line_number}: unsettled games require null actual run fields"
+            )
+        cleaned["_settlement_excluded"] = True
+    else:
+        for key in ("actual_away_runs", "actual_home_runs"):
+            cleaned[key] = _number(cleaned, key)
+            if cleaned[key] < 0:
+                raise ValueError(f"record {line_number}: {key} cannot be negative")
+        for key in ("actual_away_runs", "actual_home_runs"):
+            if not cleaned[key].is_integer():
+                raise ValueError(f"record {line_number}: {key} must be an integer")
+            cleaned[key] = int(cleaned[key])
+        if cleaned["actual_away_runs"] == cleaned["actual_home_runs"]:
+            raise ValueError(f"record {line_number}: settled MLB games cannot end tied")
 
     if scorable and "market_home_prob_no_vig" in cleaned and cleaned["market_home_prob_no_vig"] is not None:
         cleaned["market_home_prob_no_vig"] = _probability(cleaned, "market_home_prob_no_vig")
@@ -318,13 +343,18 @@ def availability_audit(records: list[dict[str, Any]]) -> dict[str, Any]:
         "total_records": total,
         "scorable_records": len(scorable),
         "unscored_records": len(unscored),
+        "settlement_excluded_records": sum(
+            1 for record in records if record.get("_settlement_excluded", False)
+        ),
         "model_coverage": _round(len(scorable) / total) if total else 0.0,
         "status_counts": dict(sorted(status_counts.items())),
         "missing_data_counts": dict(sorted(missing_data_counts.items())),
         "by_snapshot": dict(sorted(snapshots.items())),
         "note": (
-            "status=modeled and status=baseline records enter scoring; keep model_version "
-            "and status cohorts separate because baseline is not production-calibrated."
+            "status=modeled and status=baseline records enter scoring only when settled; "
+            "postponed/cancelled/suspended/no-contest records retain their original forecast "
+            "status but are excluded. Keep model_version and status cohorts separate because "
+            "baseline is not production-calibrated."
         ),
     }
 
