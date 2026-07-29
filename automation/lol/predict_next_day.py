@@ -35,6 +35,10 @@ SCORE_KEYS = {
     3: {"2-0", "2-1", "1-2", "0-2"},
     5: {"3-0", "3-1", "3-2", "2-3", "1-3", "0-3"},
 }
+BO3_MATCH_KEY = re.compile(r"bo3:([1-9]\d*)\Z")
+CANONICAL_MATCH_KEY = re.compile(
+    r"lol:[a-z0-9-]+:\d{8}T\d{4}\+0800:[a-z0-9-]+:[a-z0-9-]+\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,25 @@ def _parse_instant(value: object) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _valid_match_key(value: object) -> bool:
+    return isinstance(value, str) and bool(
+        BO3_MATCH_KEY.fullmatch(value) or CANONICAL_MATCH_KEY.fullmatch(value)
+    )
+
+
+def _is_valid_global_schedule_url(url: str) -> bool:
+    """拒絕把單一 LoL Esports 聯賽頁誤標成全域覆蓋。"""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    path = urllib.parse.unquote(parsed.path)
+    if host == "lolesports.com" or host.endswith(".lolesports.com"):
+        marker = "/leagues/"
+        if marker in path:
+            selected = path.split(marker, 1)[1].strip("/")
+            return len([item for item in selected.split(",") if item]) >= 2
+    return True
 
 
 def forecast_window(target: str) -> tuple[datetime, datetime]:
@@ -170,7 +193,9 @@ def compact_match(record: dict[str, object]) -> dict[str, object]:
     team1 = bets.get("team_1") if isinstance(bets.get("team_1"), dict) else {}
     team2 = bets.get("team_2") if isinstance(bets.get("team_2"), dict) else {}
     slug = str(record.get("slug", ""))
+    match_id = record.get("id")
     return {
+        "match_key": f"bo3:{match_id}" if isinstance(match_id, int) else None,
         "match_id": record.get("id"),
         "start_time": record.get("start_date"),
         "tier": record.get("tier"),
@@ -201,67 +226,94 @@ def prompt_for(target: str, output_dir: Path) -> str:
 - 歷史因子登錄檔：{STATE_ROOT / 'history/factor-registry.json'}（若存在）
 
 要求：
-1. 以 bo3.gg 候選與 Match ID 為主清單，Leaguepedia（lol.fandom.com）／Liquipedia
-   作為獨立核對，並以 Riot／LoL Esports 當場官方賽程處理改期或 wiki 衝突。
-   JSON schema 中將 bo3.gg 與 Riot／LoL Esports 記為 role="official"，Leaguepedia /
-   Liquipedia / 其他非 Riot 賽程記為 role="independent"。
+1. bo3.gg 只作候選與 provider Match ID，不得標成官方來源。必須另外取得：
+   (a) 涵蓋整個視窗與所有 S-Tier 賽區的 Riot／LoL Esports 全域或多賽區官方賽程；
+   (b) Leaguepedia／Liquipedia／OP.GG Esports 的獨立全域賽程，或由逐聯賽獨立頁面
+   組成的 coverage group。聯賽專頁只能貢獻該聯賽子集合，不能單獨證明跨賽區完整；
+   獨立 coverage group 的 match_keys 聯集必須等於官方全域集合，否則停止。
+   bo3.gg、Leaguepedia、Liquipedia、OP.GG 均記為
+   role="independent"；只有 Riot／賽區主辦方記為 role="official"。
 2. 建立 {output_dir / 'schedule-verification.json'}，至少包含：
    verified_at, timezone="Asia/Taipei", window_start, window_end,
-   complete, no_matches, candidate_match_ids, added_match_ids,
-   removed_match_ids, conflicts, sources, matches。
+   complete, no_matches, candidate_match_keys, added_match_keys,
+   removed_match_keys, conflicts, coverage_sources, sources, matches。
+   coverage_sources 必須至少有一筆 role="official"、scope="global-s-tier"，
+   match_keys 等於完整集合。獨立側可有一筆 scope="global-s-tier"，或多筆
+   scope="competition-s-tier" 且各自另含 competition；每筆包含 url, checked_at,
+   match_keys。每個 competition 子集合可只含該聯賽，但同一 role 的 match_keys
+   聯集必須等於最終 matches 完整集合。no_matches=true 時，官方與獨立側都必須各有
+   scope="global-s-tier" 的空集合，不能用聯賽頁拼接證明無賽事。
    sources 每筆包含 role="official" 或 role="independent"、url、checked_at；
-   matches 每筆包含 match_id, start_time, tier="s", bo_type, team1, team2,
-   tournament, source_urls。match_id 必須能回查 bo3.gg。
+   matches 每筆包含 match_key, bo3_match_id, start_time, tier="s", bo_type,
+   team1, team2, tournament, source_urls。每場 source_urls 內用來證明 official 與
+   independent 支持的 URL，必須逐字登錄在頂層 sources，且角色一致；coverage_sources
+   不能代替頂層 sources 的逐場來源索引。
+   有 bo3.gg ID 時 match_key=`bo3:<id>` 且 bo3_match_id 為該整數；bo3.gg 缺場時，
+   match_key 使用
+   `lol:<league-slug>:<YYYYMMDDTHHMM+0800>:<team1-slug>:<team2-slug>`，
+   bo3_match_id=null。slug 只用小寫英數與連字號，必須由已確認資料確定性產生。
 3. 完整集合須至少由一個當前官方來源與一個當前獨立來源支持。發現候選外賽事時補入，
    候選誤列時移除並說明。若 Liquipedia／Leaguepedia 的舊頁面與較新的 Riot 官方賽程
    衝突，依 source-priority 契約採用較新且更接近當場的 Riot 資訊；再以另一個當前獨立
    來源交叉確認。不得要求每一個第三方 wiki 都一致，也不得讓已確認過期的 wiki 單獨
    阻擋流程。被較新官方資訊消解的差異要記錄來源與裁決，但不是未解 conflicts。
-   當前官方＋當前獨立來源支持相同集合、所有 match ID 已取得且沒有未解衝突時寫
+   當前官方全域集合與獨立 coverage group 聯集相同且沒有未解衝突時寫
    complete=true。無賽事也須雙來源確認。
 4. 只有來源不一致且依上述優先序仍無法消解，或仍有未解場次時，才寫 complete=false
    與 conflicts 後停止；不要建立預測、Notion summary 或可發布報告。外層會以失敗狀態
    停止發布與寄信。
-5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露候選／新增／移除場次及驗證來源。
-6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響機率；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。先鎖模型機率，再查市場；缺資料保留 N/A，不捏造。
-7. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。
-8. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
-9. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
-   match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
+5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露官方全域集合、獨立 coverage group 各子集合與聯集、候選／新增／移除場次及驗證來源。
+6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響機率；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。先鎖模型機率，再依 `shared/markets/collection-contract.md` 逐場執行 `shared/markets/collect_odds_api.mjs --sport esports`。每場傳入獨立 `--output`、`--error-output` 與 `--events-output`；event 名稱無法唯一解析時讀 pending event artifact，確認後以 `--event-id` 重跑。不得因一場或第一次網路錯誤跳過其餘場次，也不得在沒有當次錯誤 artifact 時寫「API 無法擷取」。缺價格不改寫模型機率或信心度。
+7. 建立 {output_dir / 'market-collection.json'}，至少包含 schema_version、generated_at、attempts；attempts 必須逐場且與已驗證 match_key 一一對應，每筆包含 match_key、status=`success|failed`、artifact（{output_dir} 內的相對路徑）。success artifact 必須是收集器的 `status=success` 快照；failed artifact 必須是收集器的 `status=failed` 分類錯誤憑證。只有每場都有 artifact 才算完成市場收集。
+8. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json、market-collection.json 與 notion-summary.json。
+9. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
+10. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
+   match_key, bo3_match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
    tournament, tier="s", bo_type, exact_score_probabilities, team1_win_prob,
    team2_win_prob, team1_at_least_one_prob, team2_at_least_one_prob,
    model_confidence, sources。所有機率均用 0..1。
-10. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，「至少一局」必須是被橫掃機率的補數，model_confidence 不得冒充勝率。
-11. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}，並執行
+11. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，「至少一局」必須是被橫掃機率的補數，model_confidence 不得冒充勝率。
+12. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}，並執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
-12. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
-13. 只建立本地 Notion summary；外層程式驗證賽程與機率後才會發布並寄 Email。最後確認所有檔案確實存在。
+13. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
+14. 只建立本地 Notion summary；外層程式驗證賽程、機率與逐場市場 artifact 後才會發布並寄 Email。最後確認所有檔案確實存在。
 """
 
 
 def validate_forecasts(path: Path) -> None:
     required = {
-        "match_id", "predicted_at", "start_time", "snapshot", "model_version",
+        "match_key", "bo3_match_id", "predicted_at", "start_time", "snapshot", "model_version",
         "team1", "team2", "tournament", "tier", "bo_type",
         "exact_score_probabilities", "team1_win_prob", "team2_win_prob",
         "team1_at_least_one_prob", "team2_at_least_one_prob",
         "model_confidence", "sources",
     }
-    seen_match_ids: set[int] = set()
+    seen_match_keys: set[str] = set()
     for index, record in enumerate(load_jsonl(path), 1):
         missing = sorted(required - record.keys())
         if missing:
             raise JobError(f"forecasts.jsonl record {index} missing: {', '.join(missing)}")
-        match_id = record["match_id"]
+        match_key = record["match_key"]
+        bo3_match_id = record["bo3_match_id"]
         if (
-            isinstance(match_id, bool)
-            or not isinstance(match_id, int)
-            or match_id in seen_match_ids
+            not _valid_match_key(match_key)
+            or match_key in seen_match_keys
         ):
             raise JobError(
-                f"forecasts.jsonl record {index}: match_id must be a unique integer"
+                f"forecasts.jsonl record {index}: match_key must be unique and valid"
             )
-        seen_match_ids.add(match_id)
+        bo3_key = BO3_MATCH_KEY.fullmatch(match_key)
+        if (
+            (bo3_key and bo3_match_id != int(bo3_key.group(1)))
+            or (
+                not bo3_key
+                and bo3_match_id is not None
+            )
+        ):
+            raise JobError(
+                f"forecasts.jsonl record {index}: bo3_match_id disagrees with match_key"
+            )
+        seen_match_keys.add(match_key)
         if str(record["tier"]).lower() != "s":
             raise JobError(f"forecasts.jsonl record {index}: tier must be s")
         bo = record["bo_type"]
@@ -304,8 +356,8 @@ def validate_schedule_verification(
         raise JobError("Schedule verification and precheck must be JSON objects")
     required = {
         "verified_at", "timezone", "window_start", "window_end", "complete",
-        "no_matches", "candidate_match_ids", "added_match_ids",
-        "removed_match_ids", "conflicts", "sources", "matches",
+        "no_matches", "candidate_match_keys", "added_match_keys",
+        "removed_match_keys", "conflicts", "coverage_sources", "sources", "matches",
     }
     missing = sorted(required - verification.keys())
     if missing:
@@ -365,21 +417,21 @@ def validate_schedule_verification(
             "Official and independent schedule sources must use different hosts"
         )
 
-    candidate_ids = {
-        item.get("match_id")
+    candidate_keys = {
+        item.get("match_key")
         for item in precheck.get("matches", [])
-        if isinstance(item, dict) and isinstance(item.get("match_id"), int)
+        if isinstance(item, dict) and _valid_match_key(item.get("match_key"))
     }
-    declared_candidate_ids = verification["candidate_match_ids"]
+    declared_candidate_keys = verification["candidate_match_keys"]
     if (
-        not isinstance(declared_candidate_ids, list)
+        not isinstance(declared_candidate_keys, list)
         or any(
-            isinstance(value, bool) or not isinstance(value, int)
-            for value in declared_candidate_ids
+            not _valid_match_key(value)
+            for value in declared_candidate_keys
         )
-        or set(declared_candidate_ids) != candidate_ids
+        or set(declared_candidate_keys) != candidate_keys
     ):
-        raise JobError("Schedule verification candidate IDs disagree with precheck")
+        raise JobError("Schedule verification candidate match keys disagree with precheck")
 
     matches = verification["matches"]
     if not isinstance(matches, list):
@@ -393,60 +445,141 @@ def validate_schedule_verification(
         or end.utcoffset() is None
     ):
         raise JobError("Precheck has invalid forecast window")
-    verified_ids: set[int] = set()
+    verified_keys: set[str] = set()
     match_required = {
-        "match_id", "start_time", "tier", "bo_type", "team1", "team2",
+        "match_key", "bo3_match_id", "start_time", "tier", "bo_type", "team1", "team2",
         "tournament", "source_urls",
     }
     for index, match in enumerate(matches, 1):
         if not isinstance(match, dict) or match_required - match.keys():
             raise JobError(f"Verified match {index} is missing required fields")
-        match_id = match["match_id"]
+        match_key = match["match_key"]
+        bo3_match_id = match["bo3_match_id"]
         instant = _parse_instant(match["start_time"])
         bo_type = match["bo_type"]
         if (
-            isinstance(match_id, bool)
-            or not isinstance(match_id, int)
-            or match_id in verified_ids
+            not _valid_match_key(match_key)
+            or match_key in verified_keys
         ):
-            raise JobError(f"Verified match {index} has invalid or duplicate ID")
+            raise JobError(f"Verified match {index} has invalid or duplicate match key")
+        bo3_key = BO3_MATCH_KEY.fullmatch(match_key)
+        if (
+            (bo3_key and bo3_match_id != int(bo3_key.group(1)))
+            or (not bo3_key and bo3_match_id is not None)
+        ):
+            raise JobError(
+                f"Verified match {match_key} has inconsistent bo3_match_id"
+            )
         if (
             instant is None
             or instant.utcoffset() is None
             or not start <= instant.astimezone(TAIPEI) < end
         ):
-            raise JobError(f"Verified match {match_id} is outside forecast window")
+            raise JobError(f"Verified match {match_key} is outside forecast window")
         if str(match["tier"]).lower() != "s" or bo_type not in SCORE_KEYS:
-            raise JobError(f"Verified match {match_id} has invalid tier or BO")
+            raise JobError(f"Verified match {match_key} has invalid tier or BO")
         if any(
             not isinstance(match[field], str) or not str(match[field]).strip()
             for field in ("team1", "team2", "tournament")
         ):
-            raise JobError(f"Verified match {match_id} has incomplete names")
+            raise JobError(f"Verified match {match_key} has incomplete names")
         refs = match["source_urls"]
         if not isinstance(refs, list):
-            raise JobError(f"Verified match {match_id} source_urls must be a list")
+            raise JobError(f"Verified match {match_key} source_urls must be a list")
         roles = {source_roles.get(ref) for ref in refs}
         if not {"official", "independent"} <= roles:
             raise JobError(
-                f"Verified match {match_id} lacks official and independent support"
+                f"Verified match {match_key} lacks official and independent support"
             )
-        verified_ids.add(match_id)
+        verified_keys.add(match_key)
 
     no_matches = verification["no_matches"]
-    if not isinstance(no_matches, bool) or no_matches != (not verified_ids):
+    if not isinstance(no_matches, bool) or no_matches != (not verified_keys):
         raise JobError("Schedule verification no_matches is inconsistent")
+
+    coverage_sources = verification["coverage_sources"]
+    if not isinstance(coverage_sources, list):
+        raise JobError("Schedule verification coverage_sources must be a list")
+    coverage_roles: set[str] = set()
+    coverage_hosts: dict[str, set[str]] = {"official": set(), "independent": set()}
+    coverage_unions: dict[str, set[str]] = {
+        "official": set(),
+        "independent": set(),
+    }
+    global_roles: set[str] = set()
+    for index, source in enumerate(coverage_sources, 1):
+        if not isinstance(source, dict):
+            raise JobError(f"Coverage source {index} must be an object")
+        role = source.get("role")
+        url = source.get("url")
+        checked_at = _parse_instant(source.get("checked_at"))
+        match_keys = source.get("match_keys")
+        scope = source.get("scope")
+        source_keys = set(match_keys) if isinstance(match_keys, list) else set()
+        if (
+            role not in coverage_hosts
+            or scope not in {"global-s-tier", "competition-s-tier"}
+            or not isinstance(url, str)
+            or checked_at is None
+            or checked_at.utcoffset() is None
+            or not isinstance(match_keys, list)
+            or any(not _valid_match_key(value) for value in match_keys)
+            or not source_keys <= verified_keys
+            or (
+                scope == "competition-s-tier"
+                and (
+                    not isinstance(source.get("competition"), str)
+                    or not source["competition"].strip()
+                )
+            )
+            or (scope == "global-s-tier" and source_keys != verified_keys)
+            or (
+                scope == "global-s-tier"
+                and not _is_valid_global_schedule_url(url)
+            )
+            or source_roles.get(url) != role
+        ):
+            raise JobError(
+                f"Coverage source {index} has invalid scope or match-key coverage"
+            )
+        if abs(verified_at - checked_at) > timedelta(hours=6):
+            raise JobError(f"Coverage source {index} is stale")
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise JobError(f"Coverage source {index} has invalid URL")
+        coverage_roles.add(str(role))
+        coverage_hosts[str(role)].add(parsed.hostname.lower())
+        coverage_unions[str(role)].update(source_keys)
+        if scope == "global-s-tier":
+            global_roles.add(str(role))
+    if coverage_roles != {"official", "independent"}:
+        raise JobError(
+            "Schedule verification requires official and independent global coverage"
+        )
+    if coverage_hosts["official"] & coverage_hosts["independent"]:
+        raise JobError(
+            "Official and independent global coverage must use different hosts"
+        )
+    if coverage_unions["official"] != verified_keys or coverage_unions["independent"] != verified_keys:
+        raise JobError(
+            "Official coverage and independent coverage union must equal the verified schedule"
+        )
+    required_global_roles = (
+        {"official", "independent"} if not verified_keys else {"official"}
+    )
+    if not required_global_roles <= global_roles:
+        raise JobError(
+            "Schedule coverage lacks the required global source role"
+        )
+
     for field, expected in (
-        ("added_match_ids", verified_ids - candidate_ids),
-        ("removed_match_ids", candidate_ids - verified_ids),
+        ("added_match_keys", verified_keys - candidate_keys),
+        ("removed_match_keys", candidate_keys - verified_keys),
     ):
         values = verification[field]
         if (
             not isinstance(values, list)
-            or any(
-                isinstance(value, bool) or not isinstance(value, int)
-                for value in values
-            )
+            or any(not _valid_match_key(value) for value in values)
             or set(values) != expected
         ):
             raise JobError(f"Schedule verification {field} is inconsistent")
@@ -456,20 +589,108 @@ def validate_schedule_verification(
 def validate_forecast_schedule(
     forecasts_path: Path, verification: dict[str, object]
 ) -> None:
-    forecast_ids = {
-        record.get("match_id")
+    forecast_keys = {
+        record.get("match_key")
         for record in load_jsonl(forecasts_path)
-        if isinstance(record.get("match_id"), int)
+        if _valid_match_key(record.get("match_key"))
     }
-    verified_ids = {
-        match.get("match_id")
+    verified_keys = {
+        match.get("match_key")
         for match in verification.get("matches", [])
-        if isinstance(match, dict) and isinstance(match.get("match_id"), int)
+        if isinstance(match, dict) and _valid_match_key(match.get("match_key"))
     }
-    if forecast_ids != verified_ids:
+    if forecast_keys != verified_keys:
         raise JobError(
-            "Forecast match IDs must exactly equal the verified schedule"
+            "Forecast match keys must exactly equal the verified schedule"
         )
+
+
+def validate_market_collection(
+    path: Path, output_dir: Path, verification: dict[str, object]
+) -> dict[str, object]:
+    assert_nonempty(path)
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid market collection JSON: {exc}") from exc
+    attempts = manifest.get("attempts") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or not isinstance(manifest.get("schema_version"), str)
+        or not isinstance(manifest.get("generated_at"), str)
+        or not isinstance(attempts, list)
+    ):
+        raise JobError("Market collection manifest is missing required fields")
+
+    verified_keys = {
+        match.get("match_key")
+        for match in verification.get("matches", [])
+        if isinstance(match, dict) and _valid_match_key(match.get("match_key"))
+    }
+    seen: set[str] = set()
+    output_root = output_dir.resolve()
+    for index, attempt in enumerate(attempts, 1):
+        if not isinstance(attempt, dict):
+            raise JobError(f"Market collection attempt {index} must be an object")
+        match_key = attempt.get("match_key")
+        status = attempt.get("status")
+        artifact_name = attempt.get("artifact")
+        if (
+            not _valid_match_key(match_key)
+            or match_key in seen
+            or status not in {"success", "failed"}
+            or not isinstance(artifact_name, str)
+            or not artifact_name.strip()
+        ):
+            raise JobError(f"Market collection attempt {index} is invalid")
+        artifact_path = (output_dir / artifact_name).resolve()
+        try:
+            artifact_path.relative_to(output_root)
+        except ValueError as exc:
+            raise JobError(
+                f"Market collection artifact for {match_key} escapes output directory"
+            ) from exc
+        assert_nonempty(artifact_path)
+        try:
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise JobError(
+                f"Market collection artifact for {match_key} is invalid JSON"
+            ) from exc
+        if not isinstance(artifact, dict):
+            raise JobError(
+                f"Market collection artifact for {match_key} must be an object"
+            )
+        if artifact.get("status") != status:
+            raise JobError(
+                f"Market collection artifact for {match_key} disagrees with manifest"
+            )
+        if status == "success":
+            if (
+                artifact.get("source", {}).get("provider") != "Odds-API.io"
+                or artifact.get("event", {}).get("provider_event_id") is None
+                or not isinstance(artifact.get("collection"), dict)
+            ):
+                raise JobError(
+                    f"Successful market artifact for {match_key} lacks audit fields"
+                )
+        else:
+            error = artifact.get("error")
+            if (
+                not isinstance(artifact.get("attempted_at"), str)
+                or not isinstance(error, dict)
+                or not isinstance(error.get("kind"), str)
+                or not error.get("kind")
+            ):
+                raise JobError(
+                    f"Failed market artifact for {match_key} lacks classified error"
+                )
+        seen.add(match_key)
+    if seen != verified_keys:
+        raise JobError(
+            "Market collection match keys must exactly equal the verified schedule"
+        )
+    return manifest
 
 
 def validate_notion_summary(path: Path) -> dict[str, object]:
@@ -533,6 +754,9 @@ def finalize_prediction(output_dir: Path, target: str) -> str:
     assert_nonempty(output_dir / "probability-checks.json")
     validate_forecasts(output_dir / "forecasts.jsonl")
     validate_forecast_schedule(output_dir / "forecasts.jsonl", verification)
+    validate_market_collection(
+        output_dir / "market-collection.json", output_dir, verification
+    )
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
     notion_url = publish_to_notion(output_dir)
@@ -546,8 +770,8 @@ def finalize_prediction(output_dir: Path, target: str) -> str:
         email_notified=True,
         schedule_verified=True,
         verified_match_count=len(verification["matches"]),
-        added_match_ids=verification["added_match_ids"],
-        removed_match_ids=verification["removed_match_ids"],
+        added_match_keys=verification["added_match_keys"],
+        removed_match_keys=verification["removed_match_keys"],
     )
     return notion_url
 

@@ -11,6 +11,7 @@ description: "分析 Valorant／特戰英豪電競賽事的賽程、陣容、版
 
 - 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
 - 產生任何新機率時再讀 `../shared/prediction-methodology.md`，依其規則鎖定快照、收縮小樣本、建立主分布並計算信心度。
+- 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
 
 - 賽事日切換：若賽程跨過 00:00 但屬於同一連續轉播或同一賽程序列，視為同一比賽日，仍用 UTC+8 排序。
 - 系列賽格式：先確認 BO1 / BO3 / BO5。BO1 不得輸出 +1.5 maps 預測，只能填 `N/A（BO1）`。

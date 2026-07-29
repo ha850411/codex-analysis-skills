@@ -60,7 +60,7 @@
 
 Stake 無法存取、尚未開盤或查無可追溯價格時，分析與匯出照常完成；市場資料缺失不是停止條件。此時列出模型公允賠率、最低可接受價格、缺價原因與0u，不建立虛構市場價格。
 
-所有現有賽事模組的預設 Stake 價格來源是 Odds-API.io bookmaker 指定快照，且必須在機率鎖定後優先嘗試擷取。使用 `shared/markets/collect_odds_api.mjs`，並依模組傳入 sport：CS2／Dota 2／LoL／Valorant=`esports`、MLB=`mlb`、NBA=`nba`、世界盃=`football`。快照必須保存 provider event ID、Stake 深連結、擷取時間與原始回應 SHA-256；只有 API 無法擷取、未開盤或使用者提供了更新的 Stake 價格時，才可改用使用者價格，並明示來源與覆蓋範圍。測試只能使用本地 mock response，禁止呼叫真實 API。
+所有現有賽事模組的預設 Stake 價格來源是 Odds-API.io bookmaker 指定快照，且必須在機率鎖定後逐場擷取。使用 `shared/markets/collect_odds_api.mjs`，並依模組傳入 sport：CS2／Dota 2／LoL／Valorant=`esports`、MLB=`mlb`、NBA=`nba`、世界盃=`football`。每場必須遵守 `shared/markets/collection-contract.md`：指定成功與錯誤 artifact、讓收集器完成短暫錯誤重試、先做保守隊名別名解析，必要時查 pending events 後以 provider event ID 重跑。沒有當次錯誤 artifact，不得宣稱 Odds-API 無法擷取；多場日報不能因一場失敗跳過其餘場次。快照必須保存 provider event ID、Stake 深連結、擷取時間與原始回應 SHA-256；只有已完成契約中的嘗試、Stake 未開盤或使用者提供了更新的 Stake 價格時，才可改用使用者價格，並明示來源與覆蓋範圍。測試只能使用本地 mock response，禁止呼叫真實 API。
 
 所有賠率使用十進位。不得承諾獲利、鼓勵追損或建議 all-in。
 
@@ -81,6 +81,8 @@ EV = 市場十進位賠率 * (模型機率百分比 / 100) - 1
 使用者未指定時，單場分析預設 `full`，單一追問預設 `quick`，整日賽程預設 `daily-summary`。使用者明確要求的長度與欄位優先。
 
 所有對外的賽事總表或簡表都必須保留 `模型信心度` 欄位，包括 `full`、`daily-summary`、多場比較與 `postmortem` 的原預測比較表。使用者要求更短時仍不得刪除；資料不足則填 `N/A（原因）`。模型信心度必須使用百分比並與勝率分欄，不得以勝率、星號、火焰符號或「高／中／低」取代。
+
+`daily-summary` 與其他多場報告必須為每場賽事分別計算模型信心度及五項組成。若另計算整份日報的 coverage／流程信心，只能標為「日報層級證據品質」，不得複製到各場 `模型信心度` 欄。多場簡表每列必須引用該場的獨立值；相同數字只有在各場分量獨立計算後自然相同時才允許。
 
 ## 所有新預測的最終輸出契約
 

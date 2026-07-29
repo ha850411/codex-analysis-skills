@@ -82,6 +82,59 @@ class PipelineUnitTests(unittest.TestCase):
         confidence["value"] = 80
         self.assertTrue(any("expected rounded weighted score" in error for error in pipeline.validate_confidence(confidence, "test")))
 
+    def test_daily_summary_uses_distinct_event_confidences(self) -> None:
+        event_confidences = [
+            {
+                "event_key": "a_b",
+                "label": "A vs B",
+                "value": 55,
+                "rationale": "先發與選邊未定。",
+                "components": {
+                    "data_completeness": 60,
+                    "freshness": 75,
+                    "lineup_certainty": 38,
+                    "regime_relevance": 55,
+                    "model_stability": 45,
+                },
+            },
+            {
+                "event_key": "c_d",
+                "label": "C vs D",
+                "value": 68,
+                "rationale": "同制度樣本較完整。",
+                "components": {
+                    "data_completeness": 72,
+                    "freshness": 80,
+                    "lineup_certainty": 58,
+                    "regime_relevance": 68,
+                    "model_stability": 58,
+                },
+            },
+        ]
+        self.assertEqual(pipeline.validate_event_confidences(event_confidences, "events"), [])
+        input_data = {"prediction_id": "p1", "mode": "daily-summary", "model_data": {"evidence": []}, "market_data": []}
+        final = {
+            "prediction_id": "p1",
+            "event_confidences": event_confidences,
+            "key_factors": [],
+            "probability_groups": [],
+            "presentation": {
+                "summary_table": {
+                    "columns": ["比賽", "核心預測", "模型信心度", "建議", "風險"],
+                    "rows": [
+                        ["A vs B", "A", "60%", "0u", "先發"],
+                        ["C vs D", "C", "60%", "0u", "版本"],
+                    ],
+                }
+            },
+        }
+        errors = pipeline.cross_validate(input_data, final=final)
+        self.assertTrue(any("expected '55%'" in error for error in errors))
+        self.assertTrue(any("expected '68%'" in error for error in errors))
+        final["presentation"]["summary_table"]["rows"][0][2] = "55%"
+        final["presentation"]["summary_table"]["rows"][1][2] = "68%"
+        self.assertEqual(pipeline.cross_validate(input_data, final=final), [])
+
     def test_boolean_is_not_accepted_as_numeric_probability(self) -> None:
         prediction = {
             "schema_version": "1.0",

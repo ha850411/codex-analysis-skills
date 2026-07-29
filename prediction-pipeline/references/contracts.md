@@ -26,7 +26,7 @@
 
 - `model_data.evidence`：用於領域分析的事實。每項 claim 都要有穩定 ID、確認狀態、擷取時間與來源。
 - `model_data.data_quality`：0 到 100 的完整度，以及明列的資料缺口與警告。
-- `market_data`：選填的市場價格，以 outcome key 對應最終機率。`outcome_key` 代表全贏；整數盤或四分之一盤可另填 `push_outcome_key`、`half_win_outcome_key`、`half_loss_outcome_key`。沒有市場資料時使用空陣列。
+- `market_data`：選填的市場價格，以 outcome key 對應最終機率。`outcome_key` 代表全贏；整數盤或四分之一盤可另填 `push_outcome_key`、`half_win_outcome_key`、`half_loss_outcome_key`。依 `../../shared/markets/collection-contract.md` 逐場完成可稽核收集後仍沒有市場資料時，使用空陣列；空陣列不得代表尚未嘗試。
 
 只要賽事、參賽者、問題或資料截止時間改變，就建立新的 `prediction_id`。大型或敏感的原始回應不要直接塞進標準輸入。
 
@@ -94,7 +94,7 @@
 
 全贏總返還為十進位賠率、半贏為 `(賠率 + 1) / 2`、走盤為 `1`、半輸為 `0.5`、全輸為 `0`。不得讓模型覆寫這些計算結果。
 
-`confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致。
+`confidence` 必須包含 `data_completeness`、`freshness`、`lineup_certainty`、`regime_relevance`、`model_stability`，並符合共用加權公式。`daily-summary`／多場輸入另須提供 `event_confidences`，每一筆含 `event_key`、`label`、`value`、`rationale` 與同一組五項分量；頂層 `confidence` 只表示整份報告的證據品質。`presentation.summary_table` 的欄位與列數由領域 skill 決定，但必須包含 `模型信心度` 欄且每列欄數一致；多場時每列必須依序等於對應 `event_confidences.value`。
 
 `market_data` 非空時，匯出前必須先產生 `market_comparison.json` 與符合 `post-market.schema.json` 的 `post_market_decision.json`。後者不得包含機率欄位；每個市場 `bet_id` 必須且只能裁決一次，每一列簡表也必須且只能回填一次。市場已取得時，回填建議不得仍寫「待市場價格」或「待即時價格」。只取得部分玩法時，`market_coverage.status` 使用 `partial`，並列出尚未取得的玩法。
 
@@ -110,7 +110,7 @@ python3 prediction-pipeline/scripts/pipeline.py export --run-dir <run>
 
 `attach-market` 只重建市場盲的 `model-input.json` 與確定性市場比較；它不重跑 `primary_prediction.json`、`red_team_review.json` 或 `final_prediction.json`。快照必須帶有 bookmaker `Stake`、Odds-API.io provider、Stake 深連結、provider event ID、ISO 8601 擷取時間、原始回應雜湊、事件／玩法／選項與十進位價格。無來源時間戳、非指定 bookmaker、未映射 outcome key 或 API 錯誤一律不合格。
 
-`market_data=[]` 不屬驗證失敗。匯出器在沒有可追溯即時價格時跳過 post-market artifact，仍正常輸出模型機率、公允賠率、價格門檻與0u建議；不得因 Stake 無法存取、未開盤或查無價格而中斷整份分析。
+`market_data=[]` 不屬驗證失敗，但上游必須已依 `../../shared/markets/collection-contract.md` 對每場保存成功快照或分類錯誤 artifact；沒有 artifact 不得聲稱 Odds-API 無法擷取。匯出器在沒有可追溯即時價格時跳過 post-market artifact，仍正常輸出模型機率、公允賠率、價格門檻與0u建議；不得因 Stake 無法存取、未開盤或查無價格而中斷整份分析。
 
 sport 對應固定為 CS2／Dota 2／LoL／Valorant=`esports`、MLB=`mlb`、NBA=`nba`、世界盃=`football`。收集器測試只可傳入 `--events-response` 與 `--response` 的本地 mock fixture，禁止以真實 Odds-API.io 呼叫作測試。
 

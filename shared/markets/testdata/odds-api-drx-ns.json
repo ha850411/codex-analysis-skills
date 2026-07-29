@@ -1,0 +1,14 @@
+{
+  "id": 7185943806,
+  "home": "Kiwoom DRX",
+  "away": "Nongshim Red Force",
+  "date": "2026-07-29T08:30:00Z",
+  "status": "pending",
+  "league": { "name": "League of Legends - LCK" },
+  "urls": { "Stake": "https://stake.com/sports/mock-drx-ns" },
+  "bookmakers": {
+    "Stake": [
+      { "name": "ML", "updatedAt": "2026-07-29T06:30:00.000Z", "odds": [{ "home": "2.50", "away": "1.55" }] }
+    ]
+  }
+}

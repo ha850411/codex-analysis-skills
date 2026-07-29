@@ -15,6 +15,7 @@ description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、�
 
 - 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
 - 產生任何新機率時再讀 `../shared/prediction-methodology.md`，依其規則鎖定快照、收縮小樣本、建立主分布並計算信心度。
+- 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
 
 - 必須區分 `已交叉查核`、`HLTV 為主`、`Liquipedia 為主`、`推估`、`低信心`。
 - 必須確認比賽是 BO1 / BO3 / BO5。BO1 不得輸出 +1.5 maps 預測，只能填 `N/A（BO1）`。

@@ -115,7 +115,7 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
      --source <執行目錄>/input.json --run-dir <執行目錄>
    ```
 
-4. 目前的 Codex 只讀 `model-input.json`，依 `references/prediction.schema.json` 完成主預測並寫入 `primary_prediction.json`。不要另開一個 Codex CLI。信心度必須包含五項組成並符合共用加權公式。`primary_prediction.json.analysis_sections` 必須先保存依領域模板與輸出模式完成的完整主報告；agy 審查的是這份全文，不能只提供 thesis、機率摘要或 key factors。
+4. 目前的 Codex 只讀 `model-input.json`，依 `references/prediction.schema.json` 完成主預測並寫入 `primary_prediction.json`。不要另開一個 Codex CLI。信心度必須包含五項組成並符合共用加權公式。`daily-summary`／多場輸入另須建立 `event_confidences`，每場各自保存 `event_key`、標籤、信心值、理由與五項組成；頂層 `confidence` 只表示整份日報的證據品質。`primary_prediction.json.analysis_sections` 必須先保存依領域模板與輸出模式完成的完整主報告；agy 審查的是這份全文，不能只提供 thesis、機率摘要或 key factors。
 5. 執行以下命令，讓 agy-cli 產生 `red_team_review.json`：
 
    ```bash
@@ -147,7 +147,7 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
 
    目前 Codex 只在此時讀取 `market_comparison.json`，依 `references/post-market.schema.json` 寫入 `post_market_decision.json`。這個 artifact 必須逐一裁決全部 `bet_id`、揭露市場玩法覆蓋完整度，並回填簡表每一列的「投注建議」；不得包含或修改任何機率。若只取得獨贏而未取得使用者要求或該領域通常可玩的讓分、總局數、精確比分、首局等市場，標記 `market_coverage.status=partial` 並列出未取得玩法。
 
-   `market_data=[]` 表示沒有可追溯即時價格。此時跳過市場快照與 post-market artifact，直接完成匯出；不得因此中斷預測。報告改列模型公允賠率、價格門檻與「未取得即時價格／0u」。
+   市場收集必須先遵守 `../shared/markets/collection-contract.md`：對範圍內每場逐一執行收集器、完成短暫錯誤重試與事件解析，並保存成功快照或分類錯誤 artifact。`market_data=[]` 只表示已完成上述可稽核嘗試後仍沒有可追溯即時價格，不得用來表示「尚未嘗試」；也不得在沒有當次錯誤 artifact 時宣稱 Odds-API 無法存取。此時跳過市場快照與 post-market artifact，直接完成匯出；不得因此中斷預測。報告改列模型公允賠率、價格門檻與「未取得即時價格／0u」。
 
 8. 執行匯出：
 
@@ -168,11 +168,12 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
 - 裁決後正文不得退化成摘要：匯出驗證要求 final 正文的非空白字元至少保留 primary 正文的 70%；若確有大幅刪除需求，先修正主報告或拆分章節，不能繞過驗證。
 - 保持 `prediction_id`、賽事身分、時間、來源 ID 與階段名稱一致。
 - 公允賠率與 EV 一律交給匯出程式計算，不要讓模型自行覆寫。整數盤或亞洲四分之一盤需指定走盤／半贏／半輸 outcome key，匯出器不得把它們當全輸。
-- `presentation.summary_table` 必須依領域模板提供欄名與資料列，且包含 `模型信心度`；匯出器直接渲染，不再依 probability group ID 猜欄位。
+- `presentation.summary_table` 必須依領域模板提供欄名與資料列，且包含 `模型信心度`；匯出器直接渲染，不再依 probability group ID 猜欄位。多場日報每列信心度必須依序等於 `event_confidences` 對應賽事的值，不得以頂層 `confidence` 填滿所有列。
 - 最終裁決仍看不到市場，因此該階段的簡表建議只能寫模型傾向／市場於鎖定後裁決／不下注。取得市場資料後，post-market 階段必須把實際價格、EV、推薦閘門與注碼裁決寫入獨立 artifact，再回填置底簡表；不得回寫機率。
 - `market_data` 非空時，匯出缺少 `post_market_decision.json` 必須失敗。post-market 必須覆蓋每個 `bet_id` 與每一列簡表，且回填文字不得再出現「待市場價格」或「待即時價格」。
 - `market_data` 為空時不得要求 post-market artifact，也不得阻止 Markdown、JSON、YouTube 或已授權的外部發布；改以公允賠率、最低可接受價格與0u完成報告。
 - 使用者要求賠率／玩法分析時，市場蒐集不可以只有「找到一種就視為完成」。post-market 必須列出 requested、collected 與 unavailable market types；覆蓋不完整時在正文及簡表明示，不能暗示已檢查全部玩法。
+- 多場預測的市場收集必須逐場完成；一場失敗不得中止或跳過其他場。沒有成功快照或 `collection-contract.md` 規定的分類錯誤 artifact，不得把該場標成已完成取價。
 - `prediction.md` 必須在來源、風險與免責說明之後，以唯一一張「簡表總結」收尾；表格後不得附加模型揭露或其他文字。
 - `prediction.md` 的 `agy 紅隊審查（精簡）` 只以短列點呈現 `changes`：說明修改欄位及修改前後，不呈現 finding ID、理由長文、模型名稱、verdict、summary、接受／否決數量、九項一致性檢查或未解疑問逐題回覆。沒有 `changes` 時只顯示「未修改；保留原預測。」完整內容只保存在 `prediction.json.red_team` 與 `prediction.json.adjudication`。
 - agy-cli 不存在、逾時或回傳無效 JSON 時，保存每次 raw output 與驗證錯誤。首次格式或 schema 失敗時，允許同一模型做一次只修正格式／契約的重試；第二次仍失敗便停止紅隊流程並如實說明，不得寫入或偽造正式 `red_team_review.json`。
@@ -221,6 +222,7 @@ python3 prediction-pipeline/scripts/pipeline.py run \
 - 機率合計、信心度、finding 裁決與市場算術全部驗證成功；
 - 有市場資料時，post-market 已逐盤裁決、回填全部簡表列，且不再殘留待價格占位文字；
 - 市場玩法覆蓋已明示完整／部分／無法取得，不能把只取得獨贏寫成完整盤口分析；
+- 每場市場收集都有成功快照或分類錯誤 artifact；不存在未經嘗試就填入的 `market_data=[]`；
 - Markdown 與 JSON 輸出都已產生（若有 YouTube 需求亦包含影音腳本）；
 - `prediction.md` 已渲染 `presentation.analysis_sections` 的全部完整正文；
 - `prediction.md` 的 agy 紅隊段落只簡述實際修改，沒有修改時只寫明未修改；完整紅隊審查與逐條裁決保存在 `prediction.json`，不在 Markdown 展開；

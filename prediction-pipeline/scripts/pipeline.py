@@ -315,6 +315,34 @@ def validate_confidence(confidence: Any, label: str) -> list[str]:
     return errors
 
 
+def validate_event_confidences(values: Any, label: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(values, list) or not values:
+        return [f"{label} must be a non-empty array"]
+    event_keys: set[str] = set()
+    allowed = {"event_key", "label", "value", "rationale", "components"}
+    for i, item in enumerate(values):
+        item_label = f"{label}[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{item_label} must be an object")
+            continue
+        unknown = set(item) - allowed
+        if unknown:
+            errors.append(f"{item_label} has unknown keys: {sorted(unknown)}")
+        event_key = item.get("event_key")
+        if not isinstance(event_key, str) or not event_key.strip():
+            errors.append(f"{item_label}.event_key must be a non-empty string")
+        elif event_key in event_keys:
+            errors.append(f"duplicate event confidence key: {event_key}")
+        else:
+            event_keys.add(event_key)
+        if not isinstance(item.get("label"), str) or not item.get("label", "").strip():
+            errors.append(f"{item_label}.label must be a non-empty string")
+        for error in validate_confidence(item, item_label):
+            errors.append(error.replace(f"{item_label}.confidence.", f"{item_label}."))
+    return errors
+
+
 def validate_analysis_sections(sections: Any, label: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(sections, list) or not sections:
@@ -364,6 +392,8 @@ def validate_prediction(data: Any, stage: str) -> list[str]:
         if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
             errors.append(f"{stage}.{field} must be an array of strings")
     errors += validate_confidence(data.get("confidence"), stage)
+    if "event_confidences" in data:
+        errors += validate_event_confidences(data.get("event_confidences"), f"{stage}.event_confidences")
     groups = data.get("probability_groups")
     outcome_keys: set[str] = set()
     if not isinstance(groups, list) or not groups:
@@ -736,6 +766,10 @@ def cross_validate(input_data: dict[str, Any], primary: dict[str, Any] | None = 
     for label, artifact in (("primary", primary), ("review", review), ("final", final)):
         if artifact is not None and artifact.get("prediction_id") != prediction_id:
             errors.append(f"{label}.prediction_id does not match input")
+    if input_data.get("mode") == "daily-summary":
+        for label, artifact in (("primary", primary), ("final", final)):
+            if artifact is not None and not artifact.get("event_confidences"):
+                errors.append(f"{label}.event_confidences is required for daily-summary")
     for label, artifact in (("primary", primary), ("final", final)):
         if artifact:
             for i, factor in enumerate(artifact.get("key_factors", [])):
@@ -793,6 +827,27 @@ def cross_validate(input_data: dict[str, Any], primary: dict[str, Any] | None = 
         for key in CONFIDENCE_WEIGHTS:
             if primary.get("confidence", {}).get("components", {}).get(key) != final.get("confidence", {}).get("components", {}).get(key):
                 required_paths.add(f"confidence.components.{key}")
+        primary_event_confidences = {
+            item.get("event_key"): item
+            for item in primary.get("event_confidences", [])
+            if isinstance(item, dict) and isinstance(item.get("event_key"), str)
+        }
+        final_event_confidences = {
+            item.get("event_key"): item
+            for item in final.get("event_confidences", [])
+            if isinstance(item, dict) and isinstance(item.get("event_key"), str)
+        }
+        if set(primary_event_confidences) != set(final_event_confidences):
+            required_paths.add("event_confidences")
+        else:
+            for event_key in primary_event_confidences:
+                before_event = primary_event_confidences[event_key]
+                after_event = final_event_confidences[event_key]
+                if before_event.get("value") != after_event.get("value"):
+                    required_paths.add(f"event_confidences.{event_key}.value")
+                for key in CONFIDENCE_WEIGHTS:
+                    if before_event.get("components", {}).get(key) != after_event.get("components", {}).get(key):
+                        required_paths.add(f"event_confidences.{event_key}.components.{key}")
         primary_groups = {group.get("id"): group for group in primary.get("probability_groups", []) if isinstance(group, dict)}
         final_groups = {group.get("id"): group for group in final.get("probability_groups", []) if isinstance(group, dict)}
         if set(primary_groups) != set(final_groups):
@@ -828,6 +883,30 @@ def cross_validate(input_data: dict[str, Any], primary: dict[str, Any] | None = 
                 f"expected at least 70% of primary report ({primary_size})"
             )
     if final:
+        if input_data.get("mode") == "daily-summary":
+            event_confidences = final.get("event_confidences", [])
+            summary = final.get("presentation", {}).get("summary_table", {})
+            columns = summary.get("columns", [])
+            rows = summary.get("rows", [])
+            if isinstance(columns, list) and "模型信心度" in columns and isinstance(rows, list) and isinstance(event_confidences, list):
+                confidence_column = columns.index("模型信心度")
+                if len(rows) != len(event_confidences):
+                    errors.append(
+                        "final.presentation.summary_table must have one row per final.event_confidences item "
+                        f"({len(event_confidences)} expected, got {len(rows)})"
+                    )
+                else:
+                    for i, event_confidence in enumerate(event_confidences):
+                        if not isinstance(event_confidence, dict) or not isinstance(rows[i], list) or confidence_column >= len(rows[i]):
+                            continue
+                        cell = re.sub(r"[*_`]", "", rows[i][confidence_column]).strip()
+                        expected = f"{event_confidence.get('value')}%"
+                        if cell != expected:
+                            errors.append(
+                                f"final.presentation.summary_table.rows[{i}] 模型信心度 is {cell!r}, "
+                                f"expected {expected!r} from event_confidences[{i}] "
+                                f"({event_confidence.get('label', event_confidence.get('event_key'))})"
+                            )
         outcome_groups: dict[str, str] = {}
         for group in final.get("probability_groups", []):
             if not isinstance(group, dict):
@@ -962,6 +1041,7 @@ Hard rules:
 - Cite evidence only through existing evidence_ids. Disclose missing data and lower confidence accordingly.
 - Build one coherent primary distribution and derive dependent groups from it. Use whole percentages by default and at most one decimal.
 - Score confidence components as data_completeness 25%, freshness 20%, lineup_certainty 25%, regime_relevance 20%, model_stability 10%; confidence.value is the rounded weighted score.
+- For daily-summary or multi-event requests, confidence is report-level evidence quality only. Add event_confidences with one independently scored five-component confidence object per selected match, in report/summary-table order. Never copy the report-level confidence into every match.
 - Write analysis_sections as the complete reader-facing report required by the domain skill and input mode before red-team review. Include every required roster/lineup, form, matchup, map/draft/veto, model-calibration, scenario, recommendation-gate, and risk section that is applicable. A thesis, key-factor list, or executive summary is not a substitute for the report.
 - For daily-summary or multi-event requests that ask for deep/full analysis, include the schedule inventory and a fully expanded section for every selected match. Use unique headings and complete Markdown bodies; do not include sources, 簡表總結, or model disclosure in analysis_sections.
 - Use stage=primary and preserve prediction_id exactly.
@@ -983,6 +1063,7 @@ Rules:
 - Audit the complete primary analysis_sections against the domain skill and requested mode. Identify omitted required sections, unanswered matchup questions, over-compression, stale values, and unsupported statements.
 - Market data is withheld. Audit whether the prediction is evidence-bound and internally coherent without attempting to reconstruct prices.
 - Recompute the confidence weighted score and verify dependent probability groups come from one coherent primary distribution.
+- For daily-summary or multi-event requests, independently recompute every event_confidences item and flag any summary that repeats the report-level confidence across matches without separate component calculations.
 - Be specific and evidence-bound. Do not produce a replacement final prediction.
 - Put every concern in findings, including medium/low presentation or traceability issues; do not hide concerns only in summary. Put every genuine unanswered question in unresolved_questions, even when it does not change the main probability.
 - Return exactly one consistency_checks entry for each audit_area: event_identity, temporal_freshness, source_traceability, evidence_sufficiency, domain_report_coverage, probability_coherence, confidence_calibration, market_leakage, and presentation_integrity. Each details field must state what was checked and why it passed, failed, or was not applicable.
@@ -1016,12 +1097,13 @@ Hard rules:
 - Put every finding ID, regardless of severity, in exactly one of accepted_findings or rejected_findings.
 - For every finding, add one finding_adjudications item in the same order as the review. State accept/reject, an evidence-based rationale, and the concrete resulting action (including "no change" with a reason when appropriate). The detailed decisions must match accepted_findings and rejected_findings.
 - For every agy unresolved question, add one question_resolutions item in the same order and preserve the question text exactly. Answer it when the supplied evidence permits; otherwise mark it unresolved, explain what is missing, and state the impact on probabilities, confidence, or report limitations. Never silently drop a question. Reflect any reader-relevant unresolved impact in final risks or missing_data.
-- Record every revision actually applied to the final output in changes, including numeric, thesis, analysis-section additions, and wording corrections. Serialize before and after as concise descriptions rather than copying full report paragraphs, and include reason plus finding_ids. For numeric and thesis paths use exactly: thesis, confidence.value, confidence.components.<name>, or probability_groups.<group_id>.<outcome_key>.probability. For report edits use a concise path such as presentation.analysis_sections.<heading>.
+- Record every revision actually applied to the final output in changes, including numeric, thesis, analysis-section additions, and wording corrections. Serialize before and after as concise descriptions rather than copying full report paragraphs, and include reason plus finding_ids. For numeric and thesis paths use exactly: thesis, confidence.value, confidence.components.<name>, event_confidences.<event_key>.value, event_confidences.<event_key>.components.<name>, or probability_groups.<group_id>.<outcome_key>.probability. For report edits use a concise path such as presentation.analysis_sections.<heading>.
 - Market prices are withheld and cannot affect this adjudication. Do not calculate fair odds or EV; the exporter does that deterministically afterward.
 - Keep probability groups mutually exclusive, exhaustive, and total 100%.
 - Use whole percentages by default and at most one decimal. Recompute confidence from the five weighted components.
 - Build presentation.analysis_sections as the complete, reader-facing, post-adjudication report required by the domain skill and input mode. Start from primary.analysis_sections, apply adjudicated corrections in place, and preserve every still-valid detailed roster, matchup, map/draft/veto, calibration, and scenario explanation; do not compress them into key_points or an executive summary. The final report body must retain at least 70% of the primary report's non-whitespace length.
 - For daily-summary or multi-match requests that explicitly ask for deep/full analysis, include the schedule inventory and a separate fully expanded section for every selected match. Every number and limitation in analysis_sections must reflect the final adjudication, including accepted agy corrections, never stale primary values.
+- For daily-summary or multi-match requests, preserve or revise event_confidences one match at a time. The top-level confidence is report-level evidence quality only. Fill the summary-table 模型信心度 cells from event_confidences in the same order; never fill all rows with the top-level value.
 - Each analysis_sections item needs a unique heading and a Markdown body. Do not put sources, disclaimer, or 簡表總結 in these bodies; the exporter appends those deterministically.
 - Fill presentation.summary_table from the domain skill template. It must include 模型信心度 and every row must match the column count.
 - Because prices are withheld, recommendation cells may only state 模型傾向／待即時價格／不下注; never invent a market price, EV, or stake.
@@ -1336,7 +1418,8 @@ def render_markdown(
     event = input_data["event"]
     participants = event["participants"]
     participant_label = " vs ".join(participants) if len(participants) == 2 else f"參賽隊伍：{'、'.join(participants)}"
-    lines = [f"# {p['headline']}", "", "## 最終結論", "", p["executive_summary"], "", "## 賽事與資料狀態", "", f"- 賽事：{event['competition']}｜{participant_label}", f"- 開始時間：{event['start_time']}（{event['timezone']}）", f"- 資料截止：{input_data['as_of']}", f"- 模型信心度：{final['confidence']['value']}% — {final['confidence']['rationale']}", "", "| 信心度組成 | 分數 |", "| --- | ---: |"]
+    confidence_label = "日報層級證據品質" if input_data.get("mode") == "daily-summary" else "模型信心度"
+    lines = [f"# {p['headline']}", "", "## 最終結論", "", p["executive_summary"], "", "## 賽事與資料狀態", "", f"- 賽事：{event['competition']}｜{participant_label}", f"- 開始時間：{event['start_time']}（{event['timezone']}）", f"- 資料截止：{input_data['as_of']}", f"- {confidence_label}：{final['confidence']['value']}% — {final['confidence']['rationale']}", "", f"| {confidence_label}組成 | 分數 |", "| --- | ---: |"]
     component_labels = {
         "data_completeness": "資料完整度",
         "freshness": "資料新鮮度",
@@ -1347,6 +1430,11 @@ def render_markdown(
     for key in CONFIDENCE_WEIGHTS:
         lines.append(f"| {component_labels[key]} | {float(rendered_final['confidence']['components'][key]):g}% |")
     lines.append("")
+    if input_data.get("mode") == "daily-summary" and rendered_final.get("event_confidences"):
+        lines.extend(["| 單場 | 模型信心度 | 判讀 |", "| --- | ---: | --- |"])
+        for item in rendered_final["event_confidences"]:
+            lines.append(f"| {item['label']} | {item['value']}% | {item['rationale']} |")
+        lines.append("")
     lines.extend(render_analysis_sections(rendered_final))
     lines.extend(["## 最終機率", ""])
     for group in rendered_final["probability_groups"]:

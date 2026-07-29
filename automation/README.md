@@ -9,6 +9,7 @@
 
 每次預測排程會自動清理 30 天以前的原始報告與產物。已結算預測另存於各模組的
 `history/evaluated-forecasts.jsonl`，不受原始報告清理影響，作為跨日模型校準樣本永久保留。
+預測在鎖定模型後依 `shared/markets/collection-contract.md` 逐場收集即時盤口；支援該流程的模組必須保存成功快照或分類錯誤 artifact，不能用未經重試與事件解析的泛稱網路失敗代替。
 每個模組另保存 `history/factor-registry.json`：每日複盤同時搜尋漏掉的有效因子與既有噪音
 因子。新項目先進 candidate；只有樣本外驗證通過才啟用、停用或恢復。retired 項目不再進入
 日常抓取與判斷，但保留證據和重啟條件，且不受報告清理影響。
@@ -43,7 +44,7 @@
 }
 ```
 
-LoL 的 `schedule_source` 僅是候選入口。發布前仍須由 `lol-analysis` 依官方來源與獨立來源完成賽程完整性驗證；bo3.gg 單一回應不得直接決定日報場次。
+LoL 的 `schedule_source` 僅是候選入口。發布前仍須由 `lol-analysis` 依涵蓋整個視窗的官方全域來源列出完整 S-Tier `match_key` 集合，再由獨立全域來源或逐聯賽 coverage group 建立相同聯集；單一聯賽專頁或 bo3.gg 回應不得直接決定跨賽區日報場次。bo3.gg 缺少 provider ID 時，已被雙來源確認的比賽改用確定性 `lol:` match key，不得靜默略過。
 
 只接受允許清單內的 `mlb` 與 `lol`。LoL 的賽程來源與等級固定為 S Tier，避免錯誤設定在未察覺時消耗 Token 分析較低層級賽事。
 

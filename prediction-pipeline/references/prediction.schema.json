@@ -27,6 +27,11 @@
     },
     "probability_groups": {"$ref": "#/$defs/probability_groups"},
     "confidence": {"$ref": "#/$defs/confidence"},
+    "event_confidences": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/event_confidence"}
+    },
     "key_factors": {
       "type": "array",
       "items": {
@@ -76,6 +81,18 @@
       "additionalProperties": false,
       "required": ["value", "rationale", "components"],
       "properties": {
+        "value": {"type": "integer", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string", "minLength": 1},
+        "components": {"$ref": "#/$defs/confidence_components"}
+      }
+    },
+    "event_confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_key", "label", "value", "rationale", "components"],
+      "properties": {
+        "event_key": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
         "value": {"type": "integer", "minimum": 0, "maximum": 100},
         "rationale": {"type": "string", "minLength": 1},
         "components": {"$ref": "#/$defs/confidence_components"}

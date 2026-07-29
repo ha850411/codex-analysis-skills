@@ -105,6 +105,33 @@
         }
       }
     },
+    "event_confidences": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event_key", "label", "value", "rationale", "components"],
+        "properties": {
+          "event_key": {"type": "string", "minLength": 1},
+          "label": {"type": "string", "minLength": 1},
+          "value": {"type": "integer", "minimum": 0, "maximum": 100},
+          "rationale": {"type": "string", "minLength": 1},
+          "components": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["data_completeness", "freshness", "lineup_certainty", "regime_relevance", "model_stability"],
+            "properties": {
+              "data_completeness": {"type": "number", "minimum": 0, "maximum": 100},
+              "freshness": {"type": "number", "minimum": 0, "maximum": 100},
+              "lineup_certainty": {"type": "number", "minimum": 0, "maximum": 100},
+              "regime_relevance": {"type": "number", "minimum": 0, "maximum": 100},
+              "model_stability": {"type": "number", "minimum": 0, "maximum": 100}
+            }
+          }
+        }
+      }
+    },
     "key_factors": {
       "type": "array",
       "items": {

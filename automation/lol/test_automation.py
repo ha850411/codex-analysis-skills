@@ -31,6 +31,7 @@ from predict_next_day import (
     prompt_for as prediction_prompt_for,
     validate_forecast_schedule,
     validate_forecasts,
+    validate_market_collection,
     validate_schedule_verification,
 )
 from review_today import is_recent_report, main as review_main, prompt_for, settled_match_ids
@@ -319,14 +320,18 @@ class LolAutomationTests(unittest.TestCase):
             "2026-07-25",
             Path("/predictions/2026-07-25"),
         )
-        self.assertIn("Riot／LoL Esports 當場官方賽程", prompt)
+        self.assertIn("Riot／LoL Esports 全域或多賽區官方賽程", prompt)
         self.assertIn("不得要求每一個第三方 wiki 都一致", prompt)
         self.assertIn("已確認過期的 wiki 單獨", prompt)
         self.assertIn("只有來源不一致且依上述優先序仍無法消解", prompt)
+        self.assertIn('scope="global-s-tier"', prompt)
+        self.assertIn("聯賽專頁只能貢獻該聯賽子集合", prompt)
+        self.assertIn("bo3_match_id=null", prompt)
 
     def test_exact_score_contract(self) -> None:
         record = {
-            "match_id": 1, "predicted_at": "now", "start_time": "later",
+            "match_key": "bo3:1", "bo3_match_id": 1,
+            "predicted_at": "now", "start_time": "later",
             "snapshot": "pre-match", "model_version": "v1", "team1": "A",
             "team2": "B", "tournament": "LPL", "tier": "s", "bo_type": 3,
             "exact_score_probabilities": {"2-0": 0.25, "2-1": 0.30, "1-2": 0.25, "0-2": 0.20},
@@ -344,10 +349,13 @@ class LolAutomationTests(unittest.TestCase):
                 validate_forecasts(path)
 
     def test_schedule_verification_requires_two_source_roles_and_exact_diff(self) -> None:
+        candidate_key = "bo3:124500"
+        added_key = "lol:lck:20260723T1700+0800:t1:kt-rolster"
+        all_keys = [added_key, candidate_key]
         precheck = {
             "window_start": "2026-07-23T10:00:00+08:00",
             "window_end": "2026-07-24T10:00:00+08:00",
-            "matches": [{"match_id": 124500}],
+            "matches": [{"match_key": candidate_key, "match_id": 124500}],
         }
         verification = {
             "verified_at": "2026-07-23T11:30:00+08:00",
@@ -356,38 +364,56 @@ class LolAutomationTests(unittest.TestCase):
             "window_end": precheck["window_end"],
             "complete": True,
             "no_matches": False,
-            "candidate_match_ids": [124500],
-            "added_match_ids": [124499],
-            "removed_match_ids": [],
+            "candidate_match_keys": [candidate_key],
+            "added_match_keys": [added_key],
+            "removed_match_keys": [],
             "conflicts": [],
+            "coverage_sources": [
+                {
+                    "role": "official",
+                    "scope": "global-s-tier",
+                    "url": "https://lolesports.com/en-US/leagues/lck%2Clpl%2Clcp%2Clec%2Clcs",
+                    "checked_at": "2026-07-23T11:25:00+08:00",
+                    "match_keys": all_keys,
+                },
+                {
+                    "role": "independent",
+                    "scope": "global-s-tier",
+                    "url": "https://liquipedia.net/leagueoflegends/Liquipedia%3AMatches",
+                    "checked_at": "2026-07-23T11:26:00+08:00",
+                    "match_keys": all_keys,
+                },
+            ],
             "sources": [
                 {
                     "role": "official",
-                    "url": "https://lolesports.com/en-US/leagues/lpl",
+                    "url": "https://lolesports.com/en-US/leagues/lck%2Clpl%2Clcp%2Clec%2Clcs",
                     "checked_at": "2026-07-23T11:25:00+08:00",
                 },
                 {
                     "role": "independent",
-                    "url": "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    "url": "https://liquipedia.net/leagueoflegends/Liquipedia%3AMatches",
                     "checked_at": "2026-07-23T11:26:00+08:00",
                 },
             ],
             "matches": [
                 {
-                    "match_id": 124499,
+                    "match_key": added_key,
+                    "bo3_match_id": None,
                     "start_time": "2026-07-23T17:00:00+08:00",
                     "tier": "s",
                     "bo_type": 3,
-                    "team1": "JD Gaming",
-                    "team2": "Anyone's Legend",
-                    "tournament": "LPL 2026 Split 3",
+                    "team1": "T1",
+                    "team2": "KT Rolster",
+                    "tournament": "LCK 2026",
                     "source_urls": [
-                        "https://lolesports.com/en-US/leagues/lpl",
-                        "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                        "https://lolesports.com/en-US/leagues/lck%2Clpl%2Clcp%2Clec%2Clcs",
+                        "https://liquipedia.net/leagueoflegends/Liquipedia%3AMatches",
                     ],
                 },
                 {
-                    "match_id": 124500,
+                    "match_key": candidate_key,
+                    "bo3_match_id": 124500,
                     "start_time": "2026-07-23T19:00:00+08:00",
                     "tier": "s",
                     "bo_type": 3,
@@ -395,8 +421,8 @@ class LolAutomationTests(unittest.TestCase):
                     "team2": "ThunderTalk Gaming",
                     "tournament": "LPL 2026 Split 3",
                     "source_urls": [
-                        "https://lolesports.com/en-US/leagues/lpl",
-                        "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                        "https://lolesports.com/en-US/leagues/lck%2Clpl%2Clcp%2Clec%2Clcs",
+                        "https://liquipedia.net/leagueoflegends/Liquipedia%3AMatches",
                     ],
                 },
             ],
@@ -411,13 +437,134 @@ class LolAutomationTests(unittest.TestCase):
                 verification_path, precheck_path
             )
             self.assertEqual(
-                [item["match_id"] for item in result["matches"]],
-                [124499, 124500],
+                [item["match_key"] for item in result["matches"]],
+                [added_key, candidate_key],
             )
 
-            verification["added_match_ids"] = []
+            lck_url = "https://liquipedia.net/leagueoflegends/LCK/2026"
+            lpl_url = "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3"
+            split_coverage = json.loads(json.dumps(verification))
+            split_coverage["coverage_sources"] = [
+                verification["coverage_sources"][0],
+                {
+                    "role": "independent",
+                    "scope": "competition-s-tier",
+                    "competition": "LCK",
+                    "url": lck_url,
+                    "checked_at": "2026-07-23T11:26:00+08:00",
+                    "match_keys": [added_key],
+                },
+                {
+                    "role": "independent",
+                    "scope": "competition-s-tier",
+                    "competition": "LPL",
+                    "url": lpl_url,
+                    "checked_at": "2026-07-23T11:26:00+08:00",
+                    "match_keys": [candidate_key],
+                },
+            ]
+            split_coverage["sources"].extend(
+                [
+                    {
+                        "role": "independent",
+                        "url": lck_url,
+                        "checked_at": "2026-07-23T11:26:00+08:00",
+                    },
+                    {
+                        "role": "independent",
+                        "url": lpl_url,
+                        "checked_at": "2026-07-23T11:26:00+08:00",
+                    },
+                ]
+            )
+            split_coverage["matches"][0]["source_urls"] = [
+                split_coverage["sources"][0]["url"],
+                lck_url,
+            ]
+            split_coverage["matches"][1]["source_urls"] = [
+                split_coverage["sources"][0]["url"],
+                lpl_url,
+            ]
+            verification_path.write_text(
+                json.dumps(split_coverage), encoding="utf-8"
+            )
+            validate_schedule_verification(verification_path, precheck_path)
+
+            verification["added_match_keys"] = []
             verification_path.write_text(json.dumps(verification), encoding="utf-8")
             with self.assertRaises(JobError):
+                validate_schedule_verification(verification_path, precheck_path)
+
+    def test_lpl_only_pages_cannot_prove_global_schedule_completeness(self) -> None:
+        """Regression: 2026-07-29 bo3.gg omitted two LCK S-tier matches."""
+        precheck = {
+            "window_start": "2026-07-29T10:00:00+08:00",
+            "window_end": "2026-07-30T10:00:00+08:00",
+            "matches": [{"match_key": "bo3:124508", "match_id": 124508}],
+        }
+        verification = {
+            "verified_at": "2026-07-29T10:02:49+08:00",
+            "timezone": "Asia/Taipei",
+            "window_start": precheck["window_start"],
+            "window_end": precheck["window_end"],
+            "complete": True,
+            "no_matches": False,
+            "candidate_match_keys": ["bo3:124508"],
+            "added_match_keys": [],
+            "removed_match_keys": [],
+            "conflicts": [],
+            "coverage_sources": [
+                {
+                    "role": "official",
+                    "scope": "global-s-tier",
+                    "url": "https://lolesports.com/en-US/leagues/lpl",
+                    "checked_at": "2026-07-29T10:02:49+08:00",
+                    "match_keys": ["bo3:124508"],
+                },
+                {
+                    "role": "independent",
+                    "scope": "global-s-tier",
+                    "url": "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    "checked_at": "2026-07-29T10:02:49+08:00",
+                    "match_keys": ["bo3:124508"],
+                },
+            ],
+            "sources": [
+                {
+                    "role": "official",
+                    "url": "https://lolesports.com/en-US/leagues/lpl",
+                    "checked_at": "2026-07-29T10:02:49+08:00",
+                },
+                {
+                    "role": "independent",
+                    "url": "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    "checked_at": "2026-07-29T10:02:49+08:00",
+                },
+            ],
+            "matches": [
+                {
+                    "match_key": "bo3:124508",
+                    "bo3_match_id": 124508,
+                    "start_time": "2026-07-29T17:00:00+08:00",
+                    "tier": "s",
+                    "bo_type": 3,
+                    "team1": "Top Esports",
+                    "team2": "Anyone's Legend",
+                    "tournament": "LPL 2026 Split 3",
+                    "source_urls": [
+                        "https://lolesports.com/en-US/leagues/lpl",
+                        "https://liquipedia.net/leagueoflegends/LPL/2026/Split_3",
+                    ],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            precheck_path = root / "schedule-precheck.json"
+            verification_path = root / "schedule-verification.json"
+            precheck_path.write_text(json.dumps(precheck), encoding="utf-8")
+            verification_path.write_text(json.dumps(verification), encoding="utf-8")
+            with self.assertRaisesRegex(JobError, "invalid scope"):
                 validate_schedule_verification(verification_path, precheck_path)
 
     def test_incomplete_schedule_verification_fails_closed(self) -> None:
@@ -444,10 +591,11 @@ class LolAutomationTests(unittest.TestCase):
                         "window_end": "2026-07-24T10:00:00+08:00",
                         "complete": False,
                         "no_matches": True,
-                        "candidate_match_ids": [],
-                        "added_match_ids": [],
-                        "removed_match_ids": [],
+                        "candidate_match_keys": [],
+                        "added_match_keys": [],
+                        "removed_match_keys": [],
                         "conflicts": ["official source lists one unresolved match"],
+                        "coverage_sources": [],
                         "sources": [],
                         "matches": [],
                     }
@@ -461,13 +609,107 @@ class LolAutomationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             forecasts_path = Path(directory) / "forecasts.jsonl"
             forecasts_path.write_text(
-                json.dumps({"match_id": 124500}) + "\n", encoding="utf-8"
+                json.dumps({"match_key": "bo3:124500"}) + "\n", encoding="utf-8"
             )
             verification = {
-                "matches": [{"match_id": 124499}, {"match_id": 124500}]
+                "matches": [
+                    {"match_key": "bo3:124499"},
+                    {"match_key": "bo3:124500"},
+                ]
             }
             with self.assertRaisesRegex(JobError, "exactly equal"):
                 validate_forecast_schedule(forecasts_path, verification)
+
+    def test_market_collection_requires_one_auditable_artifact_per_match(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            success = {
+                "status": "success",
+                "collection": {
+                    "event_resolution": "conservative_team_alias",
+                    "event_lookup_attempts": 1,
+                    "odds_request_attempts": 1,
+                },
+                "source": {"provider": "Odds-API.io"},
+                "event": {"provider_event_id": 7185943806},
+            }
+            failed = {
+                "status": "failed",
+                "attempted_at": "2026-07-29T14:30:00+08:00",
+                "error": {"kind": "market_unavailable"},
+            }
+            (root / "odds-drx-ns.json").write_text(
+                json.dumps(success), encoding="utf-8"
+            )
+            (root / "odds-tes-al.error.json").write_text(
+                json.dumps(failed), encoding="utf-8"
+            )
+            manifest_path = root / "market-collection.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "generated_at": "2026-07-29T14:31:00+08:00",
+                        "attempts": [
+                            {
+                                "match_key": "bo3:1",
+                                "status": "success",
+                                "artifact": "odds-drx-ns.json",
+                            },
+                            {
+                                "match_key": "bo3:2",
+                                "status": "failed",
+                                "artifact": "odds-tes-al.error.json",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            verification = {
+                "matches": [{"match_key": "bo3:1"}, {"match_key": "bo3:2"}]
+            }
+            result = validate_market_collection(
+                manifest_path, root, verification
+            )
+            self.assertEqual(len(result["attempts"]), 2)
+
+    def test_market_collection_rejects_missing_match_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "odds.json").write_text(
+                json.dumps(
+                    {
+                        "status": "success",
+                        "collection": {},
+                        "source": {"provider": "Odds-API.io"},
+                        "event": {"provider_event_id": 1},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest_path = root / "market-collection.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "generated_at": "2026-07-29T14:31:00+08:00",
+                        "attempts": [
+                            {
+                                "match_key": "bo3:1",
+                                "status": "success",
+                                "artifact": "odds.json",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            verification = {
+                "matches": [{"match_key": "bo3:1"}, {"match_key": "bo3:2"}]
+            }
+            with self.assertRaisesRegex(JobError, "exactly equal"):
+                validate_market_collection(manifest_path, root, verification)
 
     def test_settled_match_filter(self) -> None:
         matches = [

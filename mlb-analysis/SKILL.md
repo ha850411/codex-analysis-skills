@@ -14,6 +14,7 @@ description: "分析 MLB／美國職棒賽事的賽程、先發投手、打線�
 
 - 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
 - 產生任何新機率時，完整讀取 `../shared/prediction-methodology.md` 與 `references/modeling-framework.md`；前者管理共用校準，後者規定 MLB 得分率、特徵與推薦閘門。
+- 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
 - 先辨識模型層級：優先使用已驗證生產模型；沒有生產快照時，執行 `scripts/build_public_baseline.py` 產生可重現的官方公開資料 baseline；只有 baseline 也無法建立時才把整場數值標為 `N/A`。
 - 必須區分 `已確認`、`可能`、`推估`、`未驗證` 四種資料狀態。
 - 術語統一：對使用者輸出時使用中文盤口名。`前五局` 指只計算第 1 到第 5 局的盤；`讓分盤` 指棒球讓分，常見為強隊 -1.5 分、弱隊 +1.5 分。除非使用者原文詢問英文術語，避免把 `F5` 或 `run line` 當主要標籤。
