@@ -71,13 +71,11 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
         raise ValueError(f"record {line_number}: status must be non-empty")
     status = status.strip()
     actual_status = record.get("actual_status")
-    settlement_excluded = isinstance(actual_status, str) and actual_status.strip().lower() in {
-        "postponed",
-        "cancelled",
-        "canceled",
-        "suspended",
-        "no contest",
-    }
+    settlement_status = actual_status.strip().lower() if isinstance(actual_status, str) else ""
+    settlement_excluded = any(
+        settlement_status == value or settlement_status.startswith(f"{value} -")
+        for value in ("postponed", "cancelled", "canceled", "suspended", "no contest")
+    )
     scorable = status in {"modeled", "baseline"} and not settlement_excluded
     required = REQUIRED_FIELDS if scorable else UNMODELED_REQUIRED_FIELDS
     if settlement_excluded:
