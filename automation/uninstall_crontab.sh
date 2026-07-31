@@ -21,8 +21,8 @@ awk -v begin="${BEGIN_MARKER}" -v end="${END_MARKER}" -v old_begin="${OLD_BEGIN_
   $0 == end || $0 == old_end { managed = 0; next }
   !managed { print }
   END { if (!found) exit 3 }
-' "${current_file}" >"${new_file}" || status=$?
-if [[ "${status:-0}" -eq 3 ]]; then
+' "${current_file}" >"${new_file}" || awk_status=$?
+if [[ "${awk_status:-0}" -eq 3 ]]; then
   print "找不到受管排程，無需移除。"
   exit 0
 fi
