@@ -30,6 +30,9 @@ from config import ConfigError, module_schedule_time
 
 SOURCE_URL = "https://bo3.gg/lol/matches/current?tiers=s"
 API_URL = "https://api.bo3.gg/api/v1/matches"
+RIOT_SCHEDULE_URL = (
+    "https://lolesports.com/en-SG/leagues/lck%2Clcp%2Clcs%2Clec%2Clpl"
+)
 SCORE_KEYS = {
     1: {"1-0", "0-1"},
     3: {"2-0", "2-1", "1-2", "0-2"},
@@ -38,6 +41,15 @@ SCORE_KEYS = {
 BO3_MATCH_KEY = re.compile(r"bo3:([1-9]\d*)\Z")
 CANONICAL_MATCH_KEY = re.compile(
     r"lol:[a-z0-9-]+:\d{8}T\d{4}\+0800:[a-z0-9-]+:[a-z0-9-]+\Z"
+)
+RIOT_EVENT_PATTERN = re.compile(
+    r'\{"__typename":"EventMatch","id":"(?P<id>\d+)",'
+    r'"blockName":"(?P<block>[^"]*)","startTime":"(?P<start>[^"]+)"'
+    r'.{0,2500}?"league":\{.{0,1000}?"name":"(?P<league>[^"]+)"'
+    r'.{0,1000}?\},"tournament":\{.{0,500}?"name":"(?P<tournament>[^"]+)"'
+    r'\},"matchTeams":\[\{.{0,1000}?"name":"(?P<team1>[^"]+)"'
+    r'.{0,1500}?\},\{.{0,1000}?"name":"(?P<team2>[^"]+)"',
+    re.DOTALL,
 )
 
 
@@ -188,6 +200,80 @@ def fetch_schedule(target: str) -> ScheduleFetch:
     )
 
 
+def extract_riot_schedule(html: str, target: str) -> dict[str, object]:
+    """從 Riot 伺服器渲染頁的事件 JSON 擷取視窗內官方賽程。
+
+    不解析頁面上的 Today／Tomorrow 或本地化日期標題；那些標題會依渲染
+    時區變動，曾導致隔日配對被錯套到當日。事件的 UTC startTime 才是邊界
+    判斷依據。
+    """
+    start, end = forecast_window(target)
+    parsed_event_ids: set[str] = set()
+    matches: list[dict[str, object]] = []
+    for found in RIOT_EVENT_PATTERN.finditer(html):
+        event = found.groupdict()
+        event_id = event["id"]
+        if event_id in parsed_event_ids:
+            continue
+        parsed_event_ids.add(event_id)
+        instant = _parse_instant(event["start"])
+        if (
+            instant is None
+            or instant.utcoffset() is None
+            or not start <= instant.astimezone(TAIPEI) < end
+        ):
+            continue
+        matches.append(
+            {
+                "official_event_id": event_id,
+                "start_time": instant.astimezone(TAIPEI).isoformat(),
+                "start_time_utc": instant.astimezone(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "league": event["league"],
+                "tournament": event["tournament"],
+                "block": event["block"],
+                "team1": event["team1"],
+                "team2": event["team2"],
+            }
+        )
+    if not parsed_event_ids:
+        raise JobError(
+            "Riot schedule page no longer contains recognizable embedded EventMatch data"
+        )
+    matches.sort(key=lambda item: str(item["start_time"]))
+    return {
+        "schema_version": "1.0",
+        "source": RIOT_SCHEDULE_URL,
+        "window_start": start.isoformat(),
+        "window_end": end.isoformat(),
+        "window_boundary": "start-inclusive/end-exclusive",
+        "parser": "riot-server-rendered-embedded-event-json",
+        "parsed_event_count": len(parsed_event_ids),
+        "match_count": len(matches),
+        "matches": matches,
+    }
+
+
+def fetch_riot_schedule(target: str) -> dict[str, object]:
+    """擷取 Riot 多賽區官方頁並保存可稽核的精確事件時間與配對。"""
+    request = urllib.request.Request(
+        RIOT_SCHEDULE_URL,
+        headers={
+            "Accept": "text/html",
+            "User-Agent": "codex-lol-automation/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            html = response.read().decode("utf-8")
+    except (OSError, urllib.error.URLError, UnicodeDecodeError) as exc:
+        raise JobError(f"Riot official schedule precheck failed: {exc}") from exc
+    result = extract_riot_schedule(html, target)
+    result["checked_at"] = datetime.now(TAIPEI).isoformat()
+    return result
+
+
 def compact_match(record: dict[str, object]) -> dict[str, object]:
     bets = record.get("bet_updates") if isinstance(record.get("bet_updates"), dict) else {}
     team1 = bets.get("team_1") if isinstance(bets.get("team_1"), dict) else {}
@@ -223,6 +309,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 - bo3.gg 候選賽程：{output_dir / 'schedule-precheck.json'}
 - bo3.gg 原始伺服器端 S-tier 回應：{output_dir / 'bo3-filtered-response.json'}
 - bo3.gg 原始未套 tier 回應：{output_dir / 'bo3-unfiltered-response.json'}
+- Riot 多賽區官方事件預查：{output_dir / 'riot-schedule-precheck.json'}
 - 歷史因子登錄檔：{STATE_ROOT / 'history/factor-registry.json'}（若存在）
 
 要求：
@@ -233,6 +320,12 @@ def prompt_for(target: str, output_dir: Path) -> str:
    獨立 coverage group 的 match_keys 聯集必須等於官方全域集合，否則停止。
    bo3.gg、Leaguepedia、Liquipedia、OP.GG 均記為
    role="independent"；只有 Riot／賽區主辦方記為 role="official"。
+   `riot-schedule-precheck.json` 是直接從上述 Riot 多賽區官方頁的伺服器渲染
+   EventMatch JSON 確定性擷取；其 `start_time_utc`／`start_time` 與同一事件的
+   team1/team2 是官方頁的原始綁定，必須作為官方集合的基礎。禁止改用頁面上的
+   Today／Tomorrow／星期幾等相對標題重新配對，也禁止把視窗外下一日的隊伍套到
+   視窗內同一開賽時刻。若它與 bo3.gg 候選及另一個當前獨立來源一致，不得只因
+   相鄰日期區塊還列有其他隊伍就宣告衝突；仍須查核是否有官方預查未涵蓋的賽區。
 2. 建立 {output_dir / 'schedule-verification.json'}，至少包含：
    verified_at, timezone="Asia/Taipei", window_start, window_end,
    complete, no_matches, candidate_match_keys, added_match_keys,
@@ -826,6 +919,11 @@ def main() -> int:
                 "matches": [compact_match(match) for match in matches],
             }
             atomic_json(output_dir / "schedule-precheck.json", snapshot)
+            riot_schedule = fetch_riot_schedule(target)
+            atomic_json(
+                output_dir / "riot-schedule-precheck.json",
+                riot_schedule,
+            )
             write_status(output_dir, "prediction", "running", target_date=target)
             run(
                 codex_command(REPO_ROOT, output_dir / "agent-last-message.md", prompt_for(target, output_dir)),

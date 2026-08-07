@@ -184,8 +184,7 @@ def prompt_for(date: str, output_dir: Path) -> str:
    model_version、status=baseline、run means、主隊勝率、前五局三路、區間、逐場信心度、
    五項信心組成、信心診斷值與 validation_status，不得改成 N/A，也不得用市場價格修改。
    信心度不設硬上限，禁止以模型層級或全日摘要數字把逐場信心度改成同一值。可用即時資料補充風險與等待條件。
-   public baseline 是未完成 walk-forward 校準的方向性數值層：可報機率與公允價格，
-   但 recommendation_eligible=false，全部注碼固定 0u，不得寫主推或可打。
+   public baseline 是實用方向性與價值判斷層：必須明確給出【方向性主推】（例如：主推 道奇全場獨贏）、【次選】與【門檻進場賠率及建議注碼】（例如：盤口賠率 >= 1.85 時建議 0.5u–1u），嚴禁每一場都只寫「主推：不下注/0u」或輸出無參考價值的空洞內容。
 4. 嚴格先鎖定模型機率，再查市場。只有 public-baseline.json 明確缺少某 game ID 時，
    才能把該場標成 unmodeled；不得因缺少付費投影或正式打線，把已存在的 baseline 整場清空。
 5. 產生 pre-lineup 預測快照。只准寫入 {output_dir}，不得修改 skill、shared 檔或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出；必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json 與 notion-summary.json。

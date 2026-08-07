@@ -24,6 +24,7 @@ from common import JobError
 from predict_next_day import (
     ScheduleFetch,
     _fetch_schedule_payload,
+    extract_riot_schedule,
     extract_taipei_s_matches,
     fetch_schedule,
     forecast_window,
@@ -66,6 +67,10 @@ class LolAutomationTests(unittest.TestCase):
                     ),
                 ),
                 mock.patch("predict_next_day.compact_match", return_value={}),
+                mock.patch(
+                    "predict_next_day.fetch_riot_schedule",
+                    return_value={"matches": []},
+                ),
                 mock.patch("predict_next_day.codex_command", return_value=["codex", "exec"]),
                 mock.patch("predict_next_day.run") as run_mock,
                 mock.patch(
@@ -83,6 +88,7 @@ class LolAutomationTests(unittest.TestCase):
             self.assertTrue((output_dir / "schedule-precheck.json").exists())
             self.assertTrue((output_dir / "bo3-filtered-response.json").exists())
             self.assertTrue((output_dir / "bo3-unfiltered-response.json").exists())
+            self.assertTrue((output_dir / "riot-schedule-precheck.json").exists())
 
     def test_dry_run_preserves_existing_prediction_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -134,6 +140,10 @@ class LolAutomationTests(unittest.TestCase):
                     "predict_next_day.fetch_schedule", return_value=schedule
                 ),
                 mock.patch(
+                    "predict_next_day.fetch_riot_schedule",
+                    return_value={"matches": []},
+                ),
+                mock.patch(
                     "predict_next_day.codex_command",
                     return_value=["codex", "exec"],
                 ),
@@ -183,6 +193,10 @@ class LolAutomationTests(unittest.TestCase):
                     "predict_next_day.fetch_schedule", return_value=schedule
                 ),
                 mock.patch(
+                    "predict_next_day.fetch_riot_schedule",
+                    return_value={"matches": []},
+                ),
+                mock.patch(
                     "predict_next_day.codex_command",
                     return_value=["codex", "exec"],
                 ),
@@ -211,6 +225,41 @@ class LolAutomationTests(unittest.TestCase):
             [item["id"] for item in extract_taipei_s_matches(records, "2026-07-22")],
             [1, 4],
         )
+
+    def test_riot_embedded_event_time_prevents_next_day_pairing_mixup(self) -> None:
+        """Regression: 2026-07-30 agent assigned Jul 31 LCP teams to Jul 30."""
+        html = (
+            '{"__typename":"EventMatch","id":"1","blockName":"Swiss",'
+            '"startTime":"2026-07-30T09:00:00Z","state":"unstarted","type":"match",'
+            '"league":{"__typename":"League","id":"lcp","name":"LCP"},'
+            '"tournament":{"__typename":"Tournament","id":"t","name":"Split 3 2026"},'
+            '"matchTeams":[{"__typename":"MatchTeam","id":"a",'
+            '"name":"Fukuoka SoftBank HAWKS gaming"},{"__typename":"MatchTeam",'
+            '"id":"b","name":"DetonatioN FocusMe"}]}'
+            '{"__typename":"EventMatch","id":"2","blockName":"Swiss",'
+            '"startTime":"2026-07-31T09:00:00Z","state":"unstarted","type":"match",'
+            '"league":{"__typename":"League","id":"lcp","name":"LCP"},'
+            '"tournament":{"__typename":"Tournament","id":"t","name":"Split 3 2026"},'
+            '"matchTeams":[{"__typename":"MatchTeam","id":"c",'
+            '"name":"Team Secret Whales"},{"__typename":"MatchTeam","id":"d",'
+            '"name":"MVK Esports"}]}'
+        )
+        result = extract_riot_schedule(html, "2026-07-30")
+        self.assertEqual(result["match_count"], 1)
+        self.assertEqual(result["matches"][0]["team1"], "Fukuoka SoftBank HAWKS gaming")
+        self.assertEqual(result["matches"][0]["team2"], "DetonatioN FocusMe")
+        self.assertEqual(
+            result["matches"][0]["start_time"],
+            "2026-07-30T17:00:00+08:00",
+        )
+
+    def test_prediction_prompt_uses_riot_event_json_not_relative_date_labels(self) -> None:
+        prompt = prediction_prompt_for(
+            "2026-07-30", Path("/tmp/lol-predictions/2026-07-30")
+        )
+        self.assertIn("riot-schedule-precheck.json", prompt)
+        self.assertIn("start_time_utc", prompt)
+        self.assertIn("Today／Tomorrow", prompt)
 
     def test_forecast_window_uses_configured_prediction_time(self) -> None:
         with mock.patch(
