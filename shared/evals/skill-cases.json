@@ -67,7 +67,15 @@
       "prompt": "分析 T1 對 Gen.G 的 BO5，查版本、先發、BP 與完整比分機率。",
       "shouldTrigger": true,
       "mode": "full",
-      "invariants": ["查核版本與名單", "精確比分總和 100%", "至少一局與橫掃互補"]
+      "invariants": ["版本逐聯賽保存來源與 checked_at 且不沿用舊週快取", "先發查核包含最近正式系列與近 30 天人員公告", "精確比分總和 100%", "各自至少一局與橫掃互補", "雙方皆至少一局由雙方橫掃機率推導", "敏感度保存各反模型輸出與預定集成權重", "簡表總結含雙方皆至少一局"]
+    },
+    {
+      "id": "lol-daily-data-freshness",
+      "skill": "lol-analysis",
+      "prompt": "整理今天 LCK、LPL、LCP、LEC 的 LoL 預測，列出版本、先發與完整比分機率。",
+      "shouldTrigger": true,
+      "mode": "daily-summary",
+      "invariants": ["先通過跨賽區賽程完整性閘門", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果"]
     },
     {
       "id": "lol-quick",
