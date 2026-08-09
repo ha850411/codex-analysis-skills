@@ -75,7 +75,7 @@
       "prompt": "整理今天 LCK、LPL、LCP、LEC 的 LoL 預測，列出版本、先發與完整比分機率。",
       "shouldTrigger": true,
       "mode": "daily-summary",
-      "invariants": ["先通過跨賽區賽程完整性閘門", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果"]
+      "invariants": ["先通過跨賽區賽程完整性閘門", "bo3.gg 只作候選且不得計入獨立 coverage group", "每個目標聯賽都有非 bo3 獨立子集合且聯集等於官方集合", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果"]
     },
     {
       "id": "lol-quick",

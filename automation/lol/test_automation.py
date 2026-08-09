@@ -376,6 +376,8 @@ class LolAutomationTests(unittest.TestCase):
         self.assertIn('scope="global-s-tier"', prompt)
         self.assertIn("聯賽專頁只能貢獻該聯賽子集合", prompt)
         self.assertIn("bo3_match_id=null", prompt)
+        self.assertIn("bo3.gg 不得出現在 coverage_sources", prompt)
+        self.assertIn("原始回應只保存在候選 precheck artifacts", prompt)
 
     def test_exact_score_contract(self) -> None:
         record = {
@@ -538,6 +540,18 @@ class LolAutomationTests(unittest.TestCase):
                 json.dumps(split_coverage), encoding="utf-8"
             )
             validate_schedule_verification(verification_path, precheck_path)
+
+            bo3_as_independent = json.loads(json.dumps(verification))
+            bo3_url = "https://bo3.gg/lol/matches/current?tiers=s"
+            bo3_as_independent["coverage_sources"][1]["url"] = bo3_url
+            bo3_as_independent["sources"][1]["url"] = bo3_url
+            for match in bo3_as_independent["matches"]:
+                match["source_urls"][1] = bo3_url
+            verification_path.write_text(
+                json.dumps(bo3_as_independent), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(JobError, "bo3.gg is candidate-only"):
+                validate_schedule_verification(verification_path, precheck_path)
 
             verification["added_match_keys"] = []
             verification_path.write_text(json.dumps(verification), encoding="utf-8")

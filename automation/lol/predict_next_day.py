@@ -97,6 +97,12 @@ def _is_valid_global_schedule_url(url: str) -> bool:
     return True
 
 
+def _is_bo3_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host == "bo3.gg" or host.endswith(".bo3.gg")
+
+
 def forecast_window(target: str) -> tuple[datetime, datetime]:
     """回傳報告日期排程時間起算、起點含且終點不含的 24 小時視窗。"""
     day = date_type.fromisoformat(target)
@@ -318,7 +324,9 @@ def prompt_for(target: str, output_dir: Path) -> str:
    (b) Leaguepedia／Liquipedia／OP.GG Esports 的獨立全域賽程，或由逐聯賽獨立頁面
    組成的 coverage group。聯賽專頁只能貢獻該聯賽子集合，不能單獨證明跨賽區完整；
    獨立 coverage group 的 match_keys 聯集必須等於官方全域集合，否則停止。
-   bo3.gg、Leaguepedia、Liquipedia、OP.GG 均記為
+   bo3.gg 不得出現在 coverage_sources，也不得作為 matches.source_urls
+   的獨立賽程證明；其原始回應只保存在候選 precheck artifacts。
+   Leaguepedia、Liquipedia、OP.GG 或其他不同營運方記為
    role="independent"；只有 Riot／賽區主辦方記為 role="official"。
    `riot-schedule-precheck.json` 是直接從上述 Riot 多賽區官方頁的伺服器渲染
    EventMatch JSON 確定性擷取；其 `start_time_utc`／`start_time` 與同一事件的
@@ -499,6 +507,10 @@ def validate_schedule_verification(
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise JobError(f"Schedule source {index} has invalid URL")
+        if _is_bo3_url(url):
+            raise JobError(
+                f"Schedule source {index}: bo3.gg is candidate-only and cannot prove coverage"
+            )
         source_roles[url] = str(role)
         source_hosts[str(role)].add(parsed.hostname.lower())
     if not source_hosts["official"] or not source_hosts["independent"]:
