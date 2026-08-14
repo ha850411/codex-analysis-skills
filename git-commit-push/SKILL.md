@@ -1,15 +1,18 @@
 ---
 name: git-commit-push
-description: "自動化檢查 Git 狀態、產製高質量純中文 Commit 訊息並推送至遠端儲存庫。用於 Git 變更檢查、純中文提交訊息撰寫、暫存、安全提交與推送程式碼；不要用於非 Git 專案或未經確認的破壞性覆寫操作。預設繁體中文。"
+description: "自動化檢查 Git 狀態、產製 Conventional Commits 標準語意化（標準英文前綴＋純繁體中文說明）Commit 訊息並安全推送至遠端儲存庫。用於 Git 變更檢查、語意化提交訊息撰寫、暫存、安全提交與推送程式碼；不要用於非 Git 專案或未經確認的破壞性覆寫操作。預設繁體中文。"
 ---
 
-# Git 純中文提交與推送技能（Git Commit & Push Skill）
+# Git 語意化提交與推送技能（Git Commit & Push Skill）
 
-本技能用於標準化 Git 提交流程，確保所有 Git 狀態檢查、品質驗證、提交訊息（Commit Message）產製及遠端推送（Push）均符合嚴格的安全規範與高語意化標準。
+本技能用於標準化 Git 提交流程，確保所有 Git 狀態檢查、品質驗證、遵循 Conventional Commits 標準之提交訊息（Commit Message）產製及遠端推送（Push）均符合嚴格的安全規範與高語意化標準。
 
 **核心規則：**
-1. **全中文規範**：本技能內部所有說明、流程指引與輸出內容一律使用繁體中文。
-2. **純中文 Commit 訊息**：所有產生的 Git Commit 標題與內文**一律只能使用繁體中文**（除程式碼識別碼、檔名、函數名等專有名詞外，所有動詞與語意描述皆須為中文）。
+1. **全中文指引**：本技能內部所有說明、流程指引與輸出回饋一律使用繁體中文。
+2. **Conventional Commits 語意化標準**：
+   - **類型前綴 (Type)**：一律採用標準 ASCII 英文小寫關鍵字（如 `feat`、`fix`、`docs`、`refactor`、`perf`、`test`、`chore` 等），以確保與 Commitlint、Semantic Release、Changelog 生成器等自動化工具鏈 100% 相容。
+   - **範圍 (Scope)**：以英文或小寫模組名稱標註影響範疇，如 `feat(git-commit-push)`、`fix(automation)`。
+   - **摘要與內文 (Summary & Body)**：**一律使用繁體中文**精準撰寫變更意圖與細節（除程式碼識別碼、檔名、函數名等專有名詞外，所有動詞與語意描述皆須為中文）。
 3. **安全第一**：提交前必須嚴格排查敏感資訊（`.env`、金鑰、憑證）、暫存垃圾檔案與未通過之測試。
 
 ---
@@ -17,7 +20,7 @@ description: "自動化檢查 Git 狀態、產製高質量純中文 Commit 訊�
 ## 📋 標準執行流程
 
 ```
-[1. 檢查狀態] ──> [2. 安全與測試驗證] ──> [3. 產製純中文 Commit 訊息] ──> [4. 暫存與提交] ──> [5. 推送遠端與驗證]
+[1. 檢查狀態] ──> [2. 安全與測試驗證] ──> [3. 產製語意化 Commit 訊息] ──> [4. 暫存與提交] ──> [5. 推送遠端與驗證]
 ```
 
 ### 步驟一：檢查工作區狀態 (Git Status)
@@ -30,29 +33,30 @@ description: "自動化檢查 Git 狀態、產製高質量純中文 Commit 訊�
 2. **測試與語法檢查**：若專案中包含測試套件（如 `npm test`、`python3 -m unittest` 等）或語法檢查工具，應在提交前執行並確認全數通過。
 3. 參考 [`references/safety-checklist.md`](file:///home/ec2-user/.agents/skills/git-commit-push/references/safety-checklist.md) 進行完整安全檢核。
 
-### 步驟三：產製純中文結構化 Commit 訊息
-1. 根據變更內容與目的，遵循 [`references/commit-conventions.md`](file:///home/ec2-user/.agents/skills/git-commit-push/references/commit-conventions.md) 規範產製純中文 Commit 訊息。
+### 步驟三：產製標準語意化 Commit 訊息
+1. 根據變更內容與目的，遵循 [`references/commit-conventions.md`](file:///home/ec2-user/.agents/skills/git-commit-push/references/commit-conventions.md) 規範產製語意化 Commit 訊息。
 2. **格式標準**：
    ```text
-   <類型>(<範圍>): <純中文簡短摘要>
+   <type>(<scope>): <純中文簡短摘要>
 
    - <模組或檔案1>: <純中文詳細變更說明與原因>
    - <模組或檔案2>: <純中文詳細變更說明與原因>
    - <補充說明/影響評估>（選填）
    ```
-3. **中文類型前綴對照**：
-   - `功能(feat)` 或 `【功能】`：新增功能、新模組、新技能
-   - `修復(fix)` 或 `【修復】`：修復缺陷、錯誤或例外狀況
-   - `重構(refactor)` 或 `【重構】`：程式碼重構（不改變對外行為）
-   - `文件(docs)` 或 `【文件】`：新增或修改說明文件、註解
-   - `測試(test)` 或 `【測試】`：新增、修改或補充測試案例
-   - `維護(chore)` 或 `【維護】`：建置流程、設定檔、依賴或工具鏈變更
-   - `樣式(style)` 或 `【樣式】`：排版、格式、空格等不影響程式碼邏輯之調整
-   - `效能(perf)` 或 `【效能】`：效能最佳化、減少耗時或資源佔用
+3. **標準類型前綴對照**：
+   - `feat`: 新增功能、新模組、新技能 (Feature)
+   - `fix`: 修復缺陷、錯誤或例外狀況 (Bug fix)
+   - `refactor`: 程式碼重構（不改變對外行為的代碼整理）
+   - `docs`: 新增或修改說明文件、註解、README (Documentation)
+   - `test`: 新增、修改或補充測試案例 (Testing)
+   - `chore`: 建置流程、設定檔、依賴或工具鏈變更 (Maintenance/Tooling)
+   - `style`: 排版、格式、空格等不影響程式碼邏輯之調整
+   - `perf`: 效能最佳化、減少耗時或資源佔用 (Performance)
+   - `ci` / `build`: CI/CD 流程、建置腳本或外部依賴設定
 
 4. **規範限制**：
    - 標題句末不加句號。
-   - 標題與內文一律以繁體中文撰寫，嚴禁使用英文撰寫說明。
+   - 類型必須為標準英文小寫前綴，摘要與內文一律以繁體中文撰寫。
 
 ### 步驟四：暫存與安全提交 (Stage & Commit)
 1. 依據變更範圍將檔案加入暫存區（`git add <檔案路徑>` 或 `git add -A`）。

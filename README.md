@@ -14,7 +14,7 @@ AI 驅動的體育賽事與電競分析技能集（Sports & Esports Analytics Sk
 ├── dota2-analysis/        # Dota 2 電競賽事分析模組
 ├── valorant-analysis/     # Valorant 特戰英豪電競賽事分析模組
 ├── prediction-pipeline/   # 可稽核預測管線 (支援 agy 紅隊複核與雙模型審查)
-├── git-commit-push/       # Git 純中文提交與遠端推送技能
+├── git-commit-push/       # Git 語意化（Conventional Commits）提交與遠端推送技能
 ├── automation/            # 自動化定時分析與報告郵件/Crontab 觸發器
 └── shared/                # 共用分析架構、機率校驗與 Notion 匯出工具
     ├── notion/            # Notion 賽事報告自動發布工具
@@ -43,7 +43,7 @@ AI 驅動的體育賽事與電競分析技能集（Sports & Esports Analytics Sk
 - 🔄 **[prediction-pipeline](file:///Users/eason.lee/.agents/skills/prediction-pipeline/SKILL.md)**: 協調可稽核的預測流程。支援 `agy` 紅隊審查與雙模型（Codex 主預測 + agy 紅隊複核）互相質詢，最終產出具備風險對沖與校準依據的分析報告。
 
 ### 4. 自動化與工具鏈 (Automation & Shared Tools)
-- 🚀 **[git-commit-push](file:///home/ec2-user/.agents/skills/git-commit-push/SKILL.md)**: Git 純中文自動化狀態檢查、語意化 Commit 產製與安全 Push 技能。
+- 🚀 **[git-commit-push](file:///home/ec2-user/.agents/skills/git-commit-push/SKILL.md)**: Git 自動化狀態檢查、Conventional Commits 語意化 Commit 產製與安全 Push 技能。
 - 🤖 **[automation](file:///home/ec2-user/.agents/skills/automation/README.md)**: 自動化 Crontab 觸發與郵件通知發送（支援 MLB 與 LoL 定時預測任務）。
 - 📝 **[shared/notion](file:///home/ec2-user/.agents/skills/shared/notion/README.md)**: 自動將預測分析結果解析並匯入 Notion Database / Data Source。
 
