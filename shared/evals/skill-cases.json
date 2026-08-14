@@ -244,6 +244,22 @@
       "shouldTrigger": true,
       "mode": "custom",
       "invariants": ["走盤不是全輸", "市場資料不進入機率階段", "summary_table 含模型信心度"]
+    },
+    {
+      "id": "git-commit-push-standard",
+      "skill": "git-commit-push",
+      "prompt": "幫我把剛剛修改的程式碼 git commit & push，訊息請寫清楚。",
+      "shouldTrigger": true,
+      "mode": "standard",
+      "invariants": ["純繁體中文 Commit 訊息", "檢查工作區狀態與測試", "安全推送至遠端分支"]
+    },
+    {
+      "id": "git-commit-push-boundary",
+      "skill": "git-commit-push",
+      "prompt": "Git rebase 和 merge 有什麼不同？",
+      "shouldTrigger": false,
+      "mode": null,
+      "invariants": []
     }
   ]
 }
