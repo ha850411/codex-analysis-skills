@@ -4,6 +4,13 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const STATUS = new Set(["prospective_pre_match", "reconstructed_after_start"]);
+const MODEL_KINDS = new Set([
+  "baseline_prior",
+  "recent_event",
+  "underdog_countermodel",
+  "direct_rematch",
+]);
+const POSITIONS = new Set(["Top", "Jungle", "Mid", "ADC", "Support"]);
 
 function fail(message) {
   throw new Error(message);
@@ -45,6 +52,17 @@ function stringList(value, label, length = null) {
 
 function samePlayers(left, right) {
   return left.every((player, index) => player === right[index]);
+}
+
+function probability(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    fail(`${label} must be a number from 0 to 1`);
+  }
+  return value;
+}
+
+function close(left, right, tolerance = 1e-6) {
+  return Math.abs(left - right) <= tolerance;
 }
 
 function validateTeam(team, label, predictedAt) {
@@ -96,6 +114,7 @@ function validateH2h(h2h, label, predictedAt, scheduledStart) {
   if (h2h.search_complete !== true) fail(`${label}.search_complete must be true`);
   if (!Array.isArray(h2h.matches)) fail(`${label}.matches must be an array`);
 
+  const comparableCountermodels = [];
   for (const [index, rawMatch] of h2h.matches.entries()) {
     const match = object(rawMatch, `${label}.matches[${index}]`);
     const playedAt = timestamp(match.played_at, `${label}.matches[${index}].played_at`);
@@ -149,10 +168,149 @@ function validateH2h(h2h, label, predictedAt, scheduledStart) {
     ) {
       fail(`${label}.matches[${index}] countermodel probability/weight must be 0..1`);
     }
+    comparableCountermodels.push({
+      matchIndex: index,
+      team: countermodel.team,
+      seriesProbability: probability,
+      ensembleWeight: weight,
+    });
+  }
+  return comparableCountermodels;
+}
+
+function validateLineupUncertainties(forecast, label, predictedAt, scheduledStart) {
+  if (!Array.isArray(forecast.lineup_uncertainties)) {
+    fail(`${label}.lineup_uncertainties must be an array`);
+  }
+  const teamNames = new Set(forecast.teams.map((team) => team.name));
+  const seen = new Set();
+  for (const [index, rawUncertainty] of forecast.lineup_uncertainties.entries()) {
+    const uncertaintyLabel = `${label}.lineup_uncertainties[${index}]`;
+    const uncertainty = object(rawUncertainty, uncertaintyLabel);
+    const team = nonemptyString(uncertainty.team, `${uncertaintyLabel}.team`);
+    if (!teamNames.has(team)) fail(`${uncertaintyLabel}.team must match a forecast team`);
+    const position = nonemptyString(uncertainty.position, `${uncertaintyLabel}.position`);
+    if (!POSITIONS.has(position)) fail(`${uncertaintyLabel}.position is invalid`);
+    const key = `${team}:${position}`;
+    if (seen.has(key)) fail(`${uncertaintyLabel} duplicates ${key}`);
+    seen.add(key);
+
+    const candidates = stringList(
+      uncertainty.candidates,
+      `${uncertaintyLabel}.candidates`,
+    );
+    if (candidates.length < 2 || new Set(candidates).size !== candidates.length) {
+      fail(`${uncertaintyLabel}.candidates must contain at least two unique starters`);
+    }
+    if (!Array.isArray(uncertainty.scenarios) || uncertainty.scenarios.length !== candidates.length) {
+      fail(`${uncertaintyLabel}.scenarios must contain one entry per candidate`);
+    }
+    const scenarioCandidates = new Set();
+    let scenarioWeight = 0;
+    for (const [scenarioIndex, rawScenario] of uncertainty.scenarios.entries()) {
+      const scenarioLabel = `${uncertaintyLabel}.scenarios[${scenarioIndex}]`;
+      const scenario = object(rawScenario, scenarioLabel);
+      const starter = nonemptyString(scenario.starter, `${scenarioLabel}.starter`);
+      if (!candidates.includes(starter)) fail(`${scenarioLabel}.starter is not a candidate`);
+      if (scenarioCandidates.has(starter)) fail(`${scenarioLabel}.starter is duplicated`);
+      scenarioCandidates.add(starter);
+      scenarioWeight += probability(scenario.probability, `${scenarioLabel}.probability`);
+      probability(
+        scenario.team_series_probability,
+        `${scenarioLabel}.team_series_probability`,
+      );
+      nonemptyString(scenario.evidence, `${scenarioLabel}.evidence`);
+    }
+    if (!close(scenarioWeight, 1)) {
+      fail(`${uncertaintyLabel}.scenario probabilities must sum to 1`);
+    }
+    const recheckBy = timestamp(uncertainty.recheck_by, `${uncertaintyLabel}.recheck_by`);
+    if (recheckBy <= predictedAt || recheckBy >= scheduledStart) {
+      fail(`${uncertaintyLabel}.recheck_by must be after predicted_at and before scheduled_start`);
+    }
+    nonemptyString(uncertainty.resolution_trigger, `${uncertaintyLabel}.resolution_trigger`);
   }
 }
 
-function validateForecast(forecast, index) {
+function validateModelEnsemble(forecast, label, comparableCountermodels) {
+  const ensemble = object(forecast.model_ensemble, `${label}.model_ensemble`);
+  const teamNames = forecast.teams.map((team) => team.name);
+  const targetTeam = nonemptyString(ensemble.target_team, `${label}.model_ensemble.target_team`);
+  if (!teamNames.includes(targetTeam)) {
+    fail(`${label}.model_ensemble.target_team must match a forecast team`);
+  }
+  if (!Array.isArray(ensemble.models) || ensemble.models.length < 3) {
+    fail(`${label}.model_ensemble.models must contain at least three models`);
+  }
+
+  const seenNames = new Set();
+  const seenKinds = new Set();
+  let weightSum = 0;
+  let weightedProbability = 0;
+  let minimum = 1;
+  let maximum = 0;
+  for (const [index, rawModel] of ensemble.models.entries()) {
+    const modelLabel = `${label}.model_ensemble.models[${index}]`;
+    const model = object(rawModel, modelLabel);
+    const name = nonemptyString(model.name, `${modelLabel}.name`);
+    if (seenNames.has(name)) fail(`${modelLabel}.name must be unique`);
+    seenNames.add(name);
+    const kind = nonemptyString(model.kind, `${modelLabel}.kind`);
+    if (!MODEL_KINDS.has(kind)) fail(`${modelLabel}.kind is invalid`);
+    seenKinds.add(kind);
+    const modelProbability = probability(
+      model.series_probability,
+      `${modelLabel}.series_probability`,
+    );
+    const weight = probability(model.weight, `${modelLabel}.weight`);
+    if (weight === 0) fail(`${modelLabel}.weight must be greater than 0`);
+    nonemptyString(model.evidence, `${modelLabel}.evidence`);
+    weightSum += weight;
+    weightedProbability += modelProbability * weight;
+    minimum = Math.min(minimum, modelProbability);
+    maximum = Math.max(maximum, modelProbability);
+  }
+  for (const requiredKind of ["baseline_prior", "recent_event", "underdog_countermodel"]) {
+    if (!seenKinds.has(requiredKind)) {
+      fail(`${label}.model_ensemble requires ${requiredKind}`);
+    }
+  }
+  if (!close(weightSum, 1)) fail(`${label}.model_ensemble weights must sum to 1`);
+  const central = probability(
+    ensemble.central_probability,
+    `${label}.model_ensemble.central_probability`,
+  );
+  if (!close(central, weightedProbability)) {
+    fail(`${label}.model_ensemble.central_probability must equal the weighted model output`);
+  }
+  const spread = probability(ensemble.spread, `${label}.model_ensemble.spread`);
+  if (!close(spread, maximum - minimum)) {
+    fail(`${label}.model_ensemble.spread must equal max minus min model probability`);
+  }
+
+  for (const countermodel of comparableCountermodels) {
+    const expectedProbability =
+      countermodel.team === targetTeam
+        ? countermodel.seriesProbability
+        : 1 - countermodel.seriesProbability;
+    const match = ensemble.models.find(
+      (model) =>
+        model.kind === "direct_rematch" &&
+        model.source_match_index === countermodel.matchIndex,
+    );
+    if (!match) {
+      fail(`${label}.model_ensemble is missing direct_rematch model for H2H index ${countermodel.matchIndex}`);
+    }
+    if (
+      !close(match.series_probability, expectedProbability) ||
+      !close(match.weight, countermodel.ensembleWeight)
+    ) {
+      fail(`${label}.direct_rematch model must match the H2H countermodel output and weight`);
+    }
+  }
+}
+
+function validateForecast(forecast, index, schemaVersion) {
   const label = `forecasts[${index}]`;
   object(forecast, label);
   nonemptyString(forecast.match_key, `${label}.match_key`);
@@ -180,12 +338,16 @@ function validateForecast(forecast, index) {
   forecast.teams.forEach((team, teamIndex) =>
     validateTeam(team, `${label}.teams[${teamIndex}]`, predictedAt),
   );
-  validateH2h(
+  const comparableCountermodels = validateH2h(
     forecast.recent_direct_h2h,
     `${label}.recent_direct_h2h`,
     predictedAt,
     scheduledStart,
   );
+  if (schemaVersion >= 2) {
+    validateLineupUncertainties(forecast, label, predictedAt, scheduledStart);
+    validateModelEnsemble(forecast, label, comparableCountermodels);
+  }
 
   const betting = object(forecast.betting, `${label}.betting`);
   if (
@@ -205,13 +367,13 @@ function validateForecast(forecast, index) {
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (payload.schema_version !== 1) fail("schema_version must be 1");
+  if (![1, 2].includes(payload.schema_version)) fail("schema_version must be 1 or 2");
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");
   }
   const seen = new Set();
   payload.forecasts.forEach((forecast, index) => {
-    validateForecast(forecast, index);
+    validateForecast(forecast, index, payload.schema_version);
     if (seen.has(forecast.match_key)) fail(`duplicate match_key: ${forecast.match_key}`);
     seen.add(forecast.match_key);
   });

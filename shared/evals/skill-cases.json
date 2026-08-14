@@ -102,6 +102,22 @@
       "invariants": ["標記 reconstructed_after_start", "注碼固定為 0u", "可做定性檢討但不計入賽前方向命中、Brier、log loss 或 ROI", "同時回報發布集 N 與正式賽前評分集 N"]
     },
     {
+      "id": "lol-lineup-scenario-refresh-regression",
+      "skill": "lol-analysis",
+      "prompt": "T1 最近一場由 Painter 打野，但 Oner 仍是有可信來源的本場候選；請先做 pre-lineup 預測，開賽前再收到 Oner 先發資訊。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["pre-lineup artifact 明列 Painter 與 Oner 情境、權重、各情境系列賽機率與證據", "保存早於開賽的 recheck_by 與解決條件", "不得只在正文寫 Oner 上場加減百分點", "Oner 落定後建立 post-lineup 新快照並從主分布重算", "舊 pre-lineup 版不得冒充最終先發版"]
+    },
+    {
+      "id": "lol-ensemble-replay-regression",
+      "skill": "lol-analysis",
+      "prompt": "分析一場 10 天內有同陣容直接再戰的 BO3，並交付可稽核的模型 artifact。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["schema v2 artifact 至少保存基準先驗、同賽事近期內容、弱方取勝三個具名模型", "各模型保存輸出、預定權重與證據且權重總和為 1", "中央機率等於同一組模型的加權和", "模型 spread 等於最大值減最小值", "可比 H2H 的 direct-rematch 輸出與權重在 H2H 及中央集成兩處一致"]
+    },
+    {
       "id": "lol-quick",
       "skill": "lol-analysis",
       "prompt": "只簡短說明這場 LPL 對戰最大的 BP 風險。",

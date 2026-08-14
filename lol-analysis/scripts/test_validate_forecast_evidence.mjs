@@ -61,12 +61,113 @@ function payload(forecast = validForecast()) {
   return { schema_version: 1, forecasts: [forecast] };
 }
 
+function upgradeToV2(forecast = validForecast()) {
+  forecast.lineup_uncertainties = [];
+  forecast.model_ensemble = {
+    target_team: "LGD",
+    models: [
+      {
+        name: "strength-prior",
+        kind: "baseline_prior",
+        series_probability: 0.58,
+        weight: 0.25,
+        evidence: "long-term opponent-adjusted strength",
+      },
+      {
+        name: "recent-event",
+        kind: "recent_event",
+        series_probability: 0.62,
+        weight: 0.25,
+        evidence: "same-event recent series",
+      },
+      {
+        name: "underdog-win-path",
+        kind: "underdog_countermodel",
+        series_probability: 0.48,
+        weight: 0.25,
+        evidence: "opponent repeatable win paths",
+      },
+      {
+        name: "direct-rematch",
+        kind: "direct_rematch",
+        source_match_index: 0,
+        series_probability: 0.34,
+        weight: 0.25,
+        evidence: "comparable direct rematch",
+      },
+    ],
+    central_probability: 0.505,
+    spread: 0.28,
+  };
+  return forecast;
+}
+
+function payloadV2(forecast = upgradeToV2()) {
+  return { schema_version: 2, forecasts: [forecast] };
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
+assert.doesNotThrow(() => validateSnapshot(payloadV2()));
 
 {
   const forecast = validForecast();
   forecast.teams[0].projected_lineup.players[1] = "OlderJungler";
   assert.throws(() => validateSnapshot(payload(forecast)), /change_evidence/);
+}
+
+{
+  const forecast = upgradeToV2();
+  delete forecast.model_ensemble;
+  assert.throws(() => validateSnapshot(payloadV2(forecast)), /model_ensemble/);
+}
+
+{
+  const forecast = upgradeToV2();
+  forecast.model_ensemble.central_probability = 0.58;
+  assert.throws(() => validateSnapshot(payloadV2(forecast)), /weighted model output/);
+}
+
+{
+  const forecast = upgradeToV2();
+  forecast.model_ensemble.models = forecast.model_ensemble.models.filter(
+    (model) => model.kind !== "direct_rematch",
+  );
+  forecast.model_ensemble.models[0].weight = 1 / 3;
+  forecast.model_ensemble.models[1].weight = 1 / 3;
+  forecast.model_ensemble.models[2].weight = 1 / 3;
+  forecast.model_ensemble.central_probability = 0.56;
+  forecast.model_ensemble.spread = 0.14;
+  assert.throws(() => validateSnapshot(payloadV2(forecast)), /missing direct_rematch/);
+}
+
+{
+  const forecast = upgradeToV2();
+  forecast.lineup_uncertainties = [
+    {
+      team: "TES",
+      position: "Jungle",
+      candidates: ["JungleA", "AltJungle"],
+      scenarios: [
+        {
+          starter: "JungleA",
+          probability: 0.6,
+          team_series_probability: 0.55,
+          evidence: "latest formal series",
+        },
+        {
+          starter: "AltJungle",
+          probability: 0.4,
+          team_series_probability: 0.61,
+          evidence: "recent official rotation",
+        },
+      ],
+      recheck_by: "2026-08-13T16:30:00+08:00",
+      resolution_trigger: "official match roster or on-stage draft client",
+    },
+  ];
+  assert.doesNotThrow(() => validateSnapshot(payloadV2(forecast)));
+  forecast.lineup_uncertainties[0].scenarios[1].probability = 0.3;
+  assert.throws(() => validateSnapshot(payloadV2(forecast)), /probabilities must sum to 1/);
 }
 
 {
