@@ -380,6 +380,10 @@ class LolAutomationTests(unittest.TestCase):
         self.assertIn("bo3_match_id=null", prompt)
         self.assertIn("bo3.gg 不得出現在 coverage_sources", prompt)
         self.assertIn("原始回應只保存在候選 precheck artifacts", prompt)
+        self.assertIn("decision-slate.json", prompt)
+        self.assertIn("任何非 bet_now 的 table_cell 都不得只寫 0u", prompt)
+        self.assertIn("當前價達標、證據閘門通過且沒有硬阻擋", prompt)
+        self.assertIn("若全日 0u，必須保存 all_zero_audit", prompt)
 
     def test_exact_score_contract(self) -> None:
         record = {

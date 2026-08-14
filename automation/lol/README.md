@@ -15,6 +15,7 @@ bo3.gg 清單只作候選。Codex 必須再用涵蓋完整視窗的 Riot／賽�
 - `.automation-state/lol/predictions/YYYY-MM-DD/bo3-filtered-response.json`
 - `.automation-state/lol/predictions/YYYY-MM-DD/bo3-unfiltered-response.json`
 - `.automation-state/lol/predictions/YYYY-MM-DD/market-collection.json`
+- `.automation-state/lol/predictions/YYYY-MM-DD/decision-slate.json`
 - `.automation-state/lol/predictions/YYYY-MM-DD/odds-*.json` 或 `odds-*.error.json`
 - `.automation-state/lol/predictions/YYYY-MM-DD/schedule-verification.json`
 - `.automation-state/lol/reviews/YYYY-MM-DD/postmortem.md`

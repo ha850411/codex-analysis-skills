@@ -382,7 +382,7 @@ def prompt_for(target: str, output_dir: Path) -> str:
 5. 通過賽程驗證後，`schedule-verification.json` 的 matches 才是唯一預測集合。不得加入 A/B/C Tier或視窗外賽事，並在 prediction.md 揭露官方全域集合、獨立 coverage group 各子集合與聯集、候選／新增／移除場次及驗證來源。
 6. 查核賽制、名單、版本、近期樣本、BP/英雄池與可用 VOD。因子登錄檔存在時，只讓 status=active 且 used_for_prediction=true 的項目影響機率；candidate 只可作 shadow 記錄，retired 不得再抓取、判斷、報告或影響機率。若 retired 的 revisit_trigger 明確成立，只記錄供下次 postmortem 驗證，不得在本次自行恢復。先鎖模型機率，再依 `shared/markets/collection-contract.md` 逐場執行 `shared/markets/collect_odds_api.mjs --sport esports`。每場傳入獨立 `--output`、`--error-output` 與 `--events-output`；event 名稱無法唯一解析時讀 pending event artifact，確認後以 `--event-id` 重跑。不得因一場或第一次網路錯誤跳過其餘場次，也不得在沒有當次錯誤 artifact 時寫「API 無法擷取」。缺價格不改寫模型機率或信心度。
 7. 建立 {output_dir / 'market-collection.json'}，至少包含 schema_version、generated_at、attempts；attempts 必須逐場且與已驗證 match_key 一一對應，每筆包含 match_key、status=`success|failed`、artifact（{output_dir} 內的相對路徑）。success artifact 必須是收集器的 `status=success` 快照；failed artifact 必須是收集器的 `status=failed` 分類錯誤憑證。只有每場都有 artifact 才算完成市場收集。
-8. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json、market-collection.json 與 notion-summary.json。
+8. 只准寫入 {output_dir}，不得修改 skill、shared 或其他 repo 檔案。排程已在啟動前清除該日期的舊輸出。若 no_matches=true，只建立 schedule-verification.json；否則必須建立本次 prediction.md、forecasts.jsonl、probability-checks.json、market-collection.json、decision-slate.json 與 notion-summary.json。
 9. 寫入 {output_dir / 'prediction.md'}，符合 skill 契約，全文最後只有一個「簡表總結」。
 10. 寫入 {output_dir / 'forecasts.jsonl'}，每場一行 JSON object，至少包含：
    match_key, bo3_match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
@@ -395,8 +395,9 @@ def prompt_for(target: str, output_dir: Path) -> str:
 11. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，各自／雙方至少一局都從同一分布推導。model_confidence 必須等於 final_after_non_compensatory_cap；fragility_triggers 非空時，套用 LoL 非補償式上限，空陣列時最終值等於 raw_weighted。
 12. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}。每場 weighted_confidence 檢查必須帶 match_key、rawWeighted、applyNonCompensatoryCap 與 fragilityTriggers；value 使用上限後最終值，不得改驗證 raw weighted。執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
-13. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
-14. 只建立本地 Notion summary；外層程式驗證賽程、機率與逐場市場 artifact 後才會發布並寄 Email。最後確認所有檔案確實存在。
+13. 依 `lol-analysis/references/recommendation-gates.md` 建立 {output_dir / 'decision-slate.json'}。逐場只能使用 bet_now、price_watch、live_only、pass；任何非 bet_now 的 table_cell 都不得只寫 0u。對所有已映射市場先算 p_bet、最低可接受價格與 adjusted EV；當前價達標、證據閘門通過且沒有硬阻擋時必須為 bet_now 並給非零注碼。若全日 0u，必須保存 all_zero_audit、最接近候選與重跑條件；不得為湊單降低門檻。ranking 必須涵蓋全部賽事，table_cell 必須逐字出現在 prediction.md 最後的簡表。
+14. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
+15. 只建立本地 Notion summary；外層程式驗證賽程、機率、逐場市場 artifact 與決策／簡表同步後才會發布並寄 Email。最後確認所有檔案確實存在。
 """
 
 
@@ -1004,6 +1005,13 @@ def finalize_prediction(output_dir: Path, target: str) -> str:
     validate_market_collection(
         output_dir / "market-collection.json", output_dir, verification
     )
+    run([
+        "node",
+        "lol-analysis/scripts/validate_decision_slate.mjs",
+        str(output_dir / "decision-slate.json"),
+        str(output_dir / "prediction.md"),
+        str(output_dir / "schedule-verification.json"),
+    ])
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
     notion_url = publish_to_notion(output_dir)
