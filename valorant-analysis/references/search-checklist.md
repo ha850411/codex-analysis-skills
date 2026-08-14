@@ -36,3 +36,5 @@
 32. 四場以上 BO3 若 80% 以上眾數為 2-1，是否完成比分集中度審查並列出整批預期橫掃場數？
 33. daily-summary 是否保留逐場信心度，且跨場只報範圍／中位數而非合成單一整體信心？
 34. 四場以上賽後檢討是否執行 `scripts/audit_batch.mjs`，並檢查實際 lineup / veto 的 scenario coverage？
+35. 若登錄超過五人或近期曾在地圖間換人，是否建立 `lineups_by_map` 並和 veto 路徑共同加權？
+36. 是否已用 `scripts/record_forecast.mjs` 保存不可覆寫的原快照，並在報告留下 `forecast_id` 與路徑？

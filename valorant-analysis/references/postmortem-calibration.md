@@ -5,15 +5,17 @@
 
 ## 1. 先重建事實
 
+- 先用報告內的 `forecast_id` 讀取 `.automation-state/valorant/history/forecasts/` 原快照；再查當次 run artifact 與已授權的匯出頁。找不到時標記 `baseline artifact missing`，不得事後重建原機率或計算 Brier／log loss。
 - 核對比賽：賽事、階段、日期、賽制、Patch、場地或線上/線下、先發五人與是否有 stand-in。
 - 核對結果：系列比分、每張地圖比分、pick/ban 順序、pick owner、選邊、OT、手槍局、eco/thrifty、關鍵 timeout 後回合。
 - 核對內容：官方 VOD、VLR match page、RIB.gg/THESPIKE 數據、Valorant Esports match centre、官方賽後摘要。
 - 若只能取得使用者截圖、部分 VOD 或社群摘要，必須標記資料限制，不得硬補未知比分或選手數據。
-- 另建 `scenario coverage` 欄：實際五人、首兩輪 ban、兩張 pick、pick owner、decider 是否出現在賽前加權情境中。只在風險段提到、但未進入主分布者，視為未覆蓋。
+- 另建 `scenario coverage` 欄：逐圖實際五人、首兩輪 ban、兩張 pick、pick owner、decider 是否出現在賽前加權情境中。六人名單若只覆蓋系列賽其中一組五人，標記 `lineup_by_map coverage miss`；只在風險段提到、但未進入主分布者，也視為未覆蓋。
 
 ## 2. 重建原預測
 
 - 原推薦勝方、精確比分、勝率、至少一圖機率、信心度與注碼。
+- 原快照保存狀態、`forecast_id`、模型版本、skill revision、資料截止與預定開賽時間；若缺失，把所有需原機率的指標填 `N/A（baseline artifact missing）`。
 - 原本支撐預測的核心假設：Patch、同賽事樣本、H2H、地圖池、已公布 veto、pick owner、特務池、主 Duelist 狀態、熱手/休息。
 - 若原預測是在官方 veto 公布後做出，必須檢查是否真的 post-veto 重算，或只是把已公布 veto 填進賽前模型。
 
@@ -78,14 +80,14 @@
 - 預期橫掃場數為 `Σ[P(A 2-0)+P(B 2-0)]`；與實際橫掃場數比較。
 - 用 Poisson-binomial 尾端機率描述「至少出現這麼多場橫掃」在原分布下是否罕見。
 - 計算 2-1 眾數比例；若 ≥80%，檢查是否存在機械式 2-1 壓縮。
-- 統計 lineup / veto scenario coverage miss；這是流程品質指標，不受賽果是否猜對影響。
+- 統計 `lineup_by_map`、`first_bans`、`map_picks`、`pick_owners`、`decider` 各維度的 scenario coverage miss；這是流程品質指標，不受賽果是否猜對影響。新資料使用 `scenario_coverage` 物件；`scenario_covered` 只供舊快照相容。
 
 單批樣本不足以宣稱模型已失校。只有同類 cohort 或 walk-forward 回測重複出現，才調整長期先驗；但資料漏列、情境未入模、相依機率不一致可立即修正。
 
 ## 8. 檢討輸出格式
 
 1. 賽果確認與資料來源。
-2. 原預測 vs 實際結果。
+2. 原快照可用性、原預測 vs 實際結果；快照缺失時列出已搜尋位置與不可計算欄位。
 3. 批次機率診斷：Brier / log loss、精確比分、預期 vs 實際橫掃、眾數集中度。
 4. 情境覆蓋：實際 lineup、veto、pick owner 與 decider 是否進入賽前主分布。
 5. 被推翻的賽前假設。

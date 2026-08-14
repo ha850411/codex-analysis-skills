@@ -91,16 +91,57 @@ function evaluate(check, globalTolerance) {
     if (!check.components || typeof check.components !== "object") {
       throw new Error(`${name}: components must be an object`);
     }
-    let expected = 0;
+    let rawWeighted = 0;
     for (const [field, weight] of Object.entries(weights)) {
       const value = check.components[field];
       if (!Number.isFinite(value) || value < 0 || value > 100) {
         throw new Error(`${name}: components.${field} must be within [0, 100]`);
       }
-      expected += value * weight;
+      rawWeighted += value * weight;
     }
-    expected = Math.round(expected);
-    return { name, pass: check.value === expected, actual: check.value, expected, tolerance: 0 };
+    rawWeighted = Math.round(rawWeighted);
+    if (Object.hasOwn(check, "rawWeighted") && check.rawWeighted !== rawWeighted) {
+      throw new Error(`${name}: rawWeighted must equal the rounded weighted components`);
+    }
+    if (
+      Object.hasOwn(check, "applyNonCompensatoryCap")
+      && typeof check.applyNonCompensatoryCap !== "boolean"
+    ) {
+      throw new Error(`${name}: applyNonCompensatoryCap must be boolean`);
+    }
+    const applyCap = check.applyNonCompensatoryCap === true;
+    const triggers = Array.isArray(check.fragilityTriggers)
+      ? check.fragilityTriggers
+      : [];
+    if (
+      triggers.some((value) => typeof value !== "string" || value.trim() === "")
+      || (applyCap && triggers.length === 0)
+      || (!applyCap && triggers.length > 0)
+    ) {
+      throw new Error(`${name}: fragilityTriggers must be non-empty exactly when the cap applies`);
+    }
+    if (applyCap && check.rawWeighted !== rawWeighted) {
+      throw new Error(`${name}: capped confidence checks must preserve rawWeighted`);
+    }
+    const caps = applyCap
+      ? {
+        dataCompleteness: check.components.dataCompleteness,
+        regimeRelevance: check.components.regimeRelevance,
+        modelStabilityPlusTen: check.components.modelStability + 10,
+      }
+      : null;
+    const expected = caps
+      ? Math.min(rawWeighted, ...Object.values(caps))
+      : rawWeighted;
+    return {
+      name,
+      pass: check.value === expected,
+      actual: check.value,
+      expected,
+      rawWeighted,
+      caps,
+      tolerance: 0,
+    };
   }
 
   throw new Error(`${name}: unsupported check type ${JSON.stringify(check.type)}`);

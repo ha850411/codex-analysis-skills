@@ -1,5 +1,12 @@
 # Valorant 分析輸出模板
 
+## 目錄
+
+- 今日賽程盤點與單場分析卡
+- 全地圖、veto 情境與精確比分分布
+- 今日決策總結表
+- 賽後失準檢討模板
+
 若報告提到賠率或市場價格，所有賠率欄位一律使用十進位。沒有十進位盤口時，只寫模型機率、公允賠率、價格門檻與資料限制；不得把市場方向列為勝負反向訊號。
 
 ## 今日 Valorant 賽程盤點（TW，UTC+8）
@@ -113,10 +120,11 @@
 不要把本節附加在賽前 `簡表總結` 之後。純檢討若未產生新預測，不需要賽前簡表。
 
 1. **賽果確認與資料來源：** 賽事、日期、BO、Patch、系列比分、每張地圖比分、veto、資料狀態。
-2. **原預測 vs 實際結果：** 勝方、精確比分、Win%、至少一圖、信心度。
-3. **批次機率診斷：** Brier / log loss、精確比分 log loss、預期 vs 實際橫掃、2-1 眾數比例。
-4. **情境覆蓋：** 實際五人、完整 veto、pick owner、map order、decider 是否在賽前加權情境內。
-5. **被推翻的賽前假設：** Patch、同賽事樣本、H2H、post-veto 訊號、特務陣容、手槍/經濟、教練修正。
-6. **地圖逐張復盤：** pick owner、選邊、關鍵回合、原本誤判點。
-7. **錯誤歸因：** 依 `references/postmortem-calibration.md` 分類。
-8. **可否證修正與驗證：** 賽前觸發條件、baseline/challenger、paired walk-forward 或回歸測試、主要指標差值、裁決與回退條件；附帶信心／注碼調整不得冒充精準度改善。
+2. **原快照可用性：** `forecast_id`、模型版本、skill revision、資料截止、保存路徑；缺失時標記 `baseline artifact missing` 並列出不可計算指標。
+3. **原預測 vs 實際結果：** 勝方、精確比分、Win%、至少一圖、信心度；不得由賽果反推缺失值。
+4. **批次機率診斷：** Brier / log loss、精確比分 log loss、預期 vs 實際橫掃、2-1 眾數比例。
+5. **情境覆蓋：** 逐圖實際五人、首輪 bans、map picks、pick owners、decider 是否在賽前加權情境內。
+6. **被推翻的賽前假設：** Patch、同賽事樣本、H2H、post-veto 訊號、特務陣容、手槍/經濟、教練修正。
+7. **地圖逐張復盤：** pick owner、選邊、關鍵回合、原本誤判點。
+8. **錯誤歸因：** 依 `references/postmortem-calibration.md` 分類。
+9. **可否證修正與驗證：** 賽前觸發條件、baseline/challenger、paired walk-forward 或回歸測試、主要指標差值、裁決與回退條件；附帶信心／注碼調整不得冒充精準度改善。

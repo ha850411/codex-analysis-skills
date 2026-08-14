@@ -75,7 +75,31 @@
       "prompt": "整理今天 LCK、LPL、LCP、LEC 的 LoL 預測，列出版本、先發與完整比分機率。",
       "shouldTrigger": true,
       "mode": "daily-summary",
-      "invariants": ["先通過跨賽區賽程完整性閘門", "bo3.gg 只作候選且不得計入獨立 coverage group", "每個目標聯賽都有非 bo3 獨立子集合且聯集等於官方集合", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果"]
+      "invariants": ["先通過跨賽區賽程完整性閘門", "bo3.gg 只作候選且不得計入獨立 coverage group", "每個目標聯賽都有非 bo3 獨立子集合且聯集等於官方集合", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果", "模型信心度的 forecast、正文與檢查都使用非補償上限後同一最終值"]
+    },
+    {
+      "id": "lol-roster-freshness-krx-regression",
+      "skill": "lol-analysis",
+      "prompt": "賽季 roster 頁仍列 Rich，但 KRX 最近兩個正式系列實際上路都是 Frog；請做下一場 pre-lineup 預測，之後收到當場先發公告。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["pre-lineup 快照以最近正式系列的 Frog 情境為主而不是讓舊 roster 的 Rich 靜默覆蓋", "保存最近兩個正式系列實際五人與 checked_at", "Rich 只能作有來源支持且公告時間晚於最近正式系列的替補情境", "不得用查核時間冒充變更公告時間", "當場公告後建立 post-lineup 新快照", "若核心位置變更則重建機率而非只改信心度"]
+    },
+    {
+      "id": "lol-repeat-matchup-evidence-regression",
+      "skill": "lol-analysis",
+      "prompt": "TES 與 LGD 在 12 天前同一 Split 才打過 BO3，LGD 曾靠 Heng–Tangyuan 中野結構拿下 G1；請分析今天的再戰。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["近 30 天同賽事直接交手為必要證據而非可選敘述", "保存前次逐局勝方、藍紅方、BP 與實際五人", "區分 Heng–Tangyuan 路徑是否可重複", "建立明示機率所屬隊伍的具名 direct-rematch 反模型與預定集成權重", "直接交手未檢視完成前不鎖定新機率"]
+    },
+    {
+      "id": "lol-started-match-evaluation-boundary",
+      "skill": "lol-analysis",
+      "prompt": "15:47 時重建一場 15:00 已開賽的 WBG–NIP 賽前分析，並在隔日統計預測表現。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["標記 reconstructed_after_start", "注碼固定為 0u", "可做定性檢討但不計入賽前方向命中、Brier、log loss 或 ROI", "同時回報發布集 N 與正式賽前評分集 N"]
     },
     {
       "id": "lol-quick",

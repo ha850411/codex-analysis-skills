@@ -1,0 +1,46 @@
+# 預測證據與時點資格閘門
+
+`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止舊名單覆蓋最近正式先發、漏掉最可比的直接交手，並把開賽後重建混入正式賽前績效。
+
+## 1. 保存 evidence snapshot
+
+每場在當次輸出目錄寫入 `forecast-evidence.json`；互動式分析未指定目錄時，使用 `.automation-state/lol/manual-forecasts/<YYYY-MM-DD>/<timestamp>/`。保留：
+
+- `match_key`、`scheduled_start`、可取得時的 `actual_start`、`predicted_at`、`snapshot`。
+- 雙方最近正式系列的日期、實際五人、來源與 `checked_at`。
+- 本場預估／公告五人；與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`。不得用重新查閱舊頁面的時間冒充新公告。
+- 近 30 天直接交手搜尋結果、來源與 `checked_at`。同賽事、可比陣容的交手要保存逐局勝方、選邊、BP 與可重複機制。
+- `evaluation_status`與投注決策。
+
+執行：
+
+```bash
+node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json>
+```
+
+驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
+
+## 2. 名單溯源閘門
+
+- 最近正式系列的實際五人是 `pre-lineup` 的預設主情境。
+- 預估五人不同時，只接受發布時間晚於最近正式系列、早於快照的當場公告、隊伍／賽區輪替公告，或更新且可追溯的當場資料。
+- 只有賽季 roster、較舊交手、限制名單或無來源印象時，維持最近實際五人；如果仍存在真實分歧，建立先發情境而不單點覆寫。
+
+## 3. 直接再戰閘門
+
+近 30 天內同一賽事、核心陣容可比的 H2H 是必要證據，不是可選叙事。
+
+1. 逐局檢查勝方、藍紅方、關鍵 BP、前期起手與收尾。
+2. 把弱方已成功的結構拆成可重複與不可重複；不把單次重擊／偷巴龍當成穩定路徑。
+3. 建立具名 `direct-rematch` 反模型，明示機率所屬隊伍，並保存輸出與預定集成權重。本閘門不預設 H2H 權重或機械調整機率。
+4. 找到可比 H2H 卻沒有逐局證據時，停止新預測；來源無法存取時標記缺口、觸發非補償式信心上限，且不得宣稱高完整度。
+
+## 4. 預測時點資格
+
+- `predicted_at < actual_start`且未接觸 live 資訊：`prospective_pre_match`，可進入 Brier、log loss、ROI 與 calibration cohort。
+- 開賽後才產生或重建：`reconstructed_after_start`，只做定性檢討，注碼必須為 0u，不得與正式賽前績效合併。
+- `actual_start` 未取得時暫以排定時間分類；賽後取得實際開賽時間後要重新結算資格。
+
+## 5. 賽後回收
+
+賽後同時輸出「對外發布集」與「正式賽前評分集」的 N。若兩者不同，明列排除的 `match_key`與原因；不得因為開賽後重建命中而改善正式指標。

@@ -289,6 +289,58 @@ class EvaluatedHistoryTests(unittest.TestCase):
                 2,
             )
 
+    def test_lol_history_prefers_match_key_with_legacy_id_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            history = root / "history/evaluated-forecasts.jsonl"
+            legacy = root / "legacy.jsonl"
+            current = root / "current.jsonl"
+            shared = {
+                "predicted_at": "2026-08-08T13:33:00+08:00",
+                "snapshot": "pre-lineup/pre-draft",
+                "model_version": "v1",
+            }
+            legacy.write_text(
+                json.dumps({**shared, "match_id": 123, "actual_score": "2-0"})
+                + "\n",
+                encoding="utf-8",
+            )
+            current.write_text(
+                "\n".join(
+                    [
+                        json.dumps({
+                            **shared,
+                            "match_id": 123,
+                            "match_key": "bo3:123",
+                            "actual_score": "2-1",
+                        }),
+                        json.dumps({
+                            **shared,
+                            "match_id": None,
+                            "match_key": "lol:lck:20260808T1800+0800:ns:dns",
+                            "actual_score": "0-2",
+                        }),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = sync_evaluated_history(
+                history,
+                (legacy, current),
+                key_fields=(
+                    "match_key", "predicted_at", "snapshot", "model_version",
+                ),
+            )
+            records = [
+                json.loads(line)
+                for line in history.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(result["records"], 2)
+            self.assertEqual(records[0]["actual_score"], "2-1")
+            self.assertIsNone(records[1]["match_id"])
+
 
 class CleanupTests(unittest.TestCase):
     def test_cleanup_deletes_reports_older_than_thirty_days_by_default(self) -> None:

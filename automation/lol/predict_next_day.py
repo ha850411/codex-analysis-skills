@@ -38,6 +38,13 @@ SCORE_KEYS = {
     3: {"2-0", "2-1", "1-2", "0-2"},
     5: {"3-0", "3-1", "3-2", "2-3", "1-3", "0-3"},
 }
+CONFIDENCE_COMPONENT_WEIGHTS = {
+    "data_completeness": 0.25,
+    "freshness": 0.20,
+    "lineup_certainty": 0.25,
+    "regime_relevance": 0.20,
+    "model_stability": 0.10,
+}
 BO3_MATCH_KEY = re.compile(r"bo3:([1-9]\d*)\Z")
 CANONICAL_MATCH_KEY = re.compile(
     r"lol:[a-z0-9-]+:\d{8}T\d{4}\+0800:[a-z0-9-]+:[a-z0-9-]+\Z"
@@ -82,6 +89,15 @@ def _valid_match_key(value: object) -> bool:
     return isinstance(value, str) and bool(
         BO3_MATCH_KEY.fullmatch(value) or CANONICAL_MATCH_KEY.fullmatch(value)
     )
+
+
+def _round_probability_percent(value: float) -> int:
+    """用與 JavaScript Math.round 相同的非負百分比四捨五入。"""
+    return int(value * 100 + 0.5)
+
+
+def _round_confidence(value: float) -> float:
+    return _round_probability_percent(value) / 100
 
 
 def _is_valid_global_schedule_url(url: str) -> bool:
@@ -372,9 +388,12 @@ def prompt_for(target: str, output_dir: Path) -> str:
    match_key, bo3_match_id, predicted_at, start_time, snapshot, model_version, team1, team2,
    tournament, tier="s", bo_type, exact_score_probabilities, team1_win_prob,
    team2_win_prob, team1_at_least_one_prob, team2_at_least_one_prob,
-   model_confidence, sources。所有機率均用 0..1。
-11. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，「至少一局」必須是被橫掃機率的補數，model_confidence 不得冒充勝率。
-12. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}，並執行
+   both_at_least_one_prob, model_confidence, confidence_components,
+   fragility_triggers, sources。所有機率均用 0..1。confidence_components 必須包含
+   data_completeness, freshness, lineup_certainty, regime_relevance,
+   model_stability, raw_weighted, final_after_non_compensatory_cap。
+11. BO3 精確比分鍵必須為 2-0/2-1/1-2/0-2；BO5 為 3-0/3-1/3-2/2-3/1-3/0-3；總和為 1。系列勝率必須等於對應精確比分總和，各自／雙方至少一局都從同一分布推導。model_confidence 必須等於 final_after_non_compensatory_cap；fragility_triggers 非空時，套用 LoL 非補償式上限，空陣列時最終值等於 raw_weighted。
+12. 將上述檢查以百分比寫入 {output_dir / 'probability-checks.json'}。每場 weighted_confidence 檢查必須帶 match_key、rawWeighted、applyNonCompensatoryCap 與 fragilityTriggers；value 使用上限後最終值，不得改驗證 raw weighted。執行
    `node shared/validate_probabilities.mjs {output_dir / 'probability-checks.json'}`。
 13. 依 {REPO_ROOT / 'shared/notion/skill-instructions.md'} 寫入 {output_dir / 'notion-summary.json'}；使用 sport="LoL", module="lol-analysis", analysisType="daily-summary"，startTime 帶 +08:00。
 14. 只建立本地 Notion summary；外層程式驗證賽程、機率與逐場市場 artifact 後才會發布並寄 Email。最後確認所有檔案確實存在。
@@ -387,7 +406,8 @@ def validate_forecasts(path: Path) -> None:
         "team1", "team2", "tournament", "tier", "bo_type",
         "exact_score_probabilities", "team1_win_prob", "team2_win_prob",
         "team1_at_least_one_prob", "team2_at_least_one_prob",
-        "model_confidence", "sources",
+        "both_at_least_one_prob", "model_confidence", "confidence_components",
+        "fragility_triggers", "sources",
     }
     seen_match_keys: set[str] = set()
     for index, record in enumerate(load_jsonl(path), 1):
@@ -427,7 +447,11 @@ def validate_forecasts(path: Path) -> None:
         numeric = all(isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1 for value in values)
         if not numeric or abs(sum(values) - 1) > 0.002:
             raise JobError(f"forecasts.jsonl record {index}: exact-score probabilities must sum to 1")
-        for field in ("team1_win_prob", "team2_win_prob", "team1_at_least_one_prob", "team2_at_least_one_prob", "model_confidence"):
+        for field in (
+            "team1_win_prob", "team2_win_prob", "team1_at_least_one_prob",
+            "team2_at_least_one_prob", "both_at_least_one_prob",
+            "model_confidence",
+        ):
             value = record[field]
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
                 raise JobError(f"forecasts.jsonl record {index}: {field} must be 0..1")
@@ -440,6 +464,121 @@ def validate_forecasts(path: Path) -> None:
         t2_swept = scores[f"{wins}-0"]
         if abs(record["team1_at_least_one_prob"] - (1 - t1_swept)) > 0.002 or abs(record["team2_at_least_one_prob"] - (1 - t2_swept)) > 0.002:
             raise JobError(f"forecasts.jsonl record {index}: at-least-one probabilities are inconsistent")
+        both_at_least_one = 1 - t1_swept - t2_swept
+        if abs(record["both_at_least_one_prob"] - both_at_least_one) > 0.002:
+            raise JobError(
+                f"forecasts.jsonl record {index}: both-at-least-one probability is inconsistent"
+            )
+        components = record["confidence_components"]
+        component_fields = {
+            *CONFIDENCE_COMPONENT_WEIGHTS,
+            "raw_weighted",
+            "final_after_non_compensatory_cap",
+        }
+        if not isinstance(components, dict) or component_fields - components.keys():
+            raise JobError(
+                f"forecasts.jsonl record {index}: confidence_components are incomplete"
+            )
+        if any(
+            isinstance(components[field], bool)
+            or not isinstance(components[field], (int, float))
+            or not 0 <= components[field] <= 1
+            for field in component_fields
+        ):
+            raise JobError(
+                f"forecasts.jsonl record {index}: confidence components must be 0..1"
+            )
+        raw_weighted = _round_confidence(sum(
+            components[field] * weight
+            for field, weight in CONFIDENCE_COMPONENT_WEIGHTS.items()
+        ))
+        if abs(components["raw_weighted"] - raw_weighted) > 0.0001:
+            raise JobError(
+                f"forecasts.jsonl record {index}: raw weighted confidence is inconsistent"
+            )
+        triggers = record["fragility_triggers"]
+        if (
+            not isinstance(triggers, list)
+            or any(not isinstance(value, str) or not value.strip() for value in triggers)
+        ):
+            raise JobError(
+                f"forecasts.jsonl record {index}: fragility_triggers must be a string list"
+            )
+        expected_final = raw_weighted
+        if triggers:
+            expected_final = min(
+                raw_weighted,
+                components["data_completeness"],
+                components["regime_relevance"],
+                components["model_stability"] + 0.10,
+            )
+            expected_final = _round_confidence(expected_final)
+        final_confidence = components["final_after_non_compensatory_cap"]
+        if (
+            abs(final_confidence - expected_final) > 0.0001
+            or abs(record["model_confidence"] - final_confidence) > 0.0001
+        ):
+            raise JobError(
+                f"forecasts.jsonl record {index}: final confidence does not apply the LoL cap"
+            )
+
+
+def validate_probability_checks(
+    checks_path: Path, forecasts_path: Path
+) -> None:
+    """確保機率檢查驗證的是對外使用的上限後信心度。"""
+    assert_nonempty(checks_path)
+    try:
+        payload = json.loads(checks_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise JobError(f"Invalid probability checks JSON: {exc}") from exc
+    checks = payload.get("checks") if isinstance(payload, dict) else None
+    if not isinstance(checks, list):
+        raise JobError("probability-checks.json must contain checks")
+    forecasts = {
+        record["match_key"]: record for record in load_jsonl(forecasts_path)
+    }
+    confidence_checks: dict[str, dict[str, object]] = {}
+    for check in checks:
+        if not isinstance(check, dict) or check.get("type") != "weighted_confidence":
+            continue
+        match_key = check.get("match_key")
+        if match_key not in forecasts or match_key in confidence_checks:
+            raise JobError(
+                "weighted confidence checks require a unique forecast match_key"
+            )
+        confidence_checks[str(match_key)] = check
+    if set(confidence_checks) != set(forecasts):
+        raise JobError(
+            "weighted confidence checks must cover every forecast exactly once"
+        )
+    component_names = {
+        "dataCompleteness": "data_completeness",
+        "freshness": "freshness",
+        "lineupCertainty": "lineup_certainty",
+        "regimeRelevance": "regime_relevance",
+        "modelStability": "model_stability",
+    }
+    for match_key, forecast in forecasts.items():
+        check = confidence_checks[match_key]
+        components = forecast["confidence_components"]
+        expected_components = {
+            public: _round_probability_percent(float(components[stored]))
+            for public, stored in component_names.items()
+        }
+        expected_triggers = forecast["fragility_triggers"]
+        if (
+            check.get("value")
+            != _round_probability_percent(float(forecast["model_confidence"]))
+            or check.get("components") != expected_components
+            or check.get("rawWeighted")
+            != _round_probability_percent(float(components["raw_weighted"]))
+            or check.get("applyNonCompensatoryCap") != bool(expected_triggers)
+            or check.get("fragilityTriggers") != expected_triggers
+        ):
+            raise JobError(
+                f"probability-checks.json confidence disagrees with forecast {match_key}"
+            )
 
 
 def validate_schedule_verification(
@@ -858,6 +997,9 @@ def finalize_prediction(output_dir: Path, target: str) -> str:
     assert_nonempty(output_dir / "forecasts.jsonl")
     assert_nonempty(output_dir / "probability-checks.json")
     validate_forecasts(output_dir / "forecasts.jsonl")
+    validate_probability_checks(
+        output_dir / "probability-checks.json", output_dir / "forecasts.jsonl"
+    )
     validate_forecast_schedule(output_dir / "forecasts.jsonl", verification)
     validate_market_collection(
         output_dir / "market-collection.json", output_dir, verification

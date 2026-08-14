@@ -62,6 +62,7 @@ if (!Array.isArray(input.matches) || input.matches.length === 0) {
 }
 
 const validScores = new Set(["a_2_0", "a_2_1", "b_2_1", "b_2_0"]);
+const coverageDimensions = ["lineup_by_map", "first_bans", "map_picks", "pick_owners", "decider"];
 const matchAudits = [];
 const sweepProbabilities = [];
 let winnerBrier = 0;
@@ -72,6 +73,8 @@ let exactScoreCorrect = 0;
 let actualSweeps = 0;
 let twoOneModes = 0;
 let coverageMisses = 0;
+let legacyCoverageRecords = 0;
+const coverageMissesByDimension = Object.fromEntries(coverageDimensions.map((dimension) => [dimension, 0]));
 
 for (const [index, match] of input.matches.entries()) {
   const label = match.id || `matches[${index}]`;
@@ -92,8 +95,24 @@ for (const [index, match] of input.matches.entries()) {
   if (!validScores.has(match.actual_score)) {
     fail(`${label}.actual_score must be one of ${[...validScores].join(", ")}`);
   }
-  if (typeof match.scenario_covered !== "boolean") {
-    fail(`${label}.scenario_covered must be true or false`);
+  let scenarioCoverage;
+  let scenarioCovered;
+  if (match.scenario_coverage && typeof match.scenario_coverage === "object" && !Array.isArray(match.scenario_coverage)) {
+    scenarioCoverage = {};
+    for (const dimension of coverageDimensions) {
+      if (typeof match.scenario_coverage[dimension] !== "boolean") {
+        fail(`${label}.scenario_coverage.${dimension} must be true or false`);
+      }
+      scenarioCoverage[dimension] = match.scenario_coverage[dimension];
+      coverageMissesByDimension[dimension] += scenarioCoverage[dimension] ? 0 : 1;
+    }
+    scenarioCovered = Object.values(scenarioCoverage).every(Boolean);
+  } else if (typeof match.scenario_covered === "boolean") {
+    scenarioCovered = match.scenario_covered;
+    scenarioCoverage = { legacy_overall: scenarioCovered };
+    legacyCoverageRecords += 1;
+  } else {
+    fail(`${label} requires scenario_coverage or legacy scenario_covered`);
   }
 
   const sideAWin = probabilities.a_2_0 + probabilities.a_2_1;
@@ -104,8 +123,6 @@ for (const [index, match] of input.matches.entries()) {
   const sweepProbability = probabilities.a_2_0 + probabilities.b_2_0;
   const isSweep = match.actual_score.endsWith("2_0");
   const isTwoOneMode = modeScore.endsWith("2_1");
-  const scenarioCovered = match.scenario_covered;
-
   winnerBrier += (sideAWin - actualSideAWin) ** 2;
   winnerLogLoss += -(actualSideAWin * Math.log(clippedWinner) + (1 - actualSideAWin) * Math.log(1 - clippedWinner));
   exactScoreLogLoss += -Math.log(actualScoreProbability);
@@ -124,6 +141,7 @@ for (const [index, match] of input.matches.entries()) {
     actual_score_probability: round(actualScoreProbability * 100, 2),
     sweep_probability: round(sweepProbability * 100, 2),
     scenario_covered: scenarioCovered,
+    scenario_coverage: scenarioCoverage,
   });
 }
 
@@ -139,7 +157,14 @@ if (count >= 4 && twoOneModeRate >= 0.8) {
   warnings.push("SCORE_MODE_CONCENTRATION: at least 80% of BO3 modes are 2-1; audit shared series-state and veto-scenario mixing.");
 }
 if (coverageMisses > 0) {
-  warnings.push("SCENARIO_COVERAGE_MISS: at least one realized lineup/veto path was absent from the pre-match scenario mixture.");
+  const dimensions = Object.entries(coverageMissesByDimension)
+    .filter(([, misses]) => misses > 0)
+    .map(([dimension, misses]) => `${dimension}=${misses}`);
+  const detail = dimensions.length > 0 ? ` (${dimensions.join(", ")})` : "";
+  warnings.push(`SCENARIO_COVERAGE_MISS: at least one realized lineup/veto path was absent from the pre-match scenario mixture${detail}.`);
+}
+if (legacyCoverageRecords > 0) {
+  warnings.push("LEGACY_SCENARIO_COVERAGE: dimension-level lineup/veto coverage was not available for every record.");
 }
 if (count < 20) {
   warnings.push("SMALL_SAMPLE: diagnostic batch only; do not claim long-run calibration from this cohort.");
@@ -159,6 +184,8 @@ const output = {
     probability_at_least_actual_sweeps: round(atLeastActualSweeps, 5),
     two_one_mode_rate: round(twoOneModeRate, 4),
     scenario_coverage_misses: coverageMisses,
+    scenario_coverage_misses_by_dimension: coverageMissesByDimension,
+    legacy_scenario_coverage_records: legacyCoverageRecords,
   },
   warnings,
 };

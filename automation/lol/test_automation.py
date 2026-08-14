@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -20,7 +21,7 @@ if str(AUTOMATION_DIR) not in sys.path:
 os.environ["AUTOMATION_MODULE"] = "lol"
 os.environ["AUTOMATION_EMAIL_TRANSPORT"] = "mock"
 
-from common import JobError
+from common import REPO_ROOT, JobError
 from predict_next_day import (
     ScheduleFetch,
     _fetch_schedule_payload,
@@ -33,6 +34,7 @@ from predict_next_day import (
     validate_forecast_schedule,
     validate_forecasts,
     validate_market_collection,
+    validate_probability_checks,
     validate_schedule_verification,
 )
 from review_today import is_recent_report, main as review_main, prompt_for, settled_match_ids
@@ -388,7 +390,16 @@ class LolAutomationTests(unittest.TestCase):
             "exact_score_probabilities": {"2-0": 0.25, "2-1": 0.30, "1-2": 0.25, "0-2": 0.20},
             "team1_win_prob": 0.55, "team2_win_prob": 0.45,
             "team1_at_least_one_prob": 0.80, "team2_at_least_one_prob": 0.75,
-            "model_confidence": 0.64, "sources": ["bo3.gg"],
+            "both_at_least_one_prob": 0.55,
+            "model_confidence": 0.70,
+            "confidence_components": {
+                "data_completeness": 0.70, "freshness": 0.90,
+                "lineup_certainty": 0.75, "regime_relevance": 0.74,
+                "model_stability": 0.62, "raw_weighted": 0.75,
+                "final_after_non_compensatory_cap": 0.70,
+            },
+            "fragility_triggers": ["critical_vod_incomplete"],
+            "sources": ["bo3.gg"],
         }
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "forecasts.jsonl"
@@ -398,6 +409,92 @@ class LolAutomationTests(unittest.TestCase):
             path.write_text(json.dumps(record) + "\n", encoding="utf-8")
             with self.assertRaises(JobError):
                 validate_forecasts(path)
+
+    def test_confidence_check_uses_non_compensatory_final_value(self) -> None:
+        record = {
+            "match_key": "bo3:1", "bo3_match_id": 1,
+            "predicted_at": "now", "start_time": "later",
+            "snapshot": "pre-lineup/pre-draft", "model_version": "v1",
+            "team1": "A", "team2": "B", "tournament": "LPL",
+            "tier": "s", "bo_type": 3,
+            "exact_score_probabilities": {
+                "2-0": 0.25, "2-1": 0.30, "1-2": 0.25, "0-2": 0.20,
+            },
+            "team1_win_prob": 0.55, "team2_win_prob": 0.45,
+            "team1_at_least_one_prob": 0.80,
+            "team2_at_least_one_prob": 0.75,
+            "both_at_least_one_prob": 0.55,
+            "model_confidence": 0.70,
+            "confidence_components": {
+                "data_completeness": 0.70, "freshness": 0.90,
+                "lineup_certainty": 0.75, "regime_relevance": 0.74,
+                "model_stability": 0.62, "raw_weighted": 0.75,
+                "final_after_non_compensatory_cap": 0.70,
+            },
+            "fragility_triggers": ["critical_vod_incomplete"],
+            "sources": ["https://lolesports.com"],
+        }
+        raw_only_check = {
+            "checks": [{
+                "type": "weighted_confidence", "name": "A-B confidence",
+                "match_key": "bo3:1", "value": 75,
+                "components": {
+                    "dataCompleteness": 70, "freshness": 90,
+                    "lineupCertainty": 75, "regimeRelevance": 74,
+                    "modelStability": 62,
+                },
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            forecasts = root / "forecasts.jsonl"
+            checks = root / "probability-checks.json"
+            forecasts.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            checks.write_text(json.dumps(raw_only_check), encoding="utf-8")
+            validate_forecasts(forecasts)
+            with self.assertRaises(JobError):
+                validate_probability_checks(checks, forecasts)
+
+            fixed = raw_only_check["checks"][0]
+            fixed.update({
+                "value": 70,
+                "rawWeighted": 75,
+                "applyNonCompensatoryCap": True,
+                "fragilityTriggers": ["critical_vod_incomplete"],
+            })
+            checks.write_text(json.dumps(raw_only_check), encoding="utf-8")
+            validate_probability_checks(checks, forecasts)
+
+    def test_shared_validator_applies_lol_confidence_cap(self) -> None:
+        payload = {
+            "checks": [{
+                "type": "weighted_confidence", "name": "LoL capped",
+                "value": 70,
+                "components": {
+                    "dataCompleteness": 70, "freshness": 90,
+                    "lineupCertainty": 75, "regimeRelevance": 74,
+                    "modelStability": 62,
+                },
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checks.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            command = [
+                "node", str(REPO_ROOT / "shared/validate_probabilities.mjs"),
+                str(path),
+            ]
+            old_result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(old_result.returncode, 1)
+
+            payload["checks"][0].update({
+                "rawWeighted": 75,
+                "applyNonCompensatoryCap": True,
+                "fragilityTriggers": ["critical_vod_incomplete"],
+            })
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            fixed_result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(fixed_result.returncode, 0, fixed_result.stderr)
 
     def test_schedule_verification_requires_two_source_roles_and_exact_diff(self) -> None:
         candidate_key = "bo3:124500"

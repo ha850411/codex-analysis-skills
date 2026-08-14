@@ -215,7 +215,7 @@ def main() -> int:
             sync_evaluated_history(
                 history_file,
                 prior_evaluated,
-                key_fields=("match_id", "predicted_at", "snapshot", "model_version"),
+                key_fields=("match_key", "predicted_at", "snapshot", "model_version"),
             )
             history_snapshot_bytes: bytes | None = None
             if history_file.is_file():
@@ -285,7 +285,7 @@ def main() -> int:
             sync_evaluated_history(
                 history_file,
                 (review_dir / "evaluated-forecasts.jsonl",),
-                key_fields=("match_id", "predicted_at", "snapshot", "model_version"),
+                key_fields=("match_key", "predicted_at", "snapshot", "model_version"),
             )
             paths = changed_paths(worktree)
             next_registry, factor_transitions = load_factor_registry(

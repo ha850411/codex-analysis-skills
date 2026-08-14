@@ -978,6 +978,13 @@ def sync_evaluated_history(
         values: list[object] = []
         for field in key_fields:
             value = record.get(field)
+            if (
+                field == "match_key"
+                and value is None
+                and isinstance(record.get("match_id"), int)
+                and not isinstance(record.get("match_id"), bool)
+            ):
+                value = f"bo3:{record['match_id']}"
             if value is None or isinstance(value, (dict, list)):
                 raise JobError(
                     f"Evaluated history record in {source} has invalid key field "
