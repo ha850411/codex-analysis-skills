@@ -1,6 +1,6 @@
 # Git 提交與推送安全檢核清單
 
-在執行 `git commit` 與 `git push` 前，必須落實以下安全與品質檢查，避免機密洩漏、程式碼毀損或無效提交。
+在執行 `git commit` 與 `git push` 前，落實以下安全與規範檢查，避免機密洩漏或無效提交。
 
 ---
 
@@ -13,13 +13,12 @@
 - [ ] 若發現非預期的未追蹤檔案，應先評估是否需加入 `.gitignore`。
 
 ### 2. 變更內容實質審查
-- [ ] 執行 `git diff` 審查即將提交的程式碼邏輯。
-- [ ] 確保無遺留的除錯輸出（如 `console.log("test")`, `print(debugger)` 或臨時 hardcoded 數值）。
-- [ ] 確認改動符合單一職責原則（Single Responsibility），避免混雜不相關的修改於同一次 commit 中。
+- [ ] 執行 `git diff` 審查即將提交的程式碼內容與目的。
+- [ ] 確認改動符合單一職責原則，避免混雜不相關的修改於同一次 commit 中。
 
-### 3. 自動化測試與品質驗證
-- [ ] 若專案包含單元測試，執行測試並確認 100% 通過（例如 `pytest`, `npm test`, `python3 -m unittest`）。
-- [ ] 若專案有程式碼風格檢查（Linter / Prettier），確認無阻擋等級之警告或錯誤。
+### 3. 禁止多餘操作（No Extra Tasks）
+- [ ] **嚴禁**主動執行非 Git 操作，例如單元測試（`npm test`、`phpunit`、`pytest`、`artisan test` 等）、語法檢查工具（Linter）、Docker 容器指令、依賴安裝或建置命令。
+- [ ] 僅單純檢視改動內容、產製提交訊息、commit 與 push。
 
 ### 4. 提交訊息純中文驗證
 - [ ] 標題是否遵循 `<類型>(<範圍>): <純中文摘要>` 格式？
@@ -32,7 +31,6 @@
 
 ### 1. 遠端分支檢查
 - [ ] 確認推送的目的地分支是否正確（如 `origin/master`, `origin/main` 或特定 feature branch）。
-- [ ] 若該分支為保護分支（Protected Branch）或涉及生產環境，確保變更經過充分驗證。
 
 ### 2. 推送失敗與衝突處理
 - 若推送時出現 `rejected (non-fast-forward)` 或 `fetch first` 錯誤：

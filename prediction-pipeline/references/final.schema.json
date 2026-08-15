@@ -3,7 +3,7 @@
   "title": "Codex 最終裁決",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "accepted_findings", "rejected_findings", "finding_adjudications", "question_resolutions", "changes", "thesis", "probability_groups", "confidence", "key_factors", "risks", "missing_data", "presentation"],
+  "required": ["schema_version", "prediction_id", "stage", "generated_at", "model", "reasoning_effort", "accepted_findings", "rejected_findings", "finding_adjudications", "question_resolutions", "changes", "thesis", "probability_groups", "confidence", "event_confidences", "key_factors", "risks", "missing_data", "presentation"],
   "properties": {
     "schema_version": {"type": "string", "const": "1.0"},
     "prediction_id": {"type": "string", "minLength": 1},

@@ -1,40 +1,42 @@
 ---
 name: git-commit-push
-description: "自動化檢查 Git 狀態、產製 Conventional Commits 標準語意化（標準英文前綴＋純繁體中文說明）Commit 訊息並安全推送至遠端儲存庫。用於 Git 變更檢查、語意化提交訊息撰寫、暫存、安全提交與推送程式碼；不要用於非 Git 專案或未經確認的破壞性覆寫操作。預設繁體中文。"
+description: "自動化檢查 Git 變更狀態、產製 Conventional Commits 標準語意化（標準英文前綴＋純繁體中文說明）Commit 訊息並安全提交與推送至遠端儲存庫。專注於 Git 本身操作，不執行額外測試或建置。"
 ---
 
 # Git 語意化提交與推送技能（Git Commit & Push Skill）
 
-本技能用於標準化 Git 提交流程，確保所有 Git 狀態檢查、品質驗證、遵循 Conventional Commits 標準之提交訊息（Commit Message）產製及遠端推送（Push）均符合嚴格的安全規範與高語意化標準。
+本技能用於標準化 Git 提交流程，快速檢視當前工作區改動、遵循 Conventional Commits 標準產製清晰之語意化提交訊息（Commit Message），並安全推送至遠端儲存庫。
 
 **核心規則：**
 1. **全中文指引**：本技能內部所有說明、流程指引與輸出回饋一律使用繁體中文。
-2. **Conventional Commits 語意化標準**：
+2. **專注純粹 Git 操作，絕不做多餘動作**：
+   - 僅執行 Git 本身的必要流程（`git status`、`git diff`、`git add`、`git commit`、`git push`）。
+   - **嚴禁**主動執行單元測試或整合測試（如 `phpunit`、`artisan test`、`npm test`、`pytest` 等）。
+   - **嚴禁**執行語法檢查（Linter）、程式碼格式化工具、Docker 容器指令、依賴安裝（composer / npm install）或專案建置指令。
+   - 使用者下達 commit 指令時，只要檢視改了什麼程式碼並直接進行 commit 與 push。
+3. **Conventional Commits 語意化標準**：
    - **類型前綴 (Type)**：一律採用標準 ASCII 英文小寫關鍵字（如 `feat`、`fix`、`docs`、`refactor`、`perf`、`test`、`chore` 等），以確保與 Commitlint、Semantic Release、Changelog 生成器等自動化工具鏈 100% 相容。
-   - **範圍 (Scope)**：以英文或小寫模組名稱標註影響範疇，如 `feat(git-commit-push)`、`fix(automation)`。
-   - **摘要與內文 (Summary & Body)**：**一律使用繁體中文**精準撰寫變更意圖與細節（除程式碼識別碼、檔名、函數名等專有名詞外，所有動詞與語意描述皆須為中文）。
-3. **安全第一**：提交前必須嚴格排查敏感資訊（`.env`、金鑰、憑證）、暫存垃圾檔案與未通過之測試。
+   - **範圍 (Scope)**：以英文或小寫模組名稱標註影響範疇，如 `feat(git-commit-push)`、`fix(auth)`。
+   - **摘要與內文 (Summary & Body)**：**一律使用繁體中文**精準撰寫變更意圖與細點（除程式碼識別碼、檔名、函數名等專有名詞外，所有動詞與語意描述皆須為中文）。
+4. **安全防護**：
+   - 提交前僅需快速過濾暫存清單中是否有敏感資訊（如 `.env`、金鑰憑證）與暫存垃圾檔案。
+   - 推送時遵守非破壞原則，嚴禁未經確認使用 `--force`。
 
 ---
 
 ## 📋 標準執行流程
 
 ```
-[1. 檢查狀態] ──> [2. 安全與測試驗證] ──> [3. 產製語意化 Commit 訊息] ──> [4. 暫存與提交] ──> [5. 推送遠端與驗證]
+[1. 檢查變更 (git status & diff)] ──> [2. 產製語意化 Commit 訊息] ──> [3. 暫存與提交 (git add & commit)] ──> [4. 推送遠端 (git push)]
 ```
 
-### 步驟一：檢查工作區狀態 (Git Status)
-1. 執行 `git status` 與 `git diff --stat`，掌握所有修改檔案（Modified）、新增檔案（Untracked）、刪除檔案（Deleted）與已暫存檔案（Staged）。
-2. 若有未追蹤檔案，確認是否屬於專案正式檔案；若是臨時檔案、快取或本機設定檔，先協助加入 `.gitignore`。
-3. 檢視變更內容細節（`git diff`），理解本次變更的核心目的與影響範圍。
+### 步驟一：檢查工作區變更 (Git Status & Diff)
+1. 執行 `git status` 與 `git diff --stat`，掌握修改（Modified）、新增（Untracked）、刪除（Deleted）與已暫存（Staged）之檔案清單。
+2. 檢視變更內容細節（`git diff`），理解本次變更的核心內容與目的。
+3. 確認無敏感資訊（如 `.env`、金鑰等）。若有未追蹤的臨時檔案，提醒或加入 `.gitignore`。
 
-### 步驟二：安全與品質驗證 (Pre-commit Verification)
-1. **敏感資訊過濾**：確認沒有包含金鑰、密碼、Token 或未被忽略的 `.env` 檔案。
-2. **測試與語法檢查**：若專案中包含測試套件（如 `npm test`、`python3 -m unittest` 等）或語法檢查工具，應在提交前執行並確認全數通過。
-3. 參考 [`references/safety-checklist.md`](file:///home/ec2-user/.agents/skills/git-commit-push/references/safety-checklist.md) 進行完整安全檢核。
-
-### 步驟三：產製標準語意化 Commit 訊息
-1. 根據變更內容與目的，遵循 [`references/commit-conventions.md`](file:///home/ec2-user/.agents/skills/git-commit-push/references/commit-conventions.md) 規範產製語意化 Commit 訊息。
+### 步驟二：產製標準語意化 Commit 訊息
+1. 根據實際變更內容，遵循 Conventional Commits 規範產製語意化 Commit 訊息。
 2. **格式標準**：
    ```text
    <type>(<scope>): <純中文簡短摘要>
@@ -44,7 +46,7 @@ description: "自動化檢查 Git 狀態、產製 Conventional Commits 標準語
    - <補充說明/影響評估>（選填）
    ```
 3. **標準類型前綴對照**：
-   - `feat`: 新增功能、新模組、新技能 (Feature)
+   - `feat`: 新增功能、新模組 (Feature)
    - `fix`: 修復缺陷、錯誤或例外狀況 (Bug fix)
    - `refactor`: 程式碼重構（不改變對外行為的代碼整理）
    - `docs`: 新增或修改說明文件、註解、README (Documentation)
@@ -58,26 +60,24 @@ description: "自動化檢查 Git 狀態、產製 Conventional Commits 標準語
    - 標題句末不加句號。
    - 類型必須為標準英文小寫前綴，摘要與內文一律以繁體中文撰寫。
 
-### 步驟四：暫存與安全提交 (Stage & Commit)
+### 步驟三：暫存與安全提交 (Stage & Commit)
 1. 依據變更範圍將檔案加入暫存區（`git add <檔案路徑>` 或 `git add -A`）。
-2. 再次確認 `git status` 確認暫存清單正確無誤。
-3. 執行提交：
+2. 執行提交：
    ```bash
    git commit -m "<純中文標題>
 
    <純中文內文說明>"
    ```
 
-### 步驟五：確認分支與推送遠端 (Push & Verify)
+### 步驟四：確認分支與推送遠端 (Push & Verify)
 1. 確認當前所在分支：`git branch --show-current`。
-2. 檢查遠端設定：`git remote -v`。
-3. 推送變更至遠端分支：
+2. 推送變更至遠端分支：
    ```bash
    git push origin <當前分支名稱>
    ```
    *若為首次推送新分支，使用 `git push -u origin <當前分支名稱>` 建立追蹤。*
-4. 驗證最終狀態：
-   - 執行 `git log -1` 確認最新提交記錄與訊息。
+3. 驗證最終狀態：
+   - 執行 `git log -1` 確認最新提交記錄。
    - 執行 `git status` 確認工作目錄已乾淨（`working tree clean`）且與遠端同步。
 
 ---
