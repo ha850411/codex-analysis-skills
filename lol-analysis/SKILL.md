@@ -9,7 +9,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 預設時區：台灣時間 UTC+8。使用者提到「今天」「明天」「等一下」等相對日期時，一律以台灣時間解讀。
 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
 產生任何新機率時再讀 `../shared/prediction-methodology.md`，依其規則鎖定快照、收縮小樣本、建立主分布並計算信心度。
-產生 `full` 或 `daily-summary` 新預測時讀 `references/forecast-evidence-gates.md`；在機率鎖定前先以 schema v2 保存名單溯源、先發情境、近期直接交手、具名模型集成與預測時點資格 artifact，並通過其確定性驗證。
+產生 `full` 或 `daily-summary` 新預測時讀 `references/forecast-evidence-gates.md`；在機率鎖定前先以 schema v3 保存逐聯賽／逐階段版本溯源、名單溯源、先發情境、近期直接交手、具名模型集成與預測時點資格 artifact，並通過其確定性驗證。
 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
 
 ## 不可妥協的資料來源規則
@@ -37,6 +37,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 5. 逐場核對日期、隊伍、賽事與 BO；時間一律轉 UTC+8。無賽事時沒有可供逐聯賽拼接的已知集合，仍須由官方與獨立全域來源的空集合共同支持。
 6. 來源集合、事件身分或必要欄位有未解衝突時，停止預測、Notion 發布與寄信；降低信心度不能取代賽程完整性。
 7. 自動化保存原始候選回應、驗證時間、官方全域集合、獨立 coverage group 的子集合與聯集、候選／新增／移除 match keys 與衝突，供後續稽核。
+8. `schedule-verification.json` 使用 schema v2；官方與獨立來源都要逐場保存已命名的隊伍、時間、聯賽、階段、賽制與 `participant_status=confirmed`。官方頁若仍是 `TBD vs TBD`、條件式排名賽或 placeholder，即使聚合站與盤口已有隊名，也不得當成官方確認。送出前執行 `node lol-analysis/scripts/validate_schedule_completeness.mjs <schedule-verification.json>`；驗證未通過不得鎖定機率或建立投注清單。
 
 ## 必要工作流程
 
@@ -68,7 +69,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 4. **版本與 Meta 影響**
    - 確認比賽版本。
-   - 版本必須逐聯賽／逐階段保存來源與 `checked_at`，不可把前一週、前一 Split 或另一賽區的版本沿用成跨賽區日報共用值。若官方規章、同週正式賽事頁與可信賽事資料出現新舊版本衝突，先停止版本型加減分並消解衝突；無法消解時建立版本情境，不得把推定版本寫成已確認。
+   - 版本必須逐聯賽／逐階段保存來源與 `checked_at`，不可把前一週、前一 Split 或另一賽區的版本沿用成跨賽區日報共用值。每場 schema v3 evidence 的 `patch_context` 必須與該場 `competition` 的 league／event／stage 完全相同；`confirmed` 必須有官方規章、公告或官方比賽頁，只有同週第三方賽後頁時不得宣告確認。若官方規章、同週正式賽事頁與可信賽事資料出現新舊版本衝突，先停止版本型加減分並消解衝突；無法消解時建立權重合計為 1 的版本情境，不得把推定版本寫成已確認。
    - 說明版本對哪些英雄池、線路、隊伍風格與 ban/pick 有利或不利。
    - 相關時補充紅藍方選邊影響。
 
@@ -112,7 +113,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - 如果 Stake 無法存取、尚未開盤或缺少賠率，分析不得中斷；照常給出模型機率、公允賠率、最低可接受價格與 `等價／等先發（目前 0u）`，再請使用者提供即時賠率以精確比較 EV。不得只寫 `0u`。
    - `daily-summary` 必須把所有已取得且能映射的市場按調整後 EV 排序。若至少一個標的達到最低可接受價格、通過專屬證據閘門且沒有硬阻擋，至少把最高順位標成 `立即可打` 並給非零注碼；最終簡表不得與保存的 post-market 決策不一致。
    - 若全日確實沒有 `立即可打`，觸發「全日 0u 稽核」：列出已查／未映射市場、前三個最接近標準的候選、當前價、觸發價、差距與重跑條件。只有完成此稽核後才可輸出全日沒有賽前下注；不得為了湊單製造正 EV 或強迫下注。
-   - `daily-summary` 在當次 artifact 目錄建立 `decision-slate.json`，並在送出前執行 `node lol-analysis/scripts/validate_decision_slate.mjs <decision-slate.json> <prediction.md>`；自動日報另由排程對照已驗證賽程。驗證失敗時先修正決策、注碼或簡表同步，不得發布。
+   - `daily-summary` 在當次 artifact 目錄建立 `decision-slate.json`，並在送出前執行 `node lol-analysis/scripts/validate_decision_slate.mjs <decision-slate.json> <prediction.md> <schedule-verification.json>`；第三個參數不可省略，CLI 會先驗證 schedule schema v2，再要求投注清單與已驗證賽程完全一致。驗證失敗時先修正賽程、決策、注碼或簡表同步，不得發布。
    - 可行時討論可玩的市場，例如獨贏、讓分、精確比分、地圖總數、首局，或雙方各贏一局。
    - 地圖讓分、地圖大分與「至少贏一局」屬於高誤差市場，必須通過推薦閘門；未通過時即使賠率看似便宜，也標記為不碰或只看 live。
    - 敗方 +1.5、地圖大分與「敗方至少一局」不得用「價格型」當唯一理由；必須同時列出敗方兩條可執行取圖路徑與熱門方橫掃為何受限。若做不到，獨贏可小注但地圖盤不推薦。

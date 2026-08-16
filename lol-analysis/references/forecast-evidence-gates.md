@@ -1,12 +1,15 @@
 # 預測證據與時點資格閘門
 
-`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止舊名單覆蓋最近正式先發、漏掉最可比的直接交手、隱藏模型集成權重，並把開賽後重建混入正式賽前績效。新快照使用 schema v2；v1 只供既有歷史 artifact 重播。
+`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、漏掉最可比的直接交手、隱藏模型集成權重，並把開賽後重建混入正式賽前績效。新快照使用 schema v3；v1／v2 只供既有歷史 artifact 重播。
 
 ## 1. 保存 evidence snapshot
 
 每場在當次輸出目錄寫入 `forecast-evidence.json`；互動式分析未指定目錄時，使用 `.automation-state/lol/manual-forecasts/<YYYY-MM-DD>/<timestamp>/`。保留：
 
 - `match_key`、`scheduled_start`、可取得時的 `actual_start`、`predicted_at`、`snapshot`。
+- `competition` 保存 league、event、stage、format；`patch_context` 的 scope 必須逐字對應，禁止用日報頂層共用版本代替逐場證據。
+- `patch_context.status=confirmed` 時保存單一版本、查核時間與至少一個官方規章／公告／比賽頁來源；每個來源同時保存 league、event、stage 與 `checked_at`。只有第三方同週賽後頁不得宣告 confirmed。
+- 版本來源衝突無法消解時使用 `status=scenario`，保存衝突與至少兩個版本情境、權重及證據；權重合計為 1。不得把舊週、舊 Split 或其他賽區版本快取寫成當場確認值。
 - 雙方最近正式系列的日期、實際五人、來源與 `checked_at`。
 - 本場預估／公告五人；與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`。不得用重新查閱舊頁面的時間冒充新公告。
 - 明列 `lineup_uncertainties`，沒有可信分歧時保存空陣列；有分歧時保存隊伍、位置、候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。權重合計必須為 1，`recheck_by` 必須早於開賽。
@@ -22,14 +25,20 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
-## 2. 名單溯源閘門
+## 2. 版本溯源閘門
+
+- 版本是「聯賽 × 賽事 × 階段」欄位，不是日期或整份日報的單一常數。即使同一天其他賽區仍用舊版，也不能推定本場相同。
+- 官方來源仍顯示舊版、同階段新比賽卻顯示新版時，先查改版生效公告；無法消解即建立版本情境，停止所有依賴單一版本的英雄優先級加減分。
+- v3 驗證器只證明來源角色、scope、時間與情境權重可重播，不會替來源內容背書；產生 artifact 的流程仍須實際打開來源核對。
+
+## 3. 名單溯源閘門
 
 - 最近正式系列的實際五人是 `pre-lineup` 的預設主情境。
 - 預估五人不同時，只接受發布時間晚於最近正式系列、早於快照的當場公告、隊伍／賽區輪替公告，或更新且可追溯的當場資料。
 - 只有賽季 roster、較舊交手、限制名單或無來源印象時，維持最近實際五人；如果仍存在真實分歧，建立先發情境而不單點覆寫。
 - 不得只在正文寫「某人上場上修 3–4%」。可行替代先發必須進入可重播情境；正式資訊落定後依 `recheck_by` 建立 `post-lineup` 新快照。未完成重查時，舊 `pre-lineup` 版只能標為條件版，不得冒充最終先發版。
 
-## 3. 直接再戰閘門
+## 4. 直接再戰閘門
 
 近 30 天內同一賽事、核心陣容可比的 H2H 是必要證據，不是可選叙事。
 
@@ -38,19 +47,19 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 3. 建立具名 `direct-rematch` 反模型，明示機率所屬隊伍，並保存輸出與預定集成權重。本閘門不預設 H2H 權重或機械調整機率。
 4. 找到可比 H2H 卻沒有逐局證據時，停止新預測；來源無法存取時標記缺口、觸發非補償式信心上限，且不得宣稱高完整度。
 
-## 4. 集成可重播閘門
+## 5. 集成可重播閘門
 
 - 中央機率必須等於保存模型的加權和，權重合計為 1；spread 必須等於同一組模型的最大值減最小值。
 - 直接再戰模型不得只存在於 H2H 區塊或正文，卻從中央集成消失；反之也不得在集成中使用無逐局證據的 `direct_rematch`。
 - 驗證器只證明 artifact 與計算可重播，不證明權重有樣本外增量。權重變更仍須 paired walk-forward；資料／時序與計算落盤缺失可用固定回歸案例立即修正。
 
-## 5. 預測時點資格
+## 6. 預測時點資格
 
 - `predicted_at < actual_start`且未接觸 live 資訊：`prospective_pre_match`，可進入 Brier、log loss、ROI 與 calibration cohort。
 - 開賽後才產生或重建：`reconstructed_after_start`，只做定性檢討，注碼必須為 0u，不得與正式賽前績效合併。
 - `actual_start` 未取得時暫以排定時間分類；賽後取得實際開賽時間後要重新結算資格。
 - 尚未完賽或結果未確認時標記 `pending_result`，不得以當前 live 比分計入方向、Brier、log loss、ROI 或校準。
 
-## 6. 賽後回收
+## 7. 賽後回收
 
 賽後同時輸出「對外發布集」與「正式賽前評分集」的 N。若兩者不同，明列排除的 `match_key`與原因；不得因為開賽後重建命中而改善正式指標。

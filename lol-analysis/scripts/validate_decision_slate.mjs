@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
+import { validateSchedule } from "./validate_schedule_completeness.mjs";
 
 const ACTIONS = new Set(["bet_now", "price_watch", "live_only", "pass"]);
 const COVERAGE = new Set(["full", "partial", "none"]);
@@ -248,18 +249,15 @@ export function validateDecisionSlate(payload, report = null, scheduleKeys = nul
 
 function main() {
   const [input, reportPath, schedulePath] = process.argv.slice(2);
-  if (!input || !reportPath) {
+  if (!input || !reportPath || !schedulePath) {
     console.error(
-      "Usage: validate_decision_slate.mjs <decision-slate.json> <prediction.md> [schedule-verification.json]",
+      "Usage: validate_decision_slate.mjs <decision-slate.json> <prediction.md> <schedule-verification.json>",
     );
     process.exit(2);
   }
   try {
-    const scheduleKeys = schedulePath
-      ? JSON.parse(fs.readFileSync(schedulePath, "utf8")).matches.map(
-        (match) => match.match_key,
-      )
-      : null;
+    const schedule = validateSchedule(JSON.parse(fs.readFileSync(schedulePath, "utf8")));
+    const scheduleKeys = schedule.matches.map((match) => match.match_key);
     validateDecisionSlate(
       JSON.parse(fs.readFileSync(input, "utf8")),
       fs.readFileSync(reportPath, "utf8"),

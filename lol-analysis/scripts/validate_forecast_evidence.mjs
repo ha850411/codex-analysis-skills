@@ -11,6 +11,20 @@ const MODEL_KINDS = new Set([
   "direct_rematch",
 ]);
 const POSITIONS = new Set(["Top", "Jungle", "Mid", "ADC", "Support"]);
+const FORMATS = new Set(["BO1", "BO2", "BO3", "BO5"]);
+const PATCH_STATUS = new Set(["confirmed", "scenario"]);
+const PATCH_SOURCE_KINDS = new Set([
+  "official_rulebook",
+  "official_announcement",
+  "official_match_page",
+  "same_stage_match",
+  "independent_event_page",
+]);
+const OFFICIAL_PATCH_SOURCE_KINDS = new Set([
+  "official_rulebook",
+  "official_announcement",
+  "official_match_page",
+]);
 
 function fail(message) {
   throw new Error(message);
@@ -63,6 +77,78 @@ function probability(value, label) {
 
 function close(left, right, tolerance = 1e-6) {
   return Math.abs(left - right) <= tolerance;
+}
+
+function validatePatchContext(forecast, label, predictedAt) {
+  const competition = object(forecast.competition, `${label}.competition`);
+  const league = nonemptyString(competition.league, `${label}.competition.league`);
+  const event = nonemptyString(competition.event, `${label}.competition.event`);
+  const stage = nonemptyString(competition.stage, `${label}.competition.stage`);
+  if (!FORMATS.has(competition.format)) fail(`${label}.competition.format is invalid`);
+
+  const patch = object(forecast.patch_context, `${label}.patch_context`);
+  if (patch.league !== league || patch.event !== event || patch.stage !== stage) {
+    fail(`${label}.patch_context scope must match competition league, event, and stage`);
+  }
+  if (!PATCH_STATUS.has(patch.status)) fail(`${label}.patch_context.status is invalid`);
+  const patchCheckedAt = timestamp(patch.checked_at, `${label}.patch_context.checked_at`);
+  if (patchCheckedAt > predictedAt) fail(`${label}.patch_context was checked after predicted_at`);
+  if (!Array.isArray(patch.sources) || patch.sources.length === 0) {
+    fail(`${label}.patch_context.sources must be a non-empty array`);
+  }
+  let hasOfficialSource = false;
+  for (const [index, rawSource] of patch.sources.entries()) {
+    const sourceLabel = `${label}.patch_context.sources[${index}]`;
+    const source = object(rawSource, sourceLabel);
+    nonemptyString(source.url, `${sourceLabel}.url`);
+    const kind = nonemptyString(source.kind, `${sourceLabel}.kind`);
+    if (!PATCH_SOURCE_KINDS.has(kind)) fail(`${sourceLabel}.kind is invalid`);
+    if (OFFICIAL_PATCH_SOURCE_KINDS.has(kind)) hasOfficialSource = true;
+    if (source.league !== league || source.event !== event || source.stage !== stage) {
+      fail(`${sourceLabel} scope must match competition league, event, and stage`);
+    }
+    const checkedAt = timestamp(source.checked_at, `${sourceLabel}.checked_at`);
+    if (checkedAt > predictedAt) fail(`${sourceLabel} was checked after predicted_at`);
+  }
+  if (!Array.isArray(patch.conflicts)) fail(`${label}.patch_context.conflicts must be an array`);
+
+  if (patch.status === "confirmed") {
+    nonemptyString(patch.value, `${label}.patch_context.value`);
+    if (!hasOfficialSource) {
+      fail(`${label}.patch_context confirmed status requires an official source`);
+    }
+    if (patch.conflicts.length !== 0) {
+      fail(`${label}.patch_context confirmed status cannot retain conflicts`);
+    }
+    if (patch.scenarios !== undefined && patch.scenarios !== null) {
+      fail(`${label}.patch_context confirmed status cannot include scenarios`);
+    }
+    return;
+  }
+
+  if (patch.value !== null && patch.value !== undefined) {
+    fail(`${label}.patch_context scenario status must not use a single value`);
+  }
+  if (patch.conflicts.length === 0) {
+    fail(`${label}.patch_context scenario status requires documented conflicts`);
+  }
+  if (!Array.isArray(patch.scenarios) || patch.scenarios.length < 2) {
+    fail(`${label}.patch_context.scenarios must contain at least two patch scenarios`);
+  }
+  let weightSum = 0;
+  const seenValues = new Set();
+  for (const [index, rawScenario] of patch.scenarios.entries()) {
+    const scenarioLabel = `${label}.patch_context.scenarios[${index}]`;
+    const scenario = object(rawScenario, scenarioLabel);
+    const value = nonemptyString(scenario.value, `${scenarioLabel}.value`);
+    if (seenValues.has(value)) fail(`${scenarioLabel}.value is duplicated`);
+    seenValues.add(value);
+    weightSum += probability(scenario.probability, `${scenarioLabel}.probability`);
+    nonemptyString(scenario.evidence, `${scenarioLabel}.evidence`);
+  }
+  if (!close(weightSum, 1)) {
+    fail(`${label}.patch_context scenario probabilities must sum to 1`);
+  }
 }
 
 function validateTeam(team, label, predictedAt) {
@@ -348,6 +434,9 @@ function validateForecast(forecast, index, schemaVersion) {
     validateLineupUncertainties(forecast, label, predictedAt, scheduledStart);
     validateModelEnsemble(forecast, label, comparableCountermodels);
   }
+  if (schemaVersion >= 3) {
+    validatePatchContext(forecast, label, predictedAt);
+  }
 
   const betting = object(forecast.betting, `${label}.betting`);
   if (
@@ -367,7 +456,7 @@ function validateForecast(forecast, index, schemaVersion) {
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (![1, 2].includes(payload.schema_version)) fail("schema_version must be 1 or 2");
+  if (![1, 2, 3].includes(payload.schema_version)) fail("schema_version must be 1, 2, or 3");
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");
   }

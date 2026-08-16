@@ -106,8 +106,75 @@ function payloadV2(forecast = upgradeToV2()) {
   return { schema_version: 2, forecasts: [forecast] };
 }
 
+function upgradeToV3(forecast = upgradeToV2()) {
+  forecast.competition = {
+    league: "LPL",
+    event: "LPL 2026 Split 3",
+    stage: "Group Ascend Week 4",
+    format: "BO3",
+  };
+  forecast.patch_context = {
+    league: "LPL",
+    event: "LPL 2026 Split 3",
+    stage: "Group Ascend Week 4",
+    status: "confirmed",
+    value: "26.16",
+    checked_at: "2026-08-13T15:00:00+08:00",
+    conflicts: [],
+    sources: [{
+      url: "https://example.test/official-match-page",
+      kind: "official_match_page",
+      league: "LPL",
+      event: "LPL 2026 Split 3",
+      stage: "Group Ascend Week 4",
+      checked_at: "2026-08-13T15:00:00+08:00",
+    }],
+  };
+  return forecast;
+}
+
+function payloadV3(forecast = upgradeToV3()) {
+  return { schema_version: 3, forecasts: [forecast] };
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
 assert.doesNotThrow(() => validateSnapshot(payloadV2()));
+assert.doesNotThrow(() => validateSnapshot(payloadV3()));
+
+{
+  const forecast = upgradeToV3();
+  delete forecast.patch_context;
+  assert.throws(() => validateSnapshot(payloadV3(forecast)), /patch_context/);
+}
+
+{
+  const forecast = upgradeToV3();
+  forecast.patch_context.sources[0].stage = "Previous Week";
+  assert.throws(() => validateSnapshot(payloadV3(forecast)), /scope must match/);
+}
+
+{
+  const forecast = upgradeToV3();
+  forecast.patch_context.sources[0].kind = "same_stage_match";
+  assert.throws(() => validateSnapshot(payloadV3(forecast)), /requires an official source/);
+}
+
+{
+  const forecast = upgradeToV3();
+  forecast.patch_context = {
+    ...forecast.patch_context,
+    status: "scenario",
+    value: null,
+    conflicts: ["官方規章與同週賽事頁不一致"],
+    scenarios: [
+      { value: "26.15", probability: 0.4, evidence: "規章尚列舊版" },
+      { value: "26.16", probability: 0.6, evidence: "同階段公告列新版" },
+    ],
+  };
+  assert.doesNotThrow(() => validateSnapshot(payloadV3(forecast)));
+  forecast.patch_context.scenarios[1].probability = 0.5;
+  assert.throws(() => validateSnapshot(payloadV3(forecast)), /probabilities must sum to 1/);
+}
 
 {
   const forecast = validForecast();
