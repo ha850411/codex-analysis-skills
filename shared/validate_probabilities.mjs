@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 
 function usage() {
   console.error("Usage: node shared/validate_probabilities.mjs <checks.json>");
@@ -147,13 +148,7 @@ function evaluate(check, globalTolerance) {
   throw new Error(`${name}: unsupported check type ${JSON.stringify(check.type)}`);
 }
 
-if (process.argv.length !== 3) {
-  usage();
-  process.exit(2);
-}
-
-try {
-  const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+export function validateProbabilities(payload) {
   const tolerance = Number.isFinite(payload.tolerance) ? payload.tolerance : 0.2;
   if (tolerance < 0) throw new Error("tolerance must be non-negative");
   if (!Array.isArray(payload.checks) || payload.checks.length === 0) {
@@ -162,9 +157,28 @@ try {
 
   const results = payload.checks.map((check) => evaluate(check, tolerance));
   const failures = results.filter((result) => !result.pass);
-  console.log(JSON.stringify({ pass: failures.length === 0, tolerance, results }, null, 2));
-  process.exit(failures.length === 0 ? 0 : 1);
-} catch (error) {
-  console.error(`Validation error: ${error.message}`);
-  process.exit(2);
+  if (failures.length > 0) {
+    const error = new Error(
+      `probability checks failed: ${failures.map((item) => item.name).join(", ")}`,
+    );
+    error.exitCode = 1;
+    throw error;
+  }
+  return { pass: true, tolerance, results };
 }
+
+function main() {
+  if (process.argv.length !== 3) {
+    usage();
+    process.exit(2);
+  }
+  try {
+    const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    console.log(JSON.stringify(validateProbabilities(payload), null, 2));
+  } catch (error) {
+    console.error(`Validation error: ${error.message}`);
+    process.exit(error.exitCode ?? 2);
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

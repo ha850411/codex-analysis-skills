@@ -5,7 +5,8 @@
 1. 賽程來源
    - Riot／各賽區官方賽程確認官方場次與改期；跨賽區日報使用能涵蓋整個視窗的全域／多賽區官方清單。
    - Leaguepedia（`lol.fandom.com`）、Liquipedia 或 OP.GG Esports 作為不同營運方的獨立來源；可用單一全域清單，或以逐聯賽頁面組成 coverage group，其聯集核對完整集合、階段與格式。
-   - bo3.gg 僅提供候選賽程、provider Match ID 與比賽頁對照，不得標成官方來源，也不得單獨決定完整集合。
+   - bo3.gg 提供候選賽程、provider Match ID 與比賽頁對照；官方前端更新延遲時，也可作已解析對戰索引。不得標成官方來源，也不得單獨決定完整集合。
+   - 官方 bracket 與已完成前序賽果已唯一決定參賽者、bo3.gg 顯示同一對戰，且至少一個非 bo3 即時事件來源以事件 ID、時間與賽制交叉吻合時，可把 Riot 前端 placeholder 解析為 `resolved_from_bracket`。這是可稽核的降級路徑，不是把 bo3.gg 升格為官方來源。
 
 2. 官方賽事與隊伍來源
    - Riot／賽區官方賽程、賽制、版本與公告。
@@ -37,8 +38,8 @@
 - 如果陣容或先發資料衝突，採用時間較新且更接近當場的官方公告；若只有社群 wiki，列出差異並降低信心度。
 - 如果賽程時間衝突，全部轉換為台灣時間，並說明採用的來源。
 - `daily-summary` 必須由官方全域來源列出整個視窗的 S-Tier 事件鍵集合；獨立側可用全域來源，或將逐聯賽頁面組成 coverage group。每個聯賽頁只貢獻自身子集合，獨立來源聯集必須精確等於官方集合。只查單一聯賽、聯集不完整，或來源場數／對戰組合不一致且無法消解時，停止預測與發布。
-- 官方與獨立集合都要保存逐場身分，不得只保存來源 URL 或場數。每筆必須包含 `match_key`、UTC+8 時間、聯賽、階段、賽制、雙方隊名與 `participant_status=confirmed`；官方仍為 `TBD`、條件式排名賽或 placeholder 時，聚合站隊名與盤口 event 只能保留為候選，不能讓該場通過完整性閘門。
-- bo3.gg 不得計入上述獨立 coverage group。寫入 `complete=true` 前，先排除所有 bo3.gg 子集合，再確認每個目標聯賽都有 Leaguepedia、Liquipedia、OP.GG Esports 或其他不同營運方的獨立子集合，且其聯集等於官方集合。
+- 官方與獨立集合都要保存逐場身分，不得只保存來源 URL 或場數。每筆必須包含 `match_key`、UTC+8 時間、聯賽、階段、賽制、雙方隊名與參賽者狀態。一般情況使用 `participant_status=confirmed`；官方前端仍為 `TBD`、條件式排名賽或 placeholder 時，只有在官方 bracket／前序賽果能唯一解析，且 bo3.gg 與至少一個非 bo3 即時事件來源完全交叉吻合時，才可使用 `participant_status=resolved_from_bracket`。否則仍只能保留為候選。
+- bo3.gg 不得計入上述獨立 coverage group。寫入 `complete=true` 前，先排除所有 bo3.gg 子集合，再確認每個目標聯賽都有 Leaguepedia、Liquipedia、OP.GG Esports、具事件 ID 的盤口供應商或其他不同營運方的獨立子集合，且其聯集等於官方集合。採用 `resolved_from_bracket` 時，獨立 coverage 不得與 `resolution_evidence.candidate_url` 使用相同營運方。
 - 外層預查清單只是候選集合。交叉來源找到額外目標賽事時必須補入；若無法建立可重現的 `match_key`，標記驗證失敗並等待重查。
 - bo3.gg 沒有 Match ID 但官方與獨立來源都確認場次時，不得漏場；改用技能規定的穩定 `match_key`，並明示 `bo3_match_id=null` 與上游資料缺口。
 - 「沒有比賽」也必須由官方來源與獨立來源共同支持，不能依單一空回應直接跳過。

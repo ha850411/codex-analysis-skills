@@ -71,6 +71,39 @@ assert.doesNotThrow(() => validateSchedule(validSchedule()));
 
 {
   const schedule = validSchedule();
+  const resolved = {
+    ...schedule.matches[0],
+    participant_status: "resolved_from_bracket",
+    resolution_evidence: {
+      official_bracket_url: "https://lolesports.com/schedule",
+      candidate_url: "https://bo3.gg/lol/matches/hle-vs-kt",
+      corroborating_sources: ["https://stake.com/sports/hle-kt"],
+      resolved_at: "2026-08-15T12:00:00+08:00",
+      rationale: "Completed bracket results uniquely determine both participants.",
+    },
+  };
+  schedule.candidate_set.matches[0] = resolved;
+  schedule.official_sets[0].matches[0] = resolved;
+  schedule.independent_coverage[0].matches[0] = resolved;
+  schedule.matches[0] = resolved;
+  assert.doesNotThrow(() => validateSchedule(schedule));
+}
+
+{
+  const schedule = validSchedule();
+  const unresolved = {
+    ...schedule.matches[0],
+    participant_status: "resolved_from_bracket",
+  };
+  schedule.candidate_set.matches[0] = unresolved;
+  schedule.official_sets[0].matches[0] = unresolved;
+  schedule.independent_coverage[0].matches[0] = unresolved;
+  schedule.matches[0] = unresolved;
+  assert.throws(() => validateSchedule(schedule), /resolution_evidence/);
+}
+
+{
+  const schedule = validSchedule();
   schedule.official_sets[0].matches[1] = {
     ...schedule.official_sets[0].matches[1],
     team1: "TBD",

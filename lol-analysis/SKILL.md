@@ -14,7 +14,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 ## 不可妥協的資料來源規則
 
-1. **賽程主要來源：** Riot／各賽區官方賽程負責確認官方場次；bo3.gg 只作候選入口與可用的 provider Match ID。Leaguepedia（`lol.fandom.com`）、Liquipedia 或 OP.GG Esports 作為不同營運方的獨立完整性來源，補足與核對賽程、階段與格式。不得把 bo3.gg 標成官方來源。
+1. **賽程主要來源：** Riot／各賽區官方賽程負責確認官方場次；bo3.gg 作候選入口、provider Match ID，以及官方前端更新延遲時的已解析對戰索引。Leaguepedia（`lol.fandom.com`）、Liquipedia、OP.GG Esports 或具事件 ID 與開賽時間的盤口供應商，作為不同營運方的獨立完整性來源。不得把 bo3.gg 標成官方來源，也不得只靠 bo3.gg 宣告完整；但官方 bracket／前序賽果已使參賽者唯一確定，且 bo3.gg 與至少一個非 bo3 即時事件來源同時顯示相同對戰、時間與賽制時，不得因 Riot 前端仍為 placeholder 而停問使用者。
 2. **名單主要來源：** 當場官方名單、賽區／隊伍公告優先；Leaguepedia 與 Liquipedia 用於交叉查核。來源衝突時採時間較新且更接近當場的官方資訊，不把任何社群 wiki 視為永遠優先。
 3. **版本主要來源：** 優先查賽事規章、官方公告或賽事頁；Leaguepedia／Liquipedia 補足比賽日版本與 Fearless Draft 規則。分析版本如何改變 BP 優先級、線路對位、物件節奏、英雄池與選邊價值。
 4. **數據與歷史對戰：** 可參考 `esports.op.gg/schedules`、近期比賽頁、局內數據與其他可信數據來源，但不可盲從。只看比分不足以支撐分析。
@@ -31,13 +31,13 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 「今天／明天／指定日期全部比賽」、`daily-summary` 或自動日報先讀 `references/source-priority.md`，再套用本閘門：
 
 1. 明確寫出台灣日曆日或自動化起訖時間；不得把滾動 24 小時默認成「今天」。
-2. bo3.gg 只建立候選集合。另以涵蓋整個預測視窗的 Riot／賽區官方全域賽程列出完整 S-Tier 集合；再以不同營運方的獨立全域賽程，或由逐聯賽獨立賽程組成的 coverage group，建立獨立集合。官方集合與獨立來源聯集必須完全相同，再補入漏場並移除誤列。
+2. bo3.gg 先建立候選集合。另以涵蓋整個預測視窗的 Riot／賽區官方全域賽程列出完整 S-Tier 集合；再以不同營運方的獨立全域賽程，或由逐聯賽獨立賽程組成的 coverage group，建立獨立集合。官方集合與獨立來源聯集必須完全相同，再補入漏場並移除誤列。若官方前端只欠參賽隊名，但官方 bracket 與已完成前序賽果可唯一解出隊伍，使用下一條的降級路徑補齊身分。
 3. 單一聯賽專頁只能貢獻該聯賽的子集合，不能獨自證明跨賽區日報完整。跨賽區 `daily-summary` 必須保存官方全域集合，以及獨立 coverage group 每個來源的子集合與聯集；計算獨立聯集前必須斷言其中沒有 bo3.gg 來源，且每個目標聯賽都有允許的獨立子集合。任一聯賽缺少非 bo3 獨立 coverage，或官方與獨立角色的最終聯集不相同時，不得寫 `complete=true`。
 4. 每場使用穩定 `match_key`。有 bo3.gg Match ID 時使用 `bo3:<id>`；bo3.gg 缺場時，使用由已確認聯賽、UTC+8 開賽時間及雙方隊名正規化產生的 `lol:<league>:<YYYYMMDDTHHMM+0800>:<team1>:<team2>`，並保留 `bo3_match_id=null`、官方與獨立來源。缺少 bo3.gg ID 本身不得刪除已被雙來源確認的場次。
 5. 逐場核對日期、隊伍、賽事與 BO；時間一律轉 UTC+8。無賽事時沒有可供逐聯賽拼接的已知集合，仍須由官方與獨立全域來源的空集合共同支持。
-6. 來源集合、事件身分或必要欄位有未解衝突時，停止預測、Notion 發布與寄信；降低信心度不能取代賽程完整性。
+6. 來源集合、事件身分或必要欄位有未解衝突時，停止預測、Notion 發布與寄信；降低信心度不能取代賽程完整性。官方前端單純更新落後不等於「未解衝突」：若官方 bracket／前序賽果唯一決定參賽者、bo3.gg 已解析同一場，且至少一個非 bo3 即時事件來源以事件 ID 核對相同隊伍、時間與賽制，保存 `participant_status=resolved_from_bracket` 與三方證據後可繼續，不向使用者反問公開資料可自行解決的賽程。
 7. 自動化保存原始候選回應、驗證時間、官方全域集合、獨立 coverage group 的子集合與聯集、候選／新增／移除 match keys 與衝突，供後續稽核。
-8. `schedule-verification.json` 使用 schema v2；官方與獨立來源都要逐場保存已命名的隊伍、時間、聯賽、階段、賽制與 `participant_status=confirmed`。官方頁若仍是 `TBD vs TBD`、條件式排名賽或 placeholder，即使聚合站與盤口已有隊名，也不得當成官方確認。送出前執行 `node lol-analysis/scripts/validate_schedule_completeness.mjs <schedule-verification.json>`；驗證未通過不得鎖定機率或建立投注清單。
+8. `schedule-verification.json` 使用 schema v2；官方與獨立來源都要逐場保存已命名的隊伍、時間、聯賽、階段與賽制。一般場次使用 `participant_status=confirmed`。官方前端仍為 `TBD`／placeholder 時，不得把聚合站猜測冒充官方確認；只有第 6 條的唯一 bracket 解成立時，才可使用 `participant_status=resolved_from_bracket`，並保存官方 bracket、bo3.gg 候選頁、至少一個非 bo3 即時事件來源、解析時間與理由。送出前執行 `node lol-analysis/scripts/validate_schedule_completeness.mjs <schedule-verification.json>`；驗證未通過不得鎖定機率或建立投注清單。
 
 ## 必要工作流程
 
@@ -114,6 +114,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - `daily-summary` 必須把所有已取得且能映射的市場按調整後 EV 排序。若至少一個標的達到最低可接受價格、通過專屬證據閘門且沒有硬阻擋，至少把最高順位標成 `立即可打` 並給非零注碼；最終簡表不得與保存的 post-market 決策不一致。
    - 若全日確實沒有 `立即可打`，觸發「全日 0u 稽核」：列出已查／未映射市場、前三個最接近標準的候選、當前價、觸發價、差距與重跑條件。只有完成此稽核後才可輸出全日沒有賽前下注；不得為了湊單製造正 EV 或強迫下注。
    - `daily-summary` 在當次 artifact 目錄建立 `decision-slate.json`，並在送出前執行 `node lol-analysis/scripts/validate_decision_slate.mjs <decision-slate.json> <prediction.md> <schedule-verification.json>`；第三個參數不可省略，CLI 會先驗證 schedule schema v2，再要求投注清單與已驗證賽程完全一致。驗證失敗時先修正賽程、決策、注碼或簡表同步，不得發布。
+   - `daily-summary` 的最終封口改由 `node lol-analysis/scripts/validate_daily_run.mjs <artifact-directory>` 執行；目錄必須同時包含 `schedule-verification.json`、schema v3 `forecast-evidence.json`、每個 check 都帶 `match_key` 的 `probability-checks.json`、`decision-slate.json` 與 `prediction.md`。驗證器會要求四類 artifact 的場次集合完全相同，逐場賽程 scope／隊名／開賽時間一致，模型信心度與決策清單一致，並重跑各下游驗證器。缺少任一檔案或只在對話宣稱「已驗證」都不得送出、發布或建立投注清單。
    - 可行時討論可玩的市場，例如獨贏、讓分、精確比分、地圖總數、首局，或雙方各贏一局。
    - 地圖讓分、地圖大分與「至少贏一局」屬於高誤差市場，必須通過推薦閘門；未通過時即使賠率看似便宜，也標記為不碰或只看 live。
    - 敗方 +1.5、地圖大分與「敗方至少一局」不得用「價格型」當唯一理由；必須同時列出敗方兩條可執行取圖路徑與熱門方橫掃為何受限。若做不到，獨贏可小注但地圖盤不推薦。

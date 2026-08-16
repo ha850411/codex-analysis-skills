@@ -25,6 +25,8 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
+`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v3 evidence，並核對 schedule、probability checks、decision slate 與報告的逐場集合及信心度。
+
 ## 2. 版本溯源閘門
 
 - 版本是「聯賽 × 賽事 × 階段」欄位，不是日期或整份日報的單一常數。即使同一天其他賽區仍用舊版，也不能推定本場相同。

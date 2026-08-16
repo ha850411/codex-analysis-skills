@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const FORMATS = new Set(["BO1", "BO2", "BO3", "BO5"]);
+const PARTICIPANT_STATUS = new Set(["confirmed", "resolved_from_bracket"]);
 
 function fail(message) {
   throw new Error(message);
@@ -50,6 +51,33 @@ function isBo3Source(source) {
   }
 }
 
+function validateResolutionEvidence(match, label) {
+  const evidence = object(match.resolution_evidence, `${label}.resolution_evidence`);
+  const officialBracketUrl = nonemptyString(
+    evidence.official_bracket_url,
+    `${label}.resolution_evidence.official_bracket_url`,
+  );
+  if (isBo3Source(officialBracketUrl)) {
+    fail(`${label}.resolution_evidence.official_bracket_url cannot be bo3.gg`);
+  }
+  const candidateUrl = nonemptyString(
+    evidence.candidate_url,
+    `${label}.resolution_evidence.candidate_url`,
+  );
+  if (!isBo3Source(candidateUrl)) {
+    fail(`${label}.resolution_evidence.candidate_url must be bo3.gg`);
+  }
+  const corroboratingSources = stringList(
+    evidence.corroborating_sources,
+    `${label}.resolution_evidence.corroborating_sources`,
+  );
+  if (corroboratingSources.some(isBo3Source)) {
+    fail(`${label}.resolution_evidence.corroborating_sources cannot include bo3.gg`);
+  }
+  timestamp(evidence.resolved_at, `${label}.resolution_evidence.resolved_at`);
+  nonemptyString(evidence.rationale, `${label}.resolution_evidence.rationale`);
+}
+
 function validateMatch(raw, label, windowStart, windowEnd, expectedLeague = null) {
   const match = object(raw, label);
   const matchKey = nonemptyString(match.match_key, `${label}.match_key`);
@@ -67,8 +95,13 @@ function validateMatch(raw, label, windowStart, windowEnd, expectedLeague = null
   if (/^(tbd|to be determined|unknown)$/i.test(team1) || /^(tbd|to be determined|unknown)$/i.test(team2)) {
     fail(`${label} cannot use placeholder participants`);
   }
-  if (match.participant_status !== "confirmed") {
-    fail(`${label}.participant_status must be confirmed`);
+  if (!PARTICIPANT_STATUS.has(match.participant_status)) {
+    fail(`${label}.participant_status is invalid`);
+  }
+  if (match.participant_status === "resolved_from_bracket") {
+    validateResolutionEvidence(match, label);
+  } else if (match.resolution_evidence !== undefined && match.resolution_evidence !== null) {
+    fail(`${label}.resolution_evidence is only valid for resolved_from_bracket`);
   }
   return { ...match, match_key: matchKey };
 }
