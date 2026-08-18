@@ -51,15 +51,33 @@ AI 驅動的體育賽事與電競分析技能集（Sports & Esports Analytics Sk
 
 ## 🛠️ 安裝與環境設定
 
-### 1. Skill 安裝路徑
-請確保此儲存庫中的 Skill 放置或連結於使用者家目錄的 agents skills 目錄：
+### 1. Skill 互動式掛載管理工具 (推薦)
+專案內建 Checkbox 互動選單與 Web 介面，可自由勾選並自動建立軟連結至 `~/.agents/skills`：
+
+```bash
+# 方式 A：啟動終端機 Checkbox 互動選單 (TUI)
+./manage-skills.sh
+
+# 方式 B：啟動瀏覽器圖形介面 (Web UI)
+./manage-skills.sh --web
+
+# 方式 C：檢視目前技能掛載狀態
+./manage-skills.sh --list
+```
+
+> **提示**：終端機 TUI 支援使用方向鍵移動、`Space` 勾選/取消、`a` 全選、`n` 全清、`i` 反選、`Enter` 套用變更，並會**自動處理 `shared` 共用套件之依賴關係**與**同步掛載 `.env` 金鑰設定檔**至 `~/.agents/skills/.env`。
+
+### 2. 手動安裝路徑
+如需手動建立軟連結：
 
 ```bash
 mkdir -p ~/.agents/skills
-# 將技能放置於 ~/.agents/skills/
+# 範例：將 mlb-analysis 軟連結至 ~/.agents/skills/
+ln -s "$(pwd)/mlb-analysis" ~/.agents/skills/
+ln -s "$(pwd)/shared" ~/.agents/skills/
 ```
 
-### 2. 環境變數設定 (`.env`)
+### 3. 環境變數設定 (`.env`)
 複製 `.env.example` 並設置相應的 Token 與通知金鑰：
 
 ```bash
