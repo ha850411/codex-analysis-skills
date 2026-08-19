@@ -30,8 +30,8 @@ function exactKeySet(actual, expected, label) {
 }
 
 function validateEvidenceCoverage(evidence, schedule) {
-  if (evidence.schema_version !== 3) {
-    fail("forecast-evidence.json must use schema_version 3 for a daily run");
+  if (evidence.schema_version !== 4) {
+    fail("forecast-evidence.json must use schema_version 4 for a daily run");
   }
   validateSnapshot(evidence);
 
@@ -63,6 +63,24 @@ function validateEvidenceCoverage(evidence, schedule) {
       [...scheduledTeams].some((team) => !forecastTeams.has(team))
     ) {
       fail(`${forecast.match_key} teams must match the verified schedule`);
+    }
+  }
+}
+
+function validateDecisionEligibility(evidence, decisions) {
+  const decisionByKey = new Map(
+    decisions.matches.map((decision) => [decision.match_key, decision]),
+  );
+  for (const forecast of evidence.forecasts) {
+    const decision = decisionByKey.get(forecast.match_key);
+    if (
+      forecast.lineup_uncertainties.length > 0 &&
+      decision.action === "bet_now"
+    ) {
+      fail(
+        `${forecast.match_key} unresolved lineup uncertainty cannot use bet_now; ` +
+        "publish a conditional decision or create a post-lineup snapshot",
+      );
     }
   }
 }
@@ -118,6 +136,7 @@ export function validateDailyRun({
   const scheduleKeys = schedule.matches.map((match) => match.match_key);
   validateEvidenceCoverage(evidence, schedule);
   validateDecisionSlate(decisions, report, scheduleKeys);
+  validateDecisionEligibility(evidence, decisions);
   validateProbabilityCoverage(probabilities, scheduleKeys, decisions);
   return {
     pass: true,

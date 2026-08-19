@@ -1,6 +1,6 @@
 # 預測證據與時點資格閘門
 
-`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、漏掉最可比的直接交手、隱藏模型集成權重，並把開賽後重建混入正式賽前績效。新快照使用 schema v3；v1／v2 只供既有歷史 artifact 重播。
+`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、隱藏模型集成權重，並把開賽後重建混入正式賽前績效。新快照使用 schema v4；v1／v2／v3 只供既有歷史 artifact 重播。
 
 ## 1. 保存 evidence snapshot
 
@@ -10,11 +10,12 @@
 - `competition` 保存 league、event、stage、format；`patch_context` 的 scope 必須逐字對應，禁止用日報頂層共用版本代替逐場證據。
 - `patch_context.status=confirmed` 時保存單一版本、查核時間與至少一個官方規章／公告／比賽頁來源；每個來源同時保存 league、event、stage 與 `checked_at`。只有第三方同週賽後頁不得宣告 confirmed。
 - 版本來源衝突無法消解時使用 `status=scenario`，保存衝突與至少兩個版本情境、權重及證據；權重合計為 1。不得把舊週、舊 Split 或其他賽區版本快取寫成當場確認值。
-- 雙方最近正式系列的日期、實際五人、來源與 `checked_at`。
+- 雙方最近正式系列使用穩定 `series_key`，保存日期、實際五人、來源與 `checked_at`。
+- 每隊另存 `recent_series`：scope 必須對應本場 league／event；保存查找時間、`search_complete=true`，以及同一賽事最新兩個系列的 `series_key`、日期、對手、比分、賽制、版本、實際五人、來源與 `checked_at`，按新到舊排序。不足兩場時列出全部並保存 `insufficient_reason`；不得用較早的亮眼系列跳過更晚一場。
 - 本場預估／公告五人；與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`。不得用重新查閱舊頁面的時間冒充新公告。
 - 明列 `lineup_uncertainties`，沒有可信分歧時保存空陣列；有分歧時保存隊伍、位置、候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。權重合計必須為 1，`recheck_by` 必須早於開賽。
 - 近 30 天直接交手搜尋結果、來源與 `checked_at`。同賽事、可比陣容的交手要保存逐局勝方、選邊、BP 與可重複機制。
-- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重與證據，以及由加權公式自然得到的中央點與模型 spread。存在可比直接再戰時，另加入與 H2H artifact 輸出／權重一致的 `direct_rematch` 模型。
+- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重與證據，以及由加權公式自然得到的中央點與模型 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，另加入與 H2H artifact 輸出／權重一致的 `direct_rematch` 模型。
 - `evaluation_status`與投注決策。
 
 執行：
@@ -25,7 +26,7 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
-`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v3 evidence，並核對 schedule、probability checks、decision slate 與報告的逐場集合及信心度。
+`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v4 evidence，並核對 schedule、probability checks、decision slate 與報告的逐場集合及信心度。若 evidence 仍有未解 `lineup_uncertainties`，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。
 
 ## 2. 版本溯源閘門
 

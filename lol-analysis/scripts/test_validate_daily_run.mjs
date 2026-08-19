@@ -71,21 +71,54 @@ function team(name, suffix) {
   const players = ["Top", "Jungle", "Mid", "ADC", "Support"].map(
     (position) => `${position}${suffix}`,
   );
+  const seriesKey = `lck-2026-08-10-${suffix}`;
   return {
     name,
     last_series: {
+      series_key: seriesKey,
       played_at: "2026-08-10T16:00:00+08:00",
       players,
       source: "https://example.test/last-series",
       checked_at: predictedAt,
     },
     projected_lineup: { players: [...players] },
+    recent_series: {
+      league: "LCK",
+      event: "LCK 2026 Rounds 3-4",
+      searched_at: predictedAt,
+      search_complete: true,
+      insufficient_reason: null,
+      series: [
+        {
+          series_key: seriesKey,
+          played_at: "2026-08-10T16:00:00+08:00",
+          opponent: name === "Alpha" ? "Gamma" : "Delta",
+          score: "2-1",
+          format: "BO3",
+          patch: "26.16",
+          players: [...players],
+          source: "https://example.test/last-series",
+          checked_at: predictedAt,
+        },
+        {
+          series_key: `lck-2026-08-06-${suffix}`,
+          played_at: "2026-08-06T16:00:00+08:00",
+          opponent: name === "Alpha" ? "Delta" : "Gamma",
+          score: "0-2",
+          format: "BO3",
+          patch: "26.15",
+          players: [...players],
+          source: "https://example.test/previous-series",
+          checked_at: predictedAt,
+        },
+      ],
+    },
   };
 }
 
 function evidence() {
   return {
-    schema_version: 3,
+    schema_version: 4,
     forecasts: [{
       match_key: matchKey,
       scheduled_start: start,
@@ -139,6 +172,12 @@ function evidence() {
             series_probability: 0.60,
             weight: 0.4,
             evidence: "same-event recent form",
+            evidence_refs: [
+              "lck-2026-08-10-A",
+              "lck-2026-08-06-A",
+              "lck-2026-08-10-B",
+              "lck-2026-08-06-B",
+            ],
           },
           {
             name: "underdog-countermodel",
@@ -250,6 +289,41 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
   const run = validRun();
   run.decisions.matches[0].model_confidence = 0.69;
   assert.throws(() => validateDailyRun(run), /model confidence must match/);
+}
+
+{
+  const run = validRun();
+  run.evidence.forecasts[0].lineup_uncertainties = [{
+    team: "Alpha",
+    position: "Jungle",
+    candidates: ["JungleA", "AltJungle"],
+    scenarios: [
+      {
+        starter: "JungleA",
+        probability: 0.6,
+        team_series_probability: 0.60,
+        evidence: "latest formal series",
+      },
+      {
+        starter: "AltJungle",
+        probability: 0.4,
+        team_series_probability: 0.56,
+        evidence: "recent official rotation",
+      },
+    ],
+    recheck_by: "2026-08-17T15:30:00+08:00",
+    resolution_trigger: "official match roster",
+  }];
+  const decision = run.decisions.matches[0];
+  decision.action = "bet_now";
+  decision.current_odds = 2.1;
+  decision.adjusted_ev = 0.05;
+  decision.stake_units = 0.25;
+  decision.trigger = null;
+  decision.table_cell = "立即可打：Alpha ML @2.10；底價 2.04；0.25u";
+  run.decisions.all_zero_audit = null;
+  run.report = report().replace(tableCell, decision.table_cell);
+  assert.throws(() => validateDailyRun(run), /unresolved lineup uncertainty/);
 }
 
 {

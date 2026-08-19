@@ -151,11 +151,14 @@ function validatePatchContext(forecast, label, predictedAt) {
   }
 }
 
-function validateTeam(team, label, predictedAt) {
+function validateTeam(team, label, predictedAt, requireSeriesKey = false) {
   object(team, label);
   nonemptyString(team.name, `${label}.name`);
 
   const last = object(team.last_series, `${label}.last_series`);
+  const lastSeriesKey = requireSeriesKey
+    ? nonemptyString(last.series_key, `${label}.last_series.series_key`)
+    : null;
   const lastPlayed = timestamp(last.played_at, `${label}.last_series.played_at`);
   if (lastPlayed >= predictedAt) fail(`${label}.last_series must predate the forecast`);
   const lastPlayers = stringList(
@@ -190,6 +193,61 @@ function validateTeam(team, label, predictedAt) {
     const checked = timestamp(change.checked_at, `${label}.change_evidence.checked_at`);
     if (checked > predictedAt) fail(`${label}.change_evidence was checked after predicted_at`);
   }
+  return lastSeriesKey;
+}
+
+function validateRecentSeries(team, label, predictedAt, competition) {
+  const recent = object(team.recent_series, `${label}.recent_series`);
+  if (recent.league !== competition.league || recent.event !== competition.event) {
+    fail(`${label}.recent_series scope must match competition league and event`);
+  }
+  const searchedAt = timestamp(recent.searched_at, `${label}.recent_series.searched_at`);
+  if (searchedAt > predictedAt) {
+    fail(`${label}.recent_series was searched after predicted_at`);
+  }
+  if (recent.search_complete !== true) {
+    fail(`${label}.recent_series.search_complete must be true`);
+  }
+  if (!Array.isArray(recent.series) || recent.series.length > 2) {
+    fail(`${label}.recent_series.series must contain the latest zero to two same-event series`);
+  }
+  if (recent.series.length < 2) {
+    nonemptyString(
+      recent.insufficient_reason,
+      `${label}.recent_series.insufficient_reason`,
+    );
+  } else if (recent.insufficient_reason !== null && recent.insufficient_reason !== undefined) {
+    fail(`${label}.recent_series.insufficient_reason must be null when two series are available`);
+  }
+
+  const seriesKeys = [];
+  let previousPlayedAt = Number.POSITIVE_INFINITY;
+  for (const [index, rawSeries] of recent.series.entries()) {
+    const seriesLabel = `${label}.recent_series.series[${index}]`;
+    const series = object(rawSeries, seriesLabel);
+    const seriesKey = nonemptyString(series.series_key, `${seriesLabel}.series_key`);
+    if (seriesKeys.includes(seriesKey)) fail(`${seriesLabel}.series_key is duplicated`);
+    seriesKeys.push(seriesKey);
+    const playedAt = timestamp(series.played_at, `${seriesLabel}.played_at`);
+    if (playedAt >= predictedAt) fail(`${seriesLabel} must predate the forecast`);
+    if (playedAt > previousPlayedAt) {
+      fail(`${label}.recent_series.series must be ordered newest first`);
+    }
+    previousPlayedAt = playedAt;
+    nonemptyString(series.opponent, `${seriesLabel}.opponent`);
+    nonemptyString(series.score, `${seriesLabel}.score`);
+    if (!FORMATS.has(series.format)) fail(`${seriesLabel}.format is invalid`);
+    if (series.patch === null) {
+      nonemptyString(series.patch_missing_reason, `${seriesLabel}.patch_missing_reason`);
+    } else {
+      nonemptyString(series.patch, `${seriesLabel}.patch`);
+    }
+    stringList(series.players, `${seriesLabel}.players`, 5);
+    nonemptyString(series.source, `${seriesLabel}.source`);
+    const checkedAt = timestamp(series.checked_at, `${seriesLabel}.checked_at`);
+    if (checkedAt > predictedAt) fail(`${seriesLabel} was checked after predicted_at`);
+  }
+  return seriesKeys;
 }
 
 function validateH2h(h2h, label, predictedAt, scheduledStart) {
@@ -318,7 +376,12 @@ function validateLineupUncertainties(forecast, label, predictedAt, scheduledStar
   }
 }
 
-function validateModelEnsemble(forecast, label, comparableCountermodels) {
+function validateModelEnsemble(
+  forecast,
+  label,
+  comparableCountermodels,
+  requiredRecentEvidenceRefs = [],
+) {
   const ensemble = object(forecast.model_ensemble, `${label}.model_ensemble`);
   const teamNames = forecast.teams.map((team) => team.name);
   const targetTeam = nonemptyString(ensemble.target_team, `${label}.model_ensemble.target_team`);
@@ -351,6 +414,14 @@ function validateModelEnsemble(forecast, label, comparableCountermodels) {
     const weight = probability(model.weight, `${modelLabel}.weight`);
     if (weight === 0) fail(`${modelLabel}.weight must be greater than 0`);
     nonemptyString(model.evidence, `${modelLabel}.evidence`);
+    if (requiredRecentEvidenceRefs.length > 0 && kind === "recent_event") {
+      const evidenceRefs = stringList(model.evidence_refs, `${modelLabel}.evidence_refs`);
+      for (const requiredRef of requiredRecentEvidenceRefs) {
+        if (!evidenceRefs.includes(requiredRef)) {
+          fail(`${modelLabel}.evidence_refs must include recent series ${requiredRef}`);
+        }
+      }
+    }
     weightSum += weight;
     weightedProbability += modelProbability * weight;
     minimum = Math.min(minimum, modelProbability);
@@ -421,8 +492,13 @@ function validateForecast(forecast, index, schemaVersion) {
   if (!Array.isArray(forecast.teams) || forecast.teams.length !== 2) {
     fail(`${label}.teams must contain exactly two teams`);
   }
-  forecast.teams.forEach((team, teamIndex) =>
-    validateTeam(team, `${label}.teams[${teamIndex}]`, predictedAt),
+  const lastSeriesKeys = forecast.teams.map((team, teamIndex) =>
+    validateTeam(
+      team,
+      `${label}.teams[${teamIndex}]`,
+      predictedAt,
+      schemaVersion >= 4,
+    ),
   );
   const comparableCountermodels = validateH2h(
     forecast.recent_direct_h2h,
@@ -430,9 +506,30 @@ function validateForecast(forecast, index, schemaVersion) {
     predictedAt,
     scheduledStart,
   );
+  let requiredRecentEvidenceRefs = [];
+  if (schemaVersion >= 4) {
+    const competition = object(forecast.competition, `${label}.competition`);
+    requiredRecentEvidenceRefs = [...lastSeriesKeys];
+    forecast.teams.forEach((team, teamIndex) => {
+      requiredRecentEvidenceRefs.push(
+        ...validateRecentSeries(
+          team,
+          `${label}.teams[${teamIndex}]`,
+          predictedAt,
+          competition,
+        ),
+      );
+    });
+    requiredRecentEvidenceRefs = [...new Set(requiredRecentEvidenceRefs)];
+  }
   if (schemaVersion >= 2) {
     validateLineupUncertainties(forecast, label, predictedAt, scheduledStart);
-    validateModelEnsemble(forecast, label, comparableCountermodels);
+    validateModelEnsemble(
+      forecast,
+      label,
+      comparableCountermodels,
+      requiredRecentEvidenceRefs,
+    );
   }
   if (schemaVersion >= 3) {
     validatePatchContext(forecast, label, predictedAt);
@@ -456,7 +553,9 @@ function validateForecast(forecast, index, schemaVersion) {
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (![1, 2, 3].includes(payload.schema_version)) fail("schema_version must be 1, 2, or 3");
+  if (![1, 2, 3, 4].includes(payload.schema_version)) {
+    fail("schema_version must be 1, 2, 3, or 4");
+  }
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");
   }

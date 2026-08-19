@@ -137,9 +137,82 @@ function payloadV3(forecast = upgradeToV3()) {
   return { schema_version: 3, forecasts: [forecast] };
 }
 
+function upgradeToV4(forecast = upgradeToV3()) {
+  const evidenceRefs = [];
+  forecast.teams.forEach((forecastTeam, index) => {
+    const suffix = index === 0 ? "tes" : "lgd";
+    const opponent = index === 0 ? "LGD" : "TES";
+    const latestKey = `lpl-2026-08-08-${suffix}`;
+    forecastTeam.last_series.series_key = latestKey;
+    forecastTeam.recent_series = {
+      league: forecast.competition.league,
+      event: forecast.competition.event,
+      searched_at: "2026-08-13T15:00:00+08:00",
+      search_complete: true,
+      insufficient_reason: null,
+      series: [
+        {
+          series_key: latestKey,
+          played_at: "2026-08-08T07:00:00+08:00",
+          opponent,
+          score: index === 0 ? "2-1" : "1-2",
+          format: "BO3",
+          patch: "26.16",
+          players: [...forecastTeam.last_series.players],
+          source: "https://example.test/last-series",
+          checked_at: "2026-08-13T12:00:00+08:00",
+        },
+        {
+          series_key: `lpl-2026-08-03-${suffix}`,
+          played_at: "2026-08-03T07:00:00+08:00",
+          opponent: `${opponent} Academy`,
+          score: index === 0 ? "0-2" : "2-0",
+          format: "BO3",
+          patch: "26.15",
+          players: [...forecastTeam.last_series.players],
+          source: "https://example.test/previous-series",
+          checked_at: "2026-08-13T12:00:00+08:00",
+        },
+      ],
+    };
+    evidenceRefs.push(latestKey, `lpl-2026-08-03-${suffix}`);
+  });
+  forecast.model_ensemble.models.find(
+    (model) => model.kind === "recent_event",
+  ).evidence_refs = evidenceRefs;
+  return forecast;
+}
+
+function payloadV4(forecast = upgradeToV4()) {
+  return { schema_version: 4, forecasts: [forecast] };
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
 assert.doesNotThrow(() => validateSnapshot(payloadV2()));
 assert.doesNotThrow(() => validateSnapshot(payloadV3()));
+assert.doesNotThrow(() => validateSnapshot(payloadV4()));
+
+{
+  const forecast = upgradeToV4();
+  delete forecast.teams[0].recent_series;
+  assert.throws(() => validateSnapshot(payloadV4(forecast)), /recent_series/);
+}
+
+{
+  const forecast = upgradeToV4();
+  forecast.teams[0].recent_series.series.pop();
+  forecast.teams[0].recent_series.insufficient_reason = null;
+  assert.throws(() => validateSnapshot(payloadV4(forecast)), /insufficient_reason/);
+}
+
+{
+  const forecast = upgradeToV4();
+  const recentModel = forecast.model_ensemble.models.find(
+    (model) => model.kind === "recent_event",
+  );
+  recentModel.evidence_refs.pop();
+  assert.throws(() => validateSnapshot(payloadV4(forecast)), /evidence_refs must include/);
+}
 
 {
   const forecast = upgradeToV3();
