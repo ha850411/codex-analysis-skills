@@ -187,10 +187,63 @@ function payloadV4(forecast = upgradeToV4()) {
   return { schema_version: 4, forecasts: [forecast] };
 }
 
+function upgradeToV5(forecast = upgradeToV4()) {
+  forecast.teams.forEach((forecastTeam) => {
+    forecastTeam.projected_lineup = {
+      ...forecastTeam.projected_lineup,
+      status: "projected",
+      source_kind: "latest_formal_series",
+      source: forecastTeam.last_series.source,
+      checked_at: "2026-08-13T12:00:00+08:00",
+      recheck_by: "2026-08-13T16:30:00+08:00",
+    };
+  });
+  forecast.series_distribution = {
+    outcomes: {
+      "2-0": 0.20,
+      "2-1": 0.295,
+      "1-2": 0.305,
+      "0-2": 0.20,
+    },
+    reported_mode: "1-2",
+  };
+  return forecast;
+}
+
+function payloadV5(forecast = upgradeToV5()) {
+  return { schema_version: 5, forecasts: [forecast] };
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
 assert.doesNotThrow(() => validateSnapshot(payloadV2()));
 assert.doesNotThrow(() => validateSnapshot(payloadV3()));
 assert.doesNotThrow(() => validateSnapshot(payloadV4()));
+assert.doesNotThrow(() => validateSnapshot(payloadV5()));
+
+{
+  const forecast = upgradeToV5();
+  delete forecast.teams[0].projected_lineup.status;
+  assert.throws(() => validateSnapshot(payloadV5(forecast)), /status must be confirmed or projected/);
+}
+
+{
+  const forecast = upgradeToV5();
+  forecast.teams[0].projected_lineup.status = "confirmed";
+  assert.throws(() => validateSnapshot(payloadV5(forecast)), /requires an official source/);
+}
+
+{
+  const forecast = upgradeToV5();
+  forecast.series_distribution.reported_mode = "0-2";
+  assert.throws(() => validateSnapshot(payloadV5(forecast)), /highest-probability score/);
+}
+
+{
+  const forecast = upgradeToV5();
+  forecast.series_distribution.outcomes["2-0"] = 0.205;
+  forecast.series_distribution.outcomes["0-2"] = 0.195;
+  assert.throws(() => validateSnapshot(payloadV5(forecast)), /target-team win sum/);
+}
 
 {
   const forecast = upgradeToV4();

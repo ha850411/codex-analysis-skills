@@ -30,8 +30,8 @@ function exactKeySet(actual, expected, label) {
 }
 
 function validateEvidenceCoverage(evidence, schedule) {
-  if (evidence.schema_version !== 4) {
-    fail("forecast-evidence.json must use schema_version 4 for a daily run");
+  if (evidence.schema_version !== 5) {
+    fail("forecast-evidence.json must use schema_version 5 for a daily run");
   }
   validateSnapshot(evidence);
 
@@ -74,7 +74,10 @@ function validateDecisionEligibility(evidence, decisions) {
   for (const forecast of evidence.forecasts) {
     const decision = decisionByKey.get(forecast.match_key);
     if (
-      forecast.lineup_uncertainties.length > 0 &&
+      (
+        forecast.lineup_uncertainties.length > 0 ||
+        forecast.teams.some((team) => team.projected_lineup.status === "projected")
+      ) &&
       decision.action === "bet_now"
     ) {
       fail(
@@ -85,7 +88,63 @@ function validateDecisionEligibility(evidence, decisions) {
   }
 }
 
-function validateProbabilityCoverage(probabilities, scheduleKeys, decisions) {
+function scoreOrder(format) {
+  if (format === "BO1") return ["1-0", "0-1"];
+  if (format === "BO2") return ["2-0", "1-1", "0-2"];
+  if (format === "BO3") return ["2-0", "2-1", "1-2", "0-2"];
+  if (format === "BO5") return ["3-0", "3-1", "3-2", "2-3", "1-3", "0-3"];
+  fail(`unsupported format ${format}`);
+}
+
+function markdownCells(line) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return [];
+  return trimmed
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function validateReportedModes(evidence, decisions, report) {
+  const summary = report.slice(report.indexOf("簡表總結"));
+  const summaryLines = summary.split(/\r?\n/);
+  const header = summaryLines
+    .map(markdownCells)
+    .find((cells) => cells.some((cell) => cell.includes("核心預測")));
+  if (!header) fail("最終簡表必須包含核心預測欄");
+  const corePredictionIndex = header.findIndex((cell) => cell.includes("核心預測"));
+  const decisionByKey = new Map(
+    decisions.matches.map((decision) => [decision.match_key, decision]),
+  );
+  for (const forecast of evidence.forecasts) {
+    const decision = decisionByKey.get(forecast.match_key);
+    const rows = summaryLines.filter((line) => line.includes(decision.table_cell));
+    if (rows.length !== 1) {
+      fail(`${forecast.match_key} final summary must contain exactly one decision row`);
+    }
+    const corePrediction = markdownCells(rows[0])[corePredictionIndex];
+    if (!corePrediction) {
+      fail(`${forecast.match_key} final summary is missing its core prediction cell`);
+    }
+    const score = forecast.series_distribution.reported_mode;
+    const [left, right] = score.split("-").map(Number);
+    const winner = left === right
+      ? null
+      : forecast.teams[left > right ? 0 : 1].name;
+    if (winner !== null && !corePrediction.includes(winner)) {
+      fail(`${forecast.match_key} final summary must use the canonical predicted winner ${winner}`);
+    }
+    if (
+      !corePrediction.includes(score) &&
+      !corePrediction.includes(score.replace("-", ":"))
+    ) {
+      fail(`${forecast.match_key} final summary score must match series_distribution.reported_mode`);
+    }
+  }
+}
+
+function validateProbabilityCoverage(probabilities, scheduleKeys, decisions, evidence) {
   validateProbabilities(probabilities);
   const expected = new Set(scheduleKeys);
   const checksByKey = new Map();
@@ -105,6 +164,9 @@ function validateProbabilityCoverage(probabilities, scheduleKeys, decisions) {
   const decisionByKey = new Map(
     decisions.matches.map((decision) => [decision.match_key, decision]),
   );
+  const forecastByKey = new Map(
+    evidence.forecasts.map((forecast) => [forecast.match_key, forecast]),
+  );
   for (const matchKey of expected) {
     const checks = checksByKey.get(matchKey);
     for (const requiredType of ["sum", "equal", "weighted_confidence"]) {
@@ -122,6 +184,23 @@ function validateProbabilityCoverage(probabilities, scheduleKeys, decisions) {
     if (confidenceChecks[0].value / 100 !== decisionConfidence) {
       fail(`${matchKey} model confidence must match decision-slate.json`);
     }
+
+    const forecast = forecastByKey.get(matchKey);
+    const exactScoreChecks = checks.filter((check) => check.type === "sum");
+    if (exactScoreChecks.length !== 1) {
+      fail(`${matchKey} must contain exactly one exact-score sum check`);
+    }
+    const expectedValues = scoreOrder(forecast.competition.format).map(
+      (score) => forecast.series_distribution.outcomes[score] * 100,
+    );
+    if (
+      exactScoreChecks[0].values.length !== expectedValues.length ||
+      expectedValues.some(
+        (value, index) => Math.abs(value - exactScoreChecks[0].values[index]) > 0.2,
+      )
+    ) {
+      fail(`${matchKey} exact-score check must match series_distribution outcome order`);
+    }
   }
 }
 
@@ -137,7 +216,8 @@ export function validateDailyRun({
   validateEvidenceCoverage(evidence, schedule);
   validateDecisionSlate(decisions, report, scheduleKeys);
   validateDecisionEligibility(evidence, decisions);
-  validateProbabilityCoverage(probabilities, scheduleKeys, decisions);
+  validateProbabilityCoverage(probabilities, scheduleKeys, decisions, evidence);
+  validateReportedModes(evidence, decisions, report);
   return {
     pass: true,
     match_count: scheduleKeys.length,

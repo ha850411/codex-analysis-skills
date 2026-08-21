@@ -13,6 +13,17 @@ const MODEL_KINDS = new Set([
 const POSITIONS = new Set(["Top", "Jungle", "Mid", "ADC", "Support"]);
 const FORMATS = new Set(["BO1", "BO2", "BO3", "BO5"]);
 const PATCH_STATUS = new Set(["confirmed", "scenario"]);
+const LINEUP_STATUS = new Set(["confirmed", "projected"]);
+const LINEUP_SOURCE_KINDS = new Set([
+  "official_match_lineup",
+  "official_team_announcement",
+  "latest_formal_series",
+  "independent_match_page",
+]);
+const CONFIRMED_LINEUP_SOURCE_KINDS = new Set([
+  "official_match_lineup",
+  "official_team_announcement",
+]);
 const PATCH_SOURCE_KINDS = new Set([
   "official_rulebook",
   "official_announcement",
@@ -151,7 +162,14 @@ function validatePatchContext(forecast, label, predictedAt) {
   }
 }
 
-function validateTeam(team, label, predictedAt, requireSeriesKey = false) {
+function validateTeam(
+  team,
+  label,
+  predictedAt,
+  scheduledStart,
+  requireSeriesKey = false,
+  requireLineupState = false,
+) {
   object(team, label);
   nonemptyString(team.name, `${label}.name`);
 
@@ -176,6 +194,44 @@ function validateTeam(team, label, predictedAt, requireSeriesKey = false) {
     `${label}.projected_lineup.players`,
     5,
   );
+  if (requireLineupState) {
+    if (!LINEUP_STATUS.has(projected.status)) {
+      fail(`${label}.projected_lineup.status must be confirmed or projected`);
+    }
+    const sourceKind = nonemptyString(
+      projected.source_kind,
+      `${label}.projected_lineup.source_kind`,
+    );
+    if (!LINEUP_SOURCE_KINDS.has(sourceKind)) {
+      fail(`${label}.projected_lineup.source_kind is invalid`);
+    }
+    nonemptyString(projected.source, `${label}.projected_lineup.source`);
+    const lineupCheckedAt = timestamp(
+      projected.checked_at,
+      `${label}.projected_lineup.checked_at`,
+    );
+    if (lineupCheckedAt > predictedAt) {
+      fail(`${label}.projected_lineup was checked after predicted_at`);
+    }
+    if (projected.status === "confirmed") {
+      if (!CONFIRMED_LINEUP_SOURCE_KINDS.has(sourceKind)) {
+        fail(`${label}.projected_lineup confirmed status requires an official source`);
+      }
+      if (projected.recheck_by !== null && projected.recheck_by !== undefined) {
+        fail(`${label}.projected_lineup confirmed status cannot include recheck_by`);
+      }
+    } else {
+      const recheckBy = timestamp(
+        projected.recheck_by,
+        `${label}.projected_lineup.recheck_by`,
+      );
+      if (recheckBy <= predictedAt || recheckBy >= scheduledStart) {
+        fail(
+          `${label}.projected_lineup.recheck_by must be after predicted_at and before scheduled_start`,
+        );
+      }
+    }
+  }
   if (!samePlayers(lastPlayers, projectedPlayers)) {
     const change = object(team.change_evidence, `${label}.change_evidence`);
     nonemptyString(change.source, `${label}.change_evidence.source`);
@@ -194,6 +250,78 @@ function validateTeam(team, label, predictedAt, requireSeriesKey = false) {
     if (checked > predictedAt) fail(`${label}.change_evidence was checked after predicted_at`);
   }
   return lastSeriesKey;
+}
+
+function expectedScoreKeys(format) {
+  if (format === "BO1") return ["1-0", "0-1"];
+  if (format === "BO2") return ["2-0", "1-1", "0-2"];
+  if (format === "BO3") return ["2-0", "2-1", "1-2", "0-2"];
+  if (format === "BO5") return ["3-0", "3-1", "3-2", "2-3", "1-3", "0-3"];
+  fail(`unsupported format ${format}`);
+}
+
+function validateSeriesDistribution(forecast, label) {
+  const distribution = object(
+    forecast.series_distribution,
+    `${label}.series_distribution`,
+  );
+  const outcomes = object(
+    distribution.outcomes,
+    `${label}.series_distribution.outcomes`,
+  );
+  const expectedScores = expectedScoreKeys(forecast.competition.format);
+  const actualScores = Object.keys(outcomes);
+  if (
+    actualScores.length !== expectedScores.length ||
+    expectedScores.some((score) => !Object.hasOwn(outcomes, score))
+  ) {
+    fail(
+      `${label}.series_distribution.outcomes must contain the complete ${forecast.competition.format} score set`,
+    );
+  }
+
+  let total = 0;
+  let maximum = -1;
+  for (const score of expectedScores) {
+    const outcomeProbability = probability(
+      outcomes[score],
+      `${label}.series_distribution.outcomes.${score}`,
+    );
+    total += outcomeProbability;
+    maximum = Math.max(maximum, outcomeProbability);
+  }
+  if (!close(total, 1)) {
+    fail(`${label}.series_distribution probabilities must sum to 1`);
+  }
+
+  const reportedMode = nonemptyString(
+    distribution.reported_mode,
+    `${label}.series_distribution.reported_mode`,
+  );
+  if (!expectedScores.includes(reportedMode)) {
+    fail(`${label}.series_distribution.reported_mode is not a valid score`);
+  }
+  if (!close(outcomes[reportedMode], maximum)) {
+    fail(`${label}.series_distribution.reported_mode must be a highest-probability score`);
+  }
+
+  const targetTeam = forecast.model_ensemble.target_team;
+  const targetIndex = forecast.teams.findIndex((team) => team.name === targetTeam);
+  if (targetIndex < 0) {
+    fail(`${label}.series_distribution cannot resolve model target team`);
+  }
+  let targetWinProbability = 0;
+  for (const score of expectedScores) {
+    const [left, right] = score.split("-").map(Number);
+    if ((targetIndex === 0 && left > right) || (targetIndex === 1 && right > left)) {
+      targetWinProbability += outcomes[score];
+    }
+  }
+  if (!close(targetWinProbability, forecast.model_ensemble.central_probability)) {
+    fail(
+      `${label}.series_distribution target-team win sum must equal model_ensemble.central_probability`,
+    );
+  }
 }
 
 function validateRecentSeries(team, label, predictedAt, competition) {
@@ -497,7 +625,9 @@ function validateForecast(forecast, index, schemaVersion) {
       team,
       `${label}.teams[${teamIndex}]`,
       predictedAt,
+      scheduledStart,
       schemaVersion >= 4,
+      schemaVersion >= 5,
     ),
   );
   const comparableCountermodels = validateH2h(
@@ -534,6 +664,18 @@ function validateForecast(forecast, index, schemaVersion) {
   if (schemaVersion >= 3) {
     validatePatchContext(forecast, label, predictedAt);
   }
+  if (schemaVersion >= 5) {
+    const hasProjectedLineup = forecast.teams.some(
+      (team) => team.projected_lineup.status === "projected",
+    );
+    if (hasProjectedLineup && !forecast.snapshot.includes("pre-lineup")) {
+      fail(`${label}.snapshot must be pre-lineup while any lineup is projected`);
+    }
+    if (!hasProjectedLineup && !forecast.snapshot.includes("post-lineup")) {
+      fail(`${label}.snapshot must be post-lineup when both lineups are confirmed`);
+    }
+    validateSeriesDistribution(forecast, label);
+  }
 
   const betting = object(forecast.betting, `${label}.betting`);
   if (
@@ -553,8 +695,8 @@ function validateForecast(forecast, index, schemaVersion) {
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (![1, 2, 3, 4].includes(payload.schema_version)) {
-    fail("schema_version must be 1, 2, 3, or 4");
+  if (![1, 2, 3, 4, 5].includes(payload.schema_version)) {
+    fail("schema_version must be 1, 2, 3, 4, or 5");
   }
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");

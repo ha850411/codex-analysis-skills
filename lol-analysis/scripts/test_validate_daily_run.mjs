@@ -81,7 +81,14 @@ function team(name, suffix) {
       source: "https://example.test/last-series",
       checked_at: predictedAt,
     },
-    projected_lineup: { players: [...players] },
+    projected_lineup: {
+      players: [...players],
+      status: "projected",
+      source_kind: "latest_formal_series",
+      source: "https://example.test/last-series",
+      checked_at: predictedAt,
+      recheck_by: "2026-08-17T15:30:00+08:00",
+    },
     recent_series: {
       league: "LCK",
       event: "LCK 2026 Rounds 3-4",
@@ -118,7 +125,7 @@ function team(name, suffix) {
 
 function evidence() {
   return {
-    schema_version: 4,
+    schema_version: 5,
     forecasts: [{
       match_key: matchKey,
       scheduled_start: start,
@@ -190,6 +197,15 @@ function evidence() {
         central_probability: 0.60,
         spread: 0.10,
       },
+      series_distribution: {
+        outcomes: {
+          "2-0": 0.30,
+          "2-1": 0.30,
+          "1-2": 0.25,
+          "0-2": 0.15,
+        },
+        reported_mode: "2-0",
+      },
       betting: { stake_units: 0 },
     }],
   };
@@ -256,7 +272,7 @@ function decisions() {
 }
 
 function report() {
-  return `分析正文\n\n### 簡表總結\n\n| 比賽 | 決策 |\n|---|---|\n| Alpha vs Beta | ${tableCell} |\n`;
+  return `分析正文\n\n### 簡表總結\n\n| 比賽 | 核心預測 | 決策 |\n|---|---|---|\n| Alpha vs Beta | Alpha 2-0 | ${tableCell} |\n`;
 }
 
 function validRun() {
@@ -270,6 +286,24 @@ function validRun() {
 }
 
 assert.doesNotThrow(() => validateDailyRun(validRun()));
+
+{
+  const run = validRun();
+  run.report = run.report.replace("Alpha 2-0", "Alpha 2-1");
+  assert.throws(() => validateDailyRun(run), /score must match/);
+}
+
+{
+  const run = validRun();
+  run.report = run.report.replace("Alpha 2-0", "Beta 2-0");
+  assert.throws(() => validateDailyRun(run), /canonical predicted winner/);
+}
+
+{
+  const run = validRun();
+  run.probabilities.checks[0].values = [25, 35, 25, 15];
+  assert.throws(() => validateDailyRun(run), /must match series_distribution/);
+}
 
 {
   const run = validRun();
