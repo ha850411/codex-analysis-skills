@@ -49,10 +49,11 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 2. **驗證雙方隊伍**
    - 從官方賽事頁、Leaguepedia 或 Liquipedia 核對雙方隊名。
    - 依來源優先序檢查目前陣容與可能／已確認先發。
-   - 賽季 roster 頁不等於當場先發。逐隊保存最近一個正式系列的實際五人、近 30 天簽入／升降隊公告與本場先發來源及 `checked_at`；近期已出賽的新援或替補不得被較舊的賽季名單覆蓋。
+   - 賽季 roster 頁單獨不等於當場先發，但也不得因此把所有固定陣容機械標成待確認。逐隊保存最近一個正式系列的實際五人、近 30 天簽入／升降隊公告與本場先發來源及 `checked_at`；近期已出賽的新援或替補不得被較舊的賽季名單覆蓋。
    - 預估五人與最近正式系列不同時，必須保存晚於該系列、早於預測快照的變更公告時間、來源與原因；否則停止預測，不得用舊 roster、印象或無來源輪替覆寫最近實際五人。來源的查核時間不能冒充公告時間。
-   - 若日報在正式先發公布前產生，快照必須標成 `pre-lineup` 並建立可重播的先發情境；本場公告在開賽前出現且會改變核心位置時，必須建立 `post-lineup` 新快照，不得沿用舊機率當成最終版。
-   - 每隊 `projected_lineup` 都要明示 `confirmed` 或 `projected`、來源角色、來源、查核時間；`projected` 即使只有單一主情境也必須有早於開賽的 `recheck_by`。只要過去 30 天同賽事曾由另一位同位置選手實際先發，或存在較新的官方輪替／回歸資訊，就視為可信候選並逐情境保存候選人、權重、該情境系列賽機率與證據。重查未完成時只可發布條件版；正式人選落定後必須以 `post-lineup` 新快照取代最終決策版。
+   - 名單狀態分成三類：`confirmed` 只表示當場官方名單／隊伍公告已落定；`established` 表示固定先發已核實；`projected` 才表示存在真實先發不確定性。若同一五人連續出戰同賽事最新兩個正式系列、Leaguepedia／Liquipedia／官方 roster 仍列為現役、近 30 天沒有另一位同位置選手實際先發，也沒有較新的輪替、簽入、升降隊或回歸公告，必須標成 `established`，對外寫「固定先發（已核實）」而不是「先發待確認」。賽事不足兩個系列時不得使用此降級確認。
+   - 若日報在當場官方先發公布前產生：有可信輪替候選時快照標成 `pre-lineup` 並建立可重播情境；只有 `established` 固定先發時使用 `established-lineup` 快照，不建立虛假分歧，也不把等待臨場公告列為投注硬阻擋；當場公告落定後才改為 `post-lineup`。公告若改變核心位置，必須建立新版快照與重算機率，不得沿用舊機率當成最終版。
+   - 每隊 `projected_lineup` 都要明示 `confirmed`、`established` 或 `projected`、來源角色、來源與查核時間。`established` 必須保存同五人的最新兩個 `series_key`、Leaguepedia／Liquipedia／官方 roster 交叉來源及空的輪替候選；不得只靠 roster 頁宣告固定先發。`projected` 即使只有單一主情境也必須有早於開賽的 `recheck_by`。只要過去 30 天同賽事曾由另一位同位置選手實際先發，或存在較新的官方輪替／回歸資訊，就視為可信候選並逐情境保存候選人、權重、該情境系列賽機率與證據。重查未完成時只可發布條件版；正式人選落定後必須以 `post-lineup` 新快照取代最終決策版。
    - 回答中必須列出雙方先發，讓使用者可以核對。
    - 名單依位置列出：Top / Jungle / Mid / ADC / Support。替補只在相關時列入。
 
@@ -87,6 +88,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - 提供雙方各自至少贏一局的機率，以及「雙方皆至少贏一局」的機率。
    - 以百分比提供信心度，並說明信心高/中/低的理由。
    - `daily-summary` 必須逐場獨立計算模型信心度：每場各自保存完整度、新鮮度、先發確定度、制度／樣本相關性與模型穩定性，再各自套用 LoL 非補償式上限。整份日報可另有「日報層級證據品質」，但不得用它覆蓋逐場信心度。
+   - 先發確定度不得把 `established` 當作一般猜測。`confirmed` 當場公告可給最高檔；`established` 固定先發原則上給 90–95 分，只保留臨時生病／突發替補的尾端風險；`projected` 才依候選分歧與證據強度下修。不得因缺少例行的 match-day 貼文，把固定五人一律壓到 70 分附近。
    - 逐場信心 artifact 必須保存五項分數、`raw_weighted`、`fragility_triggers` 與 `final_after_non_compensatory_cap`。`model_confidence`、卡片、簡表與 `weighted_confidence` 檢查只能引用同一個上限後最終值；原始加權值只供診斷。檢查檔須以 `applyNonCompensatoryCap` 與非空 `fragilityTriggers` 明示是否套用上限，禁止用原始加權值通過驗證後另在正文顯示較低數字。
    - 明確區分模型機率與投注賠率。
    - 產出推薦前，先依 `references/recommendation-gates.md` 檢查打滿、地圖讓分、至少贏一局與精確比分是否有足夠證據。
@@ -115,7 +117,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - `daily-summary` 必須把所有已取得且能映射的市場按調整後 EV 排序。若至少一個標的達到最低可接受價格、通過專屬證據閘門且沒有硬阻擋，至少把最高順位標成 `立即可打` 並給非零注碼；最終簡表不得與保存的 post-market 決策不一致。
    - 若全日確實沒有 `立即可打`，觸發「全日 0u 稽核」：列出已查／未映射市場、前三個最接近標準的候選、當前價、觸發價、差距與重跑條件。只有完成此稽核後才可輸出全日沒有賽前下注；不得為了湊單製造正 EV 或強迫下注。
    - `daily-summary` 在當次 artifact 目錄建立 `decision-slate.json`，並在送出前執行 `node lol-analysis/scripts/validate_decision_slate.mjs <decision-slate.json> <prediction.md> <schedule-verification.json>`；第三個參數不可省略，CLI 會先驗證 schedule schema v2，再要求投注清單與已驗證賽程完全一致。驗證失敗時先修正賽程、決策、注碼或簡表同步，不得發布。
-   - `daily-summary` 的最終封口改由 `node lol-analysis/scripts/validate_daily_run.mjs <artifact-directory>` 執行；目錄必須同時包含 `schedule-verification.json`、schema v5 `forecast-evidence.json`、每個 check 都帶 `match_key` 的 `probability-checks.json`、`decision-slate.json` 與 `prediction.md`。驗證器會要求四類 artifact 的場次集合完全相同，逐場賽程 scope／隊名／開賽時間一致，模型信心度與決策清單一致，並核對比分主分布、`reported_mode` 與置底簡表；任一隊仍為 `projected` 或有未解先發情境時不得通過 `立即可打`。缺少任一檔案或只在對話宣稱「已驗證」都不得送出、發布或建立投注清單。
+   - `daily-summary` 的最終封口改由 `node lol-analysis/scripts/validate_daily_run.mjs <artifact-directory>` 執行；目錄必須同時包含 `schedule-verification.json`、schema v5 `forecast-evidence.json`、每個 check 都帶 `match_key` 的 `probability-checks.json`、`decision-slate.json` 與 `prediction.md`。驗證器會要求四類 artifact 的場次集合完全相同，逐場賽程 scope／隊名／開賽時間一致，模型信心度與決策清單一致，並核對比分主分布、`reported_mode` 與置底簡表；任一隊仍為 `projected` 或有未解先發情境時不得通過 `立即可打`。通過 `established` 固定先發閘門者不屬於未解先發，不得再以「等先發」作為 0u 理由。缺少任一檔案或只在對話宣稱「已驗證」都不得送出、發布或建立投注清單。
    - 可行時討論可玩的市場，例如獨贏、讓分、精確比分、地圖總數、首局，或雙方各贏一局。
    - 地圖讓分、地圖大分與「至少贏一局」屬於高誤差市場，必須通過推薦閘門；未通過時即使賠率看似便宜，也標記為不碰或只看 live。
    - 敗方 +1.5、地圖大分與「敗方至少一局」不得用「價格型」當唯一理由；必須同時列出敗方兩條可執行取圖路徑與熱門方橫掃為何受限。若做不到，獨贏可小注但地圖盤不推薦。

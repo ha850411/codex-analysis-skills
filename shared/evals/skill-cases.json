@@ -86,6 +86,14 @@
       "invariants": ["pre-lineup 快照以最近正式系列的 Frog 情境為主而不是讓舊 roster 的 Rich 靜默覆蓋", "保存最近兩個正式系列實際五人與 checked_at", "Rich 只能作有來源支持且公告時間晚於最近正式系列的替補情境", "不得用查核時間冒充變更公告時間", "當場公告後建立 post-lineup 新快照", "若核心位置變更則重建機率而非只改信心度"]
     },
     {
+      "id": "lol-established-lineup-regression",
+      "skill": "lol-analysis",
+      "prompt": "Leaguepedia 現役 roster 與這支隊伍同賽事最近兩個系列的五人完全相同，近 30 天也沒有輪替或人員異動；請做今天的賽前分析。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["分類為 established 固定先發而不是 projected", "保存最新兩個同五人 series_key、roster 交叉來源與空的輪替候選", "對外寫固定先發（已核實；非臨場公告）而不是先發待確認", "使用 established-lineup 快照且不設 recheck_by", "不得單因缺少 match-day 公告阻擋投注"]
+    },
+    {
       "id": "lol-repeat-matchup-evidence-regression",
       "skill": "lol-analysis",
       "prompt": "TES 與 LGD 在 12 天前同一 Split 才打過 BO3，LGD 曾靠 Heng–Tangyuan 中野結構拿下 G1；請分析今天的再戰。",

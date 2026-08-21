@@ -361,6 +361,42 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
 }
 
 {
+  const run = validRun();
+  const forecast = run.evidence.forecasts[0];
+  forecast.snapshot = "established-lineup/pre-draft";
+  forecast.teams.forEach((forecastTeam) => {
+    forecastTeam.projected_lineup = {
+      players: [...forecastTeam.last_series.players],
+      status: "established",
+      source_kind: "stable_recent_starters",
+      source: "https://lol.fandom.com/wiki/Example_Team",
+      checked_at: predictedAt,
+      established_basis: {
+        series_keys: forecastTeam.recent_series.series
+          .slice(0, 2)
+          .map((series) => series.series_key),
+        roster_sources: [{
+          url: "https://lol.fandom.com/wiki/Example_Team",
+          kind: "leaguepedia_roster",
+          checked_at: predictedAt,
+        }],
+        rotation_candidates: [],
+      },
+    };
+  });
+  const decision = run.decisions.matches[0];
+  decision.action = "bet_now";
+  decision.current_odds = 2.1;
+  decision.adjusted_ev = 0.05;
+  decision.stake_units = 0.25;
+  decision.trigger = null;
+  decision.table_cell = "立即可打：Alpha ML @2.10；底價 2.04；0.25u";
+  run.decisions.all_zero_audit = null;
+  run.report = report().replace(tableCell, decision.table_cell);
+  assert.doesNotThrow(() => validateDailyRun(run));
+}
+
+{
   const emptyRun = fs.mkdtempSync(path.join(os.tmpdir(), "lol-daily-run-missing-"));
   const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "validate_daily_run.mjs");
   const result = spawnSync(process.execPath, [script, emptyRun], { encoding: "utf8" });

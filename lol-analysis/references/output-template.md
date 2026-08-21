@@ -12,7 +12,7 @@
 ### 1. ⚔️ 賽事概覽與核心預測
 
 - **賽事資訊**：{台灣時間} | {BO3/BO5} | 版本 {版本} | 預測快照：{pre-lineup/pre-draft/post-lineup/post-draft} | 資料狀態：{已確認/部分確認/未驗證} (as of {時間})
-- **雙方先發名單**：
+- **雙方先發名單**：逐隊標示「當場公告確認 (`confirmed`)」、「固定先發已核實、非臨場公告 (`established`)」或「存在真實輪替分歧 (`projected`)」；`established` 不得寫成待確認。
   | 位置 | Top | Jungle | Mid | ADC | Support |
   |---|---|---|---|---|---|
   | **{隊伍 A}** | {Top} | {Jungle} | {Mid} | {ADC} | {Support} |

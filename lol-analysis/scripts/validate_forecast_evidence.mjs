@@ -13,16 +13,23 @@ const MODEL_KINDS = new Set([
 const POSITIONS = new Set(["Top", "Jungle", "Mid", "ADC", "Support"]);
 const FORMATS = new Set(["BO1", "BO2", "BO3", "BO5"]);
 const PATCH_STATUS = new Set(["confirmed", "scenario"]);
-const LINEUP_STATUS = new Set(["confirmed", "projected"]);
+const LINEUP_STATUS = new Set(["confirmed", "established", "projected"]);
 const LINEUP_SOURCE_KINDS = new Set([
   "official_match_lineup",
   "official_team_announcement",
+  "stable_recent_starters",
   "latest_formal_series",
   "independent_match_page",
 ]);
 const CONFIRMED_LINEUP_SOURCE_KINDS = new Set([
   "official_match_lineup",
   "official_team_announcement",
+]);
+const ESTABLISHED_LINEUP_SOURCE_KINDS = new Set(["stable_recent_starters"]);
+const ROSTER_SOURCE_KINDS = new Set([
+  "official_roster",
+  "leaguepedia_roster",
+  "liquipedia_roster",
 ]);
 const PATCH_SOURCE_KINDS = new Set([
   "official_rulebook",
@@ -196,7 +203,7 @@ function validateTeam(
   );
   if (requireLineupState) {
     if (!LINEUP_STATUS.has(projected.status)) {
-      fail(`${label}.projected_lineup.status must be confirmed or projected`);
+      fail(`${label}.projected_lineup.status must be confirmed, established, or projected`);
     }
     const sourceKind = nonemptyString(
       projected.source_kind,
@@ -219,6 +226,81 @@ function validateTeam(
       }
       if (projected.recheck_by !== null && projected.recheck_by !== undefined) {
         fail(`${label}.projected_lineup confirmed status cannot include recheck_by`);
+      }
+    } else if (projected.status === "established") {
+      if (!ESTABLISHED_LINEUP_SOURCE_KINDS.has(sourceKind)) {
+        fail(`${label}.projected_lineup established status requires stable_recent_starters`);
+      }
+      if (projected.recheck_by !== null && projected.recheck_by !== undefined) {
+        fail(`${label}.projected_lineup established status cannot include recheck_by`);
+      }
+      const basis = object(
+        projected.established_basis,
+        `${label}.projected_lineup.established_basis`,
+      );
+      const seriesKeys = stringList(
+        basis.series_keys,
+        `${label}.projected_lineup.established_basis.series_keys`,
+      );
+      if (seriesKeys.length !== 2 || new Set(seriesKeys).size !== 2) {
+        fail(
+          `${label}.projected_lineup established status requires exactly two unique recent series keys`,
+        );
+      }
+      const recentSeries = object(team.recent_series, `${label}.recent_series`);
+      if (!Array.isArray(recentSeries.series) || recentSeries.series.length < 2) {
+        fail(`${label}.projected_lineup established status requires two recent series`);
+      }
+      const latestTwo = recentSeries.series.slice(0, 2);
+      const latestKeys = latestTwo.map((series, index) =>
+        nonemptyString(
+          object(series, `${label}.recent_series.series[${index}]`).series_key,
+          `${label}.recent_series.series[${index}].series_key`,
+        )
+      );
+      if (!samePlayers(seriesKeys, latestKeys)) {
+        fail(
+          `${label}.projected_lineup established series keys must be the latest two series`,
+        );
+      }
+      for (const [index, series] of latestTwo.entries()) {
+        const players = stringList(
+          series.players,
+          `${label}.recent_series.series[${index}].players`,
+          5,
+        );
+        if (!samePlayers(players, projectedPlayers)) {
+          fail(
+            `${label}.projected_lineup established players must match both latest series`,
+          );
+        }
+      }
+      if (!Array.isArray(basis.roster_sources) || basis.roster_sources.length === 0) {
+        fail(
+          `${label}.projected_lineup established status requires a roster cross-check source`,
+        );
+      }
+      for (const [index, rawRosterSource] of basis.roster_sources.entries()) {
+        const rosterLabel =
+          `${label}.projected_lineup.established_basis.roster_sources[${index}]`;
+        const rosterSource = object(rawRosterSource, rosterLabel);
+        nonemptyString(rosterSource.url, `${rosterLabel}.url`);
+        const rosterKind = nonemptyString(rosterSource.kind, `${rosterLabel}.kind`);
+        if (!ROSTER_SOURCE_KINDS.has(rosterKind)) {
+          fail(`${rosterLabel}.kind is invalid`);
+        }
+        const rosterCheckedAt = timestamp(rosterSource.checked_at, `${rosterLabel}.checked_at`);
+        if (rosterCheckedAt > predictedAt) {
+          fail(`${rosterLabel} was checked after predicted_at`);
+        }
+      }
+      if (!Array.isArray(basis.rotation_candidates)) {
+        fail(
+          `${label}.projected_lineup.established_basis.rotation_candidates must be an array`,
+        );
+      }
+      if (basis.rotation_candidates.length !== 0) {
+        fail(`${label}.projected_lineup established status cannot retain rotation candidates`);
       }
     } else {
       const recheckBy = timestamp(
@@ -654,6 +736,18 @@ function validateForecast(forecast, index, schemaVersion) {
   }
   if (schemaVersion >= 2) {
     validateLineupUncertainties(forecast, label, predictedAt, scheduledStart);
+    const establishedTeams = new Set(
+      forecast.teams
+        .filter((team) => team.projected_lineup.status === "established")
+        .map((team) => team.name),
+    );
+    if (
+      forecast.lineup_uncertainties.some((uncertainty) =>
+        establishedTeams.has(uncertainty.team)
+      )
+    ) {
+      fail(`${label} established lineup cannot retain a lineup uncertainty`);
+    }
     validateModelEnsemble(
       forecast,
       label,
@@ -668,10 +762,24 @@ function validateForecast(forecast, index, schemaVersion) {
     const hasProjectedLineup = forecast.teams.some(
       (team) => team.projected_lineup.status === "projected",
     );
+    const hasEstablishedLineup = forecast.teams.some(
+      (team) => team.projected_lineup.status === "established",
+    );
     if (hasProjectedLineup && !forecast.snapshot.includes("pre-lineup")) {
       fail(`${label}.snapshot must be pre-lineup while any lineup is projected`);
     }
-    if (!hasProjectedLineup && !forecast.snapshot.includes("post-lineup")) {
+    if (
+      !hasProjectedLineup &&
+      hasEstablishedLineup &&
+      !forecast.snapshot.includes("established-lineup")
+    ) {
+      fail(`${label}.snapshot must be established-lineup when a fixed lineup is established`);
+    }
+    if (
+      !hasProjectedLineup &&
+      !hasEstablishedLineup &&
+      !forecast.snapshot.includes("post-lineup")
+    ) {
       fail(`${label}.snapshot must be post-lineup when both lineups are confirmed`);
     }
     validateSeriesDistribution(forecast, label);

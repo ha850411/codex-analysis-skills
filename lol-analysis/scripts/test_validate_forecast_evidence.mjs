@@ -223,13 +223,80 @@ assert.doesNotThrow(() => validateSnapshot(payloadV5()));
 {
   const forecast = upgradeToV5();
   delete forecast.teams[0].projected_lineup.status;
-  assert.throws(() => validateSnapshot(payloadV5(forecast)), /status must be confirmed or projected/);
+  assert.throws(
+    () => validateSnapshot(payloadV5(forecast)),
+    /status must be confirmed, established, or projected/,
+  );
 }
 
 {
   const forecast = upgradeToV5();
   forecast.teams[0].projected_lineup.status = "confirmed";
   assert.throws(() => validateSnapshot(payloadV5(forecast)), /requires an official source/);
+}
+
+{
+  const forecast = upgradeToV5();
+  forecast.snapshot = "established-lineup/pre-draft";
+  forecast.teams.forEach((forecastTeam) => {
+    const recentKeys = forecastTeam.recent_series.series
+      .slice(0, 2)
+      .map((series) => series.series_key);
+    forecastTeam.projected_lineup = {
+      players: [...forecastTeam.last_series.players],
+      status: "established",
+      source_kind: "stable_recent_starters",
+      source: "https://lol.fandom.com/wiki/Example_Team",
+      checked_at: "2026-08-13T12:00:00+08:00",
+      established_basis: {
+        series_keys: recentKeys,
+        roster_sources: [{
+          url: "https://lol.fandom.com/wiki/Example_Team",
+          kind: "leaguepedia_roster",
+          checked_at: "2026-08-13T12:00:00+08:00",
+        }],
+        rotation_candidates: [],
+      },
+    };
+  });
+  assert.doesNotThrow(() => validateSnapshot(payloadV5(forecast)));
+
+  forecast.teams[0].projected_lineup.established_basis.series_keys = [
+    forecast.teams[0].recent_series.series[0].series_key,
+    "lpl-older-roster-only",
+  ];
+  assert.throws(
+    () => validateSnapshot(payloadV5(forecast)),
+    /series keys must be the latest two series/,
+  );
+}
+
+{
+  const forecast = upgradeToV5();
+  forecast.snapshot = "established-lineup/pre-draft";
+  const forecastTeam = forecast.teams[0];
+  forecastTeam.projected_lineup = {
+    players: [...forecastTeam.last_series.players],
+    status: "established",
+    source_kind: "stable_recent_starters",
+    source: "https://lol.fandom.com/wiki/Example_Team",
+    checked_at: "2026-08-13T12:00:00+08:00",
+    established_basis: {
+      series_keys: forecastTeam.recent_series.series
+        .slice(0, 2)
+        .map((series) => series.series_key),
+      roster_sources: [{
+        url: "https://lol.fandom.com/wiki/Example_Team",
+        kind: "leaguepedia_roster",
+        checked_at: "2026-08-13T12:00:00+08:00",
+      }],
+      rotation_candidates: ["CredibleSub"],
+    },
+  };
+  assert.throws(
+    () => validateSnapshot(payloadV5(forecast)),
+    /cannot retain rotation candidates/,
+  );
 }
 
 {
