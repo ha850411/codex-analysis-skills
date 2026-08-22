@@ -1,6 +1,6 @@
 # 預測證據與時點資格閘門
 
-`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、隱藏模型集成權重、比分主分布與摘要漂移，並把開賽後重建混入正式賽前績效。新快照使用 schema v5；v1–v4 只供既有歷史 artifact 重播。
+`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、候選因子滲入正式集成、比分主分布與摘要漂移，並把開賽後重建混入正式賽前績效。新快照使用 schema v6；v1–v5 只供既有歷史 artifact 重播。
 
 ## 1. 保存 evidence snapshot
 
@@ -14,8 +14,9 @@
 - 每隊另存 `recent_series`：scope 必須對應本場 league／event；保存查找時間、`search_complete=true`，以及同一賽事最新兩個系列的 `series_key`、日期、對手、比分、賽制、版本、實際五人、來源與 `checked_at`，按新到舊排序。不足兩場時列出全部並保存 `insufficient_reason`；不得用較早的亮眼系列跳過更晚一場。
 - 本場五人；`projected_lineup` 保存 `status=confirmed|established|projected`、`source_kind`、來源與 `checked_at`。`confirmed` 只接受當場官方名單／隊伍公告。`established` 必須由同一五人連續出戰同賽事最新兩個正式系列、Leaguepedia／Liquipedia／官方 roster 仍列現役，且近 30 天沒有實際輪替或較新的變更公告共同支持；另存 `established_basis.series_keys`、`roster_sources` 與空的 `rotation_candidates`，不可只靠 roster 頁。`projected` 才必須另存晚於快照、早於開賽的 `recheck_by`。與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`；不得用重新查閱舊頁面的時間冒充新公告。
 - 明列 `lineup_uncertainties`，沒有可信分歧時保存空陣列；有分歧時保存隊伍、位置、候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。權重合計必須為 1，`recheck_by` 必須早於開賽。
-- 近 30 天直接交手搜尋結果、來源與 `checked_at`。同賽事、可比陣容的交手要保存逐局勝方、選邊、BP 與可重複機制。
-- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重與證據，以及由加權公式自然得到的中央點與模型 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，另加入與 H2H artifact 輸出／權重一致的 `direct_rematch` 模型。
+- 近 30 天直接交手搜尋結果、來源與 `checked_at`。每筆 H2H 另存 `roster_comparison`：依 Top／Jungle／Mid／ADC／Support 順序保存交手五人、當前快照五人、查核來源與時間；`comparable_roster` 必須由逐位置比對重算，不接受自由文字或未驗證的布林值。同賽事且重算為可比的交手要保存逐局勝方、選邊、BP 與可重複機制。
+- 頂層保存 `factor_registry_snapshot`：來源、查核時間，以及本次所有模型引用因子的 `factor_id`、`status`、`used_for_prediction`。每個正式 `model_ensemble.models[]` 都必須列 `factor_ids`；只有 `status=active` 且 `used_for_prediction=true` 的因子可以取得正權重。
+- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重、`factor_ids` 與證據，以及由加權公式自然得到的中央點與模型 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，只有 active 因子的 `direct_rematch_countermodel.mode=production` 可以加入中央集成；candidate／retired 因子必須標 `mode=shadow`、`ensemble_weight=0`，且不得出現在正式 `models[]`。
 - 保存 `series_distribution.outcomes`：以 `teams[0]-teams[1]` 的比分方向列出該賽制全部互斥結果；`reported_mode` 必須是最高機率比分。目標隊獲勝結果之和須等於 `model_ensemble.central_probability`，並與 `probability-checks.json` 及置底簡表逐場一致。
 - `evaluation_status`與投注決策。
 
@@ -27,7 +28,9 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
-`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v5 evidence，並核對 schedule、probability checks、decision slate、比分主峰與報告的逐場集合及信心度。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。`established` 已通過固定先發證據閘門，不視為未解先發，也不得在正文或決策表寫「等先發」。
+`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v6 evidence，並核對 schedule、probability checks、decision slate、比分主峰與報告的逐場集合及信心度。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。`established` 已通過固定先發證據閘門，不視為未解先發，也不得在正文或決策表寫「等先發」。
+
+已發布快照若在開賽前因 H2H、名單、版本或其他證據修正機率，必須建立新的完整 artifact 目錄，重寫 canonical `forecast-evidence.json`、機率檢查、決策與報告，再重跑 daily validator。修正版 sidecar 或單獨的 decision slate 不得宣稱取代原 canonical 快照。
 
 ## 2. 版本溯源閘門
 
@@ -49,14 +52,14 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 1. 逐局檢查勝方、藍紅方、關鍵 BP、前期起手與收尾。
 2. 把弱方已成功的結構拆成可重複與不可重複；不把單次重擊／偷巴龍當成穩定路徑。
-3. 建立具名 `direct-rematch` 反模型，明示機率所屬隊伍，並保存輸出與預定集成權重。本閘門不預設 H2H 權重或機械調整機率。
+3. 先以 `roster_comparison` 逐位置重算陣容可比性，再建立具名 `direct-rematch` 反模型，明示機率所屬隊伍、因子、production／shadow 模式與預定集成權重。本閘門不預設 H2H 權重或機械調整機率。
 4. 找到可比 H2H 卻沒有逐局證據時，停止新預測；來源無法存取時標記缺口、觸發非補償式信心上限，且不得宣稱高完整度。
 5. `factor-registry.json` 若仍把 `direct-rematch-mechanism-persistence` 列為 `candidate`，正式模型可把 H2H 作為收縮先驗，但不得以「上次成功機制必然延續」另加權；重賽後是否仍有效只進 shadow challenger，直到 paired walk-forward 通過升版門檻。
 
 ## 5. 集成可重播閘門
 
 - 中央機率必須等於保存模型的加權和，權重合計為 1；spread 必須等於同一組模型的最大值減最小值。
-- 直接再戰模型不得只存在於 H2H 區塊或正文，卻從中央集成消失；反之也不得在集成中使用無逐局證據的 `direct_rematch`。
+- production 直接再戰模型不得只存在於 H2H 區塊或正文，卻從中央集成消失；shadow 模型則必須保持 0 權重且不得出現在中央集成。反之也不得在集成中使用無逐局證據、未通過陣容重算或引用 candidate／retired 因子的 `direct_rematch`。
 - 驗證器只證明 artifact 與計算可重播，不證明權重有樣本外增量。權重變更仍須 paired walk-forward；資料／時序與計算落盤缺失可用固定回歸案例立即修正。
 
 ## 6. 預測時點資格

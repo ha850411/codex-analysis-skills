@@ -214,11 +214,138 @@ function payloadV5(forecast = upgradeToV5()) {
   return { schema_version: 5, forecasts: [forecast] };
 }
 
+function upgradeToV6(forecast = upgradeToV5()) {
+  const factorByKind = {
+    baseline_prior: "long-term-strength-shrinkage-prior",
+    recent_event: "recent-regime-and-opponent-adjusted-performance",
+    underdog_countermodel: "draft-champion-pool-fearless-and-adjustment",
+    direct_rematch: "historical-h2h-as-shrunk-prior",
+  };
+  forecast.model_ensemble.models.forEach((model) => {
+    model.factor_ids = [factorByKind[model.kind]];
+  });
+  const h2h = forecast.recent_direct_h2h.matches[0];
+  h2h.roster_comparison = {
+    checked_at: "2026-08-13T13:00:00+08:00",
+    sources: ["https://example.test/h2h", "https://example.test/rosters"],
+    teams: forecast.teams.map((forecastTeam) => ({
+      name: forecastTeam.name,
+      h2h_players: [...forecastTeam.projected_lineup.players],
+      snapshot_players: [...forecastTeam.projected_lineup.players],
+    })),
+  };
+  h2h.direct_rematch_countermodel.factor_id = "historical-h2h-as-shrunk-prior";
+  h2h.direct_rematch_countermodel.mode = "production";
+  return forecast;
+}
+
+function factorRegistrySnapshot() {
+  return {
+    schema_version: 1,
+    source: ".automation-state/lol/history/factor-registry.json",
+    checked_at: "2026-08-13T15:00:00+08:00",
+    factors: [
+      {
+        factor_id: "long-term-strength-shrinkage-prior",
+        status: "active",
+        used_for_prediction: true,
+      },
+      {
+        factor_id: "recent-regime-and-opponent-adjusted-performance",
+        status: "active",
+        used_for_prediction: true,
+      },
+      {
+        factor_id: "draft-champion-pool-fearless-and-adjustment",
+        status: "active",
+        used_for_prediction: true,
+      },
+      {
+        factor_id: "historical-h2h-as-shrunk-prior",
+        status: "active",
+        used_for_prediction: true,
+      },
+      {
+        factor_id: "direct-rematch-mechanism-persistence",
+        status: "candidate",
+        used_for_prediction: false,
+      },
+    ],
+  };
+}
+
+function payloadV6(forecast = upgradeToV6()) {
+  return {
+    schema_version: 6,
+    factor_registry_snapshot: factorRegistrySnapshot(),
+    forecasts: [forecast],
+  };
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
 assert.doesNotThrow(() => validateSnapshot(payloadV2()));
 assert.doesNotThrow(() => validateSnapshot(payloadV3()));
 assert.doesNotThrow(() => validateSnapshot(payloadV4()));
 assert.doesNotThrow(() => validateSnapshot(payloadV5()));
+assert.doesNotThrow(() => validateSnapshot(payloadV6()));
+
+{
+  const forecast = upgradeToV6();
+  forecast.recent_direct_h2h.matches[0].roster_comparison.teams[0].h2h_players[0] =
+    "DifferentTop";
+  assert.doesNotThrow(() =>
+    validateSnapshot({ schema_version: 5, forecasts: [forecast] })
+  );
+  assert.throws(
+    () => validateSnapshot(payloadV6(forecast)),
+    /comparable_roster must equal the structured roster comparison/,
+  );
+}
+
+{
+  const forecast = upgradeToV6();
+  const directModel = forecast.model_ensemble.models.find(
+    (model) => model.kind === "direct_rematch",
+  );
+  directModel.factor_ids = ["direct-rematch-mechanism-persistence"];
+  const countermodel =
+    forecast.recent_direct_h2h.matches[0].direct_rematch_countermodel;
+  countermodel.factor_id = "direct-rematch-mechanism-persistence";
+  assert.doesNotThrow(() =>
+    validateSnapshot({ schema_version: 5, forecasts: [forecast] })
+  );
+  assert.throws(
+    () => validateSnapshot(payloadV6(forecast)),
+    /candidate factor direct-rematch-mechanism-persistence cannot affect the production ensemble/,
+  );
+}
+
+{
+  const forecast = upgradeToV6();
+  const countermodel =
+    forecast.recent_direct_h2h.matches[0].direct_rematch_countermodel;
+  countermodel.factor_id = "direct-rematch-mechanism-persistence";
+  countermodel.mode = "shadow";
+  countermodel.ensemble_weight = 0;
+  forecast.model_ensemble.models = forecast.model_ensemble.models.filter(
+    (model) => model.kind !== "direct_rematch",
+  );
+  forecast.model_ensemble.models.forEach((model) => {
+    model.weight = 1 / 3;
+  });
+  forecast.model_ensemble.central_probability = 0.56;
+  forecast.model_ensemble.spread = 0.14;
+  forecast.series_distribution = {
+    outcomes: {
+      "2-0": 0.20,
+      "2-1": 0.24,
+      "1-2": 0.32,
+      "0-2": 0.24,
+    },
+    reported_mode: "1-2",
+  };
+  assert.doesNotThrow(() => validateSnapshot(payloadV6(forecast)));
+}
 
 {
   const forecast = upgradeToV5();

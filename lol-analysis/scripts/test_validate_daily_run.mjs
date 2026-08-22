@@ -125,7 +125,29 @@ function team(name, suffix) {
 
 function evidence() {
   return {
-    schema_version: 5,
+    schema_version: 6,
+    factor_registry_snapshot: {
+      schema_version: 1,
+      source: ".automation-state/lol/history/factor-registry.json",
+      checked_at: predictedAt,
+      factors: [
+        {
+          factor_id: "long-term-strength-shrinkage-prior",
+          status: "active",
+          used_for_prediction: true,
+        },
+        {
+          factor_id: "recent-regime-and-opponent-adjusted-performance",
+          status: "active",
+          used_for_prediction: true,
+        },
+        {
+          factor_id: "draft-champion-pool-fearless-and-adjustment",
+          status: "active",
+          used_for_prediction: true,
+        },
+      ],
+    },
     forecasts: [{
       match_key: matchKey,
       scheduled_start: start,
@@ -172,6 +194,7 @@ function evidence() {
             series_probability: 0.65,
             weight: 0.3,
             evidence: "opponent-adjusted prior",
+            factor_ids: ["long-term-strength-shrinkage-prior"],
           },
           {
             name: "recent-event",
@@ -185,6 +208,7 @@ function evidence() {
               "lck-2026-08-10-B",
               "lck-2026-08-06-B",
             ],
+            factor_ids: ["recent-regime-and-opponent-adjusted-performance"],
           },
           {
             name: "underdog-countermodel",
@@ -192,6 +216,7 @@ function evidence() {
             series_probability: 0.55,
             weight: 0.3,
             evidence: "Beta repeatable paths",
+            factor_ids: ["draft-champion-pool-fearless-and-adjustment"],
           },
         ],
         central_probability: 0.60,
@@ -286,6 +311,12 @@ function validRun() {
 }
 
 assert.doesNotThrow(() => validateDailyRun(validRun()));
+
+{
+  const run = validRun();
+  run.evidence.schema_version = 5;
+  assert.throws(() => validateDailyRun(run), /must use schema_version 6/);
+}
 
 {
   const run = validRun();

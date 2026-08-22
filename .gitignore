@@ -6,4 +6,5 @@ __pycache__/
 .automation-state/
 tmp/
 .tmp/
+.runs/
 *.zip

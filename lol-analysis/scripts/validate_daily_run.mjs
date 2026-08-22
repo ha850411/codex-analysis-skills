@@ -30,8 +30,8 @@ function exactKeySet(actual, expected, label) {
 }
 
 function validateEvidenceCoverage(evidence, schedule) {
-  if (evidence.schema_version !== 5) {
-    fail("forecast-evidence.json must use schema_version 5 for a daily run");
+  if (evidence.schema_version !== 6) {
+    fail("forecast-evidence.json must use schema_version 6 for a daily run");
   }
   validateSnapshot(evidence);
 

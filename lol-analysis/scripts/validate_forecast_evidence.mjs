@@ -43,6 +43,8 @@ const OFFICIAL_PATCH_SOURCE_KINDS = new Set([
   "official_announcement",
   "official_match_page",
 ]);
+const FACTOR_STATUSES = new Set(["active", "candidate", "retired"]);
+const H2H_COUNTERMODEL_MODES = new Set(["production", "shadow"]);
 
 function fail(message) {
   throw new Error(message);
@@ -84,6 +86,16 @@ function stringList(value, label, length = null) {
 
 function samePlayers(left, right) {
   return left.every((player, index) => player === right[index]);
+}
+
+function normalizedPlayer(player) {
+  return player.trim().toLocaleLowerCase("en-US");
+}
+
+function samePlayersNormalized(left, right) {
+  return left.every(
+    (player, index) => normalizedPlayer(player) === normalizedPlayer(right[index]),
+  );
 }
 
 function probability(value, label) {
@@ -460,7 +472,51 @@ function validateRecentSeries(team, label, predictedAt, competition) {
   return seriesKeys;
 }
 
-function validateH2h(h2h, label, predictedAt, scheduledStart) {
+function validateFactorRegistrySnapshot(payload) {
+  const snapshot = object(payload.factor_registry_snapshot, "factor_registry_snapshot");
+  if (snapshot.schema_version !== 1) {
+    fail("factor_registry_snapshot.schema_version must be 1");
+  }
+  nonemptyString(snapshot.source, "factor_registry_snapshot.source");
+  const checkedAt = timestamp(
+    snapshot.checked_at,
+    "factor_registry_snapshot.checked_at",
+  );
+  if (!Array.isArray(snapshot.factors) || snapshot.factors.length === 0) {
+    fail("factor_registry_snapshot.factors must be a non-empty array");
+  }
+
+  const factors = new Map();
+  for (const [index, rawFactor] of snapshot.factors.entries()) {
+    const factorLabel = `factor_registry_snapshot.factors[${index}]`;
+    const factor = object(rawFactor, factorLabel);
+    const factorId = nonemptyString(factor.factor_id, `${factorLabel}.factor_id`);
+    if (factors.has(factorId)) fail(`${factorLabel}.factor_id must be unique`);
+    const status = nonemptyString(factor.status, `${factorLabel}.status`);
+    if (!FACTOR_STATUSES.has(status)) fail(`${factorLabel}.status is invalid`);
+    if (typeof factor.used_for_prediction !== "boolean") {
+      fail(`${factorLabel}.used_for_prediction must be boolean`);
+    }
+    if (status !== "active" && factor.used_for_prediction) {
+      fail(`${factorLabel} non-active factor cannot be used_for_prediction`);
+    }
+    factors.set(factorId, {
+      status,
+      usedForPrediction: factor.used_for_prediction,
+    });
+  }
+  return { checkedAt, factors };
+}
+
+function validateH2h(
+  h2h,
+  label,
+  predictedAt,
+  scheduledStart,
+  forecastTeams,
+  schemaVersion,
+  factorRegistry,
+) {
   object(h2h, label);
   const searchedAt = timestamp(h2h.searched_at, `${label}.searched_at`);
   if (searchedAt > predictedAt) fail(`${label} was searched after predicted_at`);
@@ -474,11 +530,60 @@ function validateH2h(h2h, label, predictedAt, scheduledStart) {
     const playedAt = timestamp(match.played_at, `${label}.matches[${index}].played_at`);
     if (playedAt >= predictedAt) fail(`${label}.matches[${index}] must predate the forecast`);
     const ageDays = (scheduledStart - playedAt) / 86_400_000;
+    let rosterComparable = match.comparable_roster === true;
+    if (schemaVersion >= 6) {
+      const comparisonLabel = `${label}.matches[${index}].roster_comparison`;
+      const comparison = object(match.roster_comparison, comparisonLabel);
+      const checkedAt = timestamp(comparison.checked_at, `${comparisonLabel}.checked_at`);
+      if (checkedAt > predictedAt) fail(`${comparisonLabel} was checked after predicted_at`);
+      stringList(comparison.sources, `${comparisonLabel}.sources`);
+      if (!Array.isArray(comparison.teams) || comparison.teams.length !== 2) {
+        fail(`${comparisonLabel}.teams must contain exactly two teams`);
+      }
+      const comparisonByTeam = new Map();
+      for (const [teamIndex, rawTeam] of comparison.teams.entries()) {
+        const teamLabel = `${comparisonLabel}.teams[${teamIndex}]`;
+        const comparisonTeam = object(rawTeam, teamLabel);
+        const name = nonemptyString(comparisonTeam.name, `${teamLabel}.name`);
+        if (comparisonByTeam.has(name)) fail(`${teamLabel}.name must be unique`);
+        comparisonByTeam.set(name, {
+          h2hPlayers: stringList(
+            comparisonTeam.h2h_players,
+            `${teamLabel}.h2h_players`,
+            5,
+          ),
+          snapshotPlayers: stringList(
+            comparisonTeam.snapshot_players,
+            `${teamLabel}.snapshot_players`,
+            5,
+          ),
+        });
+      }
+      const forecastTeamNames = new Set(forecastTeams.map((team) => team.name));
+      if (
+        comparisonByTeam.size !== forecastTeamNames.size ||
+        [...forecastTeamNames].some((name) => !comparisonByTeam.has(name))
+      ) {
+        fail(`${comparisonLabel}.teams must match the forecast teams`);
+      }
+      rosterComparable = forecastTeams.every((team) => {
+        const compared = comparisonByTeam.get(team.name);
+        if (!samePlayersNormalized(compared.snapshotPlayers, team.projected_lineup.players)) {
+          fail(`${comparisonLabel} snapshot players must match projected_lineup`);
+        }
+        return samePlayersNormalized(compared.h2hPlayers, compared.snapshotPlayers);
+      });
+      if (match.comparable_roster !== rosterComparable) {
+        fail(
+          `${label}.matches[${index}].comparable_roster must equal the structured roster comparison`,
+        );
+      }
+    }
     const comparable =
       ageDays >= 0 &&
       ageDays <= 30 &&
       match.same_event === true &&
-      match.comparable_roster === true;
+      rosterComparable;
     if (!comparable) continue;
 
     if (!Array.isArray(match.games) || match.games.length === 0) {
@@ -511,7 +616,13 @@ function validateH2h(h2h, label, predictedAt, scheduledStart) {
     );
     const probability = countermodel.series_probability;
     const weight = countermodel.ensemble_weight;
-    nonemptyString(countermodel.team, `${label}.matches[${index}].direct_rematch_countermodel.team`);
+    const countermodelTeam = nonemptyString(
+      countermodel.team,
+      `${label}.matches[${index}].direct_rematch_countermodel.team`,
+    );
+    if (!forecastTeams.some((team) => team.name === countermodelTeam)) {
+      fail(`${label}.matches[${index}] countermodel team must match a forecast team`);
+    }
     if (
       typeof probability !== "number" ||
       probability < 0 ||
@@ -522,11 +633,44 @@ function validateH2h(h2h, label, predictedAt, scheduledStart) {
     ) {
       fail(`${label}.matches[${index}] countermodel probability/weight must be 0..1`);
     }
+    let factorId = null;
+    let mode = "production";
+    if (schemaVersion >= 6) {
+      factorId = nonemptyString(
+        countermodel.factor_id,
+        `${label}.matches[${index}].direct_rematch_countermodel.factor_id`,
+      );
+      mode = nonemptyString(
+        countermodel.mode,
+        `${label}.matches[${index}].direct_rematch_countermodel.mode`,
+      );
+      if (!H2H_COUNTERMODEL_MODES.has(mode)) {
+        fail(`${label}.matches[${index}] countermodel mode is invalid`);
+      }
+      const factor = factorRegistry.factors.get(factorId);
+      if (!factor) {
+        fail(`${label}.matches[${index}] countermodel factor is missing from the registry snapshot`);
+      }
+      const productionEligible = factor.status === "active" && factor.usedForPrediction;
+      if (mode === "production" && !productionEligible) {
+        fail(
+          `${label}.matches[${index}] ${factor.status} factor ${factorId} cannot affect the production ensemble`,
+        );
+      }
+      if (mode === "production" && weight === 0) {
+        fail(`${label}.matches[${index}] production countermodel weight must be greater than 0`);
+      }
+      if (mode === "shadow" && weight !== 0) {
+        fail(`${label}.matches[${index}] shadow countermodel ensemble_weight must be 0`);
+      }
+    }
     comparableCountermodels.push({
       matchIndex: index,
       team: countermodel.team,
       seriesProbability: probability,
       ensembleWeight: weight,
+      factorId,
+      mode,
     });
   }
   return comparableCountermodels;
@@ -591,6 +735,8 @@ function validateModelEnsemble(
   label,
   comparableCountermodels,
   requiredRecentEvidenceRefs = [],
+  schemaVersion = 1,
+  factorRegistry = null,
 ) {
   const ensemble = object(forecast.model_ensemble, `${label}.model_ensemble`);
   const teamNames = forecast.teams.map((team) => team.name);
@@ -624,6 +770,20 @@ function validateModelEnsemble(
     const weight = probability(model.weight, `${modelLabel}.weight`);
     if (weight === 0) fail(`${modelLabel}.weight must be greater than 0`);
     nonemptyString(model.evidence, `${modelLabel}.evidence`);
+    if (schemaVersion >= 6) {
+      const factorIds = stringList(model.factor_ids, `${modelLabel}.factor_ids`);
+      for (const factorId of factorIds) {
+        const factor = factorRegistry.factors.get(factorId);
+        if (!factor) {
+          fail(`${modelLabel}.factor_ids contains an unregistered factor: ${factorId}`);
+        }
+        if (factor.status !== "active" || !factor.usedForPrediction) {
+          fail(
+            `${modelLabel} ${factor.status} factor ${factorId} cannot affect the production ensemble`,
+          );
+        }
+      }
+    }
     if (requiredRecentEvidenceRefs.length > 0 && kind === "recent_event") {
       const evidenceRefs = stringList(model.evidence_refs, `${modelLabel}.evidence_refs`);
       for (const requiredRef of requiredRecentEvidenceRefs) {
@@ -665,6 +825,14 @@ function validateModelEnsemble(
         model.kind === "direct_rematch" &&
         model.source_match_index === countermodel.matchIndex,
     );
+    if (schemaVersion >= 6 && countermodel.mode === "shadow") {
+      if (match) {
+        fail(
+          `${label}.shadow direct-rematch factor ${countermodel.factorId} cannot appear in the production ensemble`,
+        );
+      }
+      continue;
+    }
     if (!match) {
       fail(`${label}.model_ensemble is missing direct_rematch model for H2H index ${countermodel.matchIndex}`);
     }
@@ -674,10 +842,16 @@ function validateModelEnsemble(
     ) {
       fail(`${label}.direct_rematch model must match the H2H countermodel output and weight`);
     }
+    if (
+      schemaVersion >= 6 &&
+      !match.factor_ids.includes(countermodel.factorId)
+    ) {
+      fail(`${label}.direct_rematch model must reference its H2H factor_id`);
+    }
   }
 }
 
-function validateForecast(forecast, index, schemaVersion) {
+function validateForecast(forecast, index, schemaVersion, factorRegistry = null) {
   const label = `forecasts[${index}]`;
   object(forecast, label);
   nonemptyString(forecast.match_key, `${label}.match_key`);
@@ -698,6 +872,9 @@ function validateForecast(forecast, index, schemaVersion) {
   if (forecast.evaluation_status !== expectedStatus) {
     fail(`${label}.evaluation_status must be ${expectedStatus}`);
   }
+  if (schemaVersion >= 6 && factorRegistry.checkedAt > predictedAt) {
+    fail(`${label} factor registry snapshot was checked after predicted_at`);
+  }
 
   if (!Array.isArray(forecast.teams) || forecast.teams.length !== 2) {
     fail(`${label}.teams must contain exactly two teams`);
@@ -717,6 +894,9 @@ function validateForecast(forecast, index, schemaVersion) {
     `${label}.recent_direct_h2h`,
     predictedAt,
     scheduledStart,
+    forecast.teams,
+    schemaVersion,
+    factorRegistry,
   );
   let requiredRecentEvidenceRefs = [];
   if (schemaVersion >= 4) {
@@ -753,6 +933,8 @@ function validateForecast(forecast, index, schemaVersion) {
       label,
       comparableCountermodels,
       requiredRecentEvidenceRefs,
+      schemaVersion,
+      factorRegistry,
     );
   }
   if (schemaVersion >= 3) {
@@ -803,15 +985,18 @@ function validateForecast(forecast, index, schemaVersion) {
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (![1, 2, 3, 4, 5].includes(payload.schema_version)) {
-    fail("schema_version must be 1, 2, 3, 4, or 5");
+  if (![1, 2, 3, 4, 5, 6].includes(payload.schema_version)) {
+    fail("schema_version must be 1, 2, 3, 4, 5, or 6");
   }
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");
   }
+  const factorRegistry = payload.schema_version >= 6
+    ? validateFactorRegistrySnapshot(payload)
+    : null;
   const seen = new Set();
   payload.forecasts.forEach((forecast, index) => {
-    validateForecast(forecast, index, payload.schema_version);
+    validateForecast(forecast, index, payload.schema_version, factorRegistry);
     if (seen.has(forecast.match_key)) fail(`duplicate match_key: ${forecast.match_key}`);
     seen.add(forecast.match_key);
   });
