@@ -9,7 +9,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 預設時區：台灣時間 UTC+8。使用者提到「今天」「明天」「等一下」等相對日期時，一律以台灣時間解讀。
 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
 產生任何新機率時再讀 `../shared/prediction-methodology.md`，依其規則鎖定快照、收縮小樣本、建立主分布並計算信心度。
-產生 `full` 或 `daily-summary` 新預測時讀 `references/forecast-evidence-gates.md`；在機率鎖定前先以 schema v6 保存逐聯賽／逐階段版本溯源、名單溯源、雙方同賽事最新系列、先發情境、近期直接交手、因子登錄快照、具名模型集成、完整系列賽比分主分布與預測時點資格 artifact，並通過其確定性驗證。
+產生 `full` 或 `daily-summary` 新預測時讀 `references/forecast-evidence-gates.md`；在機率鎖定前先以 schema v7 保存逐聯賽／逐階段版本溯源、名單溯源、雙方同賽事最新系列、先發情境、近期直接交手、因子登錄快照、具名模型集成、逐局條件機率樹、完整系列賽比分主分布與預測時點資格 artifact，並通過其確定性驗證。
 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
 
 ## 不可妥協的資料來源規則
@@ -65,12 +65,12 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - 重點放在比賽內容：BP 邏輯、對線期、打野路線、物件佈置、邊線管理、團戰執行、巴龍/小龍控制、視野紀律、前期滾雪球穩定性、被翻盤風險，以及局間調整能力。
    - 將「贏下比賽」與「穩定控制比賽」分開評分。靠大逆轉、極端團戰、偷巴龍或對手失誤獲勝，只能證明韌性，不能直接當成下一場的穩定性加分。
    - 同一賽事、同一陣容與版本已累積至少兩個系列賽時，這批內容不得被單一舊 H2H 或品牌排名蓋過。若近期內容與 GPR、整季排名或舊 H2H 衝突，必須做顯式權重仲裁並說明採信哪一邊。
-   - 每場 schema v6 evidence 必須在逐隊 `recent_series` 列出同一賽事最新兩個系列（不足則列全部）的 `series_key`、日期、對手、比分、版本、實際五人、來源與查核時間；`recent_event.evidence_refs` 必須引用雙方最近正式系列及這批資料。不得略過較晚敗局只保留較早勝局；只寫「公開資料不足」而未保存逐隊查找結果，也不得用跨 Split 強度先驗直接取代這批證據。
+   - 每場 schema v7 evidence 必須在逐隊 `recent_series` 列出同一賽事最新兩個系列（不足則列全部）的 `series_key`、日期、對手、比分、版本、實際五人、來源與查核時間；`recent_event.evidence_refs` 必須引用雙方最近正式系列及這批資料。不得略過較晚敗局只保留較早勝局；只寫「公開資料不足」而未保存逐隊查找結果，也不得用跨 Split 強度先驗直接取代這批證據。
    - 同版本 H2H 若賽制不同，例如 BO5 外推 BO3，只能作為收縮先驗；其有效權重不得高於可比較賽制證據的一半。短系列的 G1、選邊與單局高變異必須另外建模。
 
 4. **版本與 Meta 影響**
    - 確認比賽版本。
-   - 版本必須逐聯賽／逐階段保存來源與 `checked_at`，不可把前一週、前一 Split 或另一賽區的版本沿用成跨賽區日報共用值。每場 schema v6 evidence 的 `patch_context` 必須與該場 `competition` 的 league／event／stage 完全相同；`confirmed` 必須有官方規章、公告或官方比賽頁，只有同週第三方賽後頁時不得宣告確認。若官方規章、同週正式賽事頁與可信賽事資料出現新舊版本衝突，先停止版本型加減分並消解衝突；無法消解時建立權重合計為 1 的版本情境，不得把推定版本寫成已確認。
+   - 版本必須逐聯賽／逐階段保存來源與 `checked_at`，不可把前一週、前一 Split 或另一賽區的版本沿用成跨賽區日報共用值。每場 schema v7 evidence 的 `patch_context` 必須與該場 `competition` 的 league／event／stage 完全相同；`confirmed` 必須有官方規章、公告或官方比賽頁，只有同週第三方賽後頁時不得宣告確認。若官方規章、同週正式賽事頁與可信賽事資料出現新舊版本衝突，先停止版本型加減分並消解衝突；無法消解時建立權重合計為 1 的版本情境，不得把推定版本寫成已確認。
    - 說明版本對哪些英雄池、線路、隊伍風格與 ban/pick 有利或不利。
    - 相關時補充紅藍方選邊影響。
 
@@ -99,8 +99,8 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - 先以可能選邊、版本 BP、Fearless Draft 與局間調整情境建立逐局勝率，再形成精確比分主分布；勝率、各自至少一局、雙方皆至少一局、橫掃、讓分與總局數都從同一分布推導，不得分別手填。
    - GPR、整季強度與隊伍品牌只可建立收縮先驗，不得直接成為熱門方優勢。至少另建「同賽事近期內容優先」與「弱方取勝」兩個反事實模型；三者對系列賽勝率的最大差距達 8 個百分點時，輸出敏感區間、降低模型穩定性，且不得使用「明顯優勢」「穩勝」等語言。
    - 反模型與敏感度不得只保存最小值／最大值。逐場保存各模型名稱、輸出機率、預先決定的集成權重與中央點計算式；敏感區間只是穩定性診斷，不能事後挑選區間端點作為最終勝率。若中央點落在區間端點，必須由已保存的權重計算自然導出並說明原因。
-   - 新預測的 evidence artifact 必須讓驗證器重算中央點：至少包含基準先驗、同賽事近期內容與弱方取勝三個模型；同賽事模型必須引用 schema v6 的逐隊近期 `series_key`。頂層必須保存 `factor_registry_snapshot`，正式集成每個模型列出 `factor_ids`；只有 `active` 且 `used_for_prediction=true` 的因子能取得正權重。有可比直接再戰時，active 因子的 production 反模型輸出與權重必須同時出現在 H2H 與中央集成；candidate／retired 因子只能以 `mode=shadow`、`ensemble_weight=0` 保存，不得進入正式模型。若 `direct-rematch-mechanism-persistence` 仍是 candidate，「前次勝法可重複」只進 shadow challenger。
-   - schema v6 的 `series_distribution` 必須列出該賽制全部精確比分、合計為 1，且目標隊勝方結果之和等於中央勝率；`reported_mode` 必須是最高機率比分。卡片、正文與置底簡表只能引用同一個 `reported_mode`，不得人工改寫另一個主推比分。
+   - 新預測的 evidence artifact 必須讓驗證器重算中央點：至少包含基準先驗、同賽事近期內容與弱方取勝三個模型；每個模型以 `probability_team` 明示 `series_probability` 所屬隊伍，中央集成先換算到 `target_team` 再加權，禁止靠模型名稱或讀者自行判斷機率方向。同賽事模型必須引用 schema v7 的逐隊近期 `series_key`。頂層必須保存 `factor_registry_snapshot`，正式集成每個模型列出 `factor_ids`；只有 `active` 且 `used_for_prediction=true` 的因子能取得正權重。有可比直接再戰時，active 因子的 production 反模型輸出與權重必須同時出現在 H2H 與中央集成；candidate／retired 因子只能以 `mode=shadow`、`ensemble_weight=0` 保存，不得進入正式模型。若 `direct-rematch-mechanism-persistence` 仍是 candidate，「前次勝法可重複」只進 shadow challenger。
+   - schema v7 必須保存 `series_generation.method=conditional_game_tree`、固定以 `teams[0]` 為 `probability_team`，並列出每個未終結 W/L 路徑的下一局勝率與證據。驗證器必須從該樹重算 `series_distribution`；不得先手填精確比分，再用無法重播的敘事聲稱已考慮選邊、Fearless Draft 或局間調整。`series_distribution` 仍須列出該賽制全部精確比分、合計為 1，且目標隊勝方結果之和等於中央勝率；`reported_mode` 必須是最高機率比分。卡片、正文與置底簡表只能引用同一個 `reported_mode`，不得人工改寫另一個主推比分。
    - 弱方若已在同一賽事展示兩套不同且可重複的取圖結構，必須把它們建成獨立分支，不得合併成單一低機率爆冷情境。Fearless Draft 以系列為單位重置；前一場已成功使用的組合，下一個系列仍是可用且高相關的賽前證據。
    - 國際賽 BO3 中，熱門方先贏 G1 不代表其調整優勢已被驗證；必須獨立估計弱方的 G2 修正與 G3 收尾能力。若弱方兩條取圖路徑都能延伸到決勝局，重新檢查弱方 ML／2–1 是否被壓得過低。
    - 只要系列賽勝率給任一方 60% 以上，或主結論使用「明顯優勢」，即使沒有盤口或投注建議，也必須讀 `references/recommendation-gates.md` 並完成其中的熱門／爆冷反模型閘門。
@@ -117,7 +117,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - `daily-summary` 必須把所有已取得且能映射的市場按調整後 EV 排序。若至少一個標的達到最低可接受價格、通過專屬證據閘門且沒有硬阻擋，至少把最高順位標成 `立即可打` 並給非零注碼；最終簡表不得與保存的 post-market 決策不一致。
    - 若全日確實沒有 `立即可打`，觸發「全日 0u 稽核」：列出已查／未映射市場、前三個最接近標準的候選、當前價、觸發價、差距與重跑條件。只有完成此稽核後才可輸出全日沒有賽前下注；不得為了湊單製造正 EV 或強迫下注。
    - `daily-summary` 在當次 artifact 目錄建立 `decision-slate.json`，並在送出前執行 `node lol-analysis/scripts/validate_decision_slate.mjs <decision-slate.json> <prediction.md> <schedule-verification.json>`；第三個參數不可省略，CLI 會先驗證 schedule schema v2，再要求投注清單與已驗證賽程完全一致。驗證失敗時先修正賽程、決策、注碼或簡表同步，不得發布。
-   - `daily-summary` 的最終封口改由 `node lol-analysis/scripts/validate_daily_run.mjs <artifact-directory>` 執行；目錄必須同時包含 `schedule-verification.json`、schema v6 `forecast-evidence.json`、每個 check 都帶 `match_key` 的 `probability-checks.json`、`decision-slate.json` 與 `prediction.md`。驗證器會要求四類 artifact 的場次集合完全相同，逐場賽程 scope／隊名／開賽時間一致，模型信心度與決策清單一致，並核對比分主分布、`reported_mode`、因子資格與置底簡表；任一隊仍為 `projected` 或有未解先發情境時不得通過 `立即可打`。通過 `established` 固定先發閘門者不屬於未解先發，不得再以「等先發」作為 0u 理由。缺少任一檔案或只在對話宣稱「已驗證」都不得送出、發布或建立投注清單。任何開賽前修正都必須建立新的完整 canonical artifact 目錄並重跑本驗證；sidecar 修正檔不得單獨取代原快照。
+   - `daily-summary` 的最終封口改由 `node lol-analysis/scripts/validate_daily_run.mjs <artifact-directory>` 執行；目錄必須同時包含 `schedule-verification.json`、schema v7 `forecast-evidence.json`、每個 check 都帶 `match_key` 的 `probability-checks.json`、`decision-slate.json` 與 `prediction.md`。驗證器會要求四類 artifact 的場次集合完全相同，逐場賽程 scope／隊名／開賽時間一致，模型信心度與決策清單一致，並核對模型機率隊伍座標、逐局條件機率樹、比分主分布、`reported_mode`、因子資格與置底簡表；任一隊仍為 `projected` 或有未解先發情境時不得通過 `立即可打`。通過 `established` 固定先發閘門者不屬於未解先發，不得再以「等先發」作為 0u 理由。缺少任一檔案或只在對話宣稱「已驗證」都不得送出、發布或建立投注清單。任何開賽前修正都必須建立新的完整 canonical artifact 目錄並重跑本驗證；sidecar 修正檔不得單獨取代原快照。
    - 可行時討論可玩的市場，例如獨贏、讓分、精確比分、地圖總數、首局，或雙方各贏一局。
    - 地圖讓分、地圖大分與「至少贏一局」屬於高誤差市場，必須通過推薦閘門；未通過時即使賠率看似便宜，也標記為不碰或只看 live。
    - 敗方 +1.5、地圖大分與「敗方至少一局」不得用「價格型」當唯一理由；必須同時列出敗方兩條可執行取圖路徑與熱門方橫掃為何受限。若做不到，獨贏可小注但地圖盤不推薦。
@@ -166,6 +166,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
    - 如果出現「勝方錯 + 精確比分相差至少 2 局」的大偏差，先判斷是流程錯誤或合理變異；只有找到可重複的資料、版本、BP、權重或分布錯誤時才建立 challenger，不能因單場結果機械扣信心或搬動機率。
    - 大偏差後重新檢查分布是否過窄與是否漏掉對手 3-1/3-2 或 2-1 路徑；調整幅度須由重建後的證據支持，不為了「補尾端」任意搬動機率。
    - 同一天若兩場以上預測都朝熱門方失準，先標記為「共同先驗偏誤警報」；檢查 GPR／品牌、舊 H2H、短賽制、同版本賽事趨勢與 VOD 缺口是否造成相關錯誤。樣本仍不足時不得直接宣稱系統性偏差。
+   - 檢討 schema v6 或更舊的預測時，若精確比分分布沒有保存可重播的 `series_generation`，標記為「分布稽核缺口」；不得從賽後比分反推當時的逐局權重。新 challenger 必須用 schema v7 的條件式逐局樹重建並由驗證器聚合。
    - 賽後同時回看主模型與 agy 紅隊：若紅隊只修正格式、算術或來源，卻沒有挑戰熱門方先驗、弱方取勝路徑與機率權重，視為領域審查未完成。
    - 參考 `references/postmortem-calibration.md` 執行完整檢討。
    - 若檢討確認版本或近期正式先發在原快照前已可取得、但預測仍沿用舊值，歸類為資料 bug；若資訊在原快照後、開賽前出現而 `recheck_by` 未執行，歸類為重查時序 bug。兩者都要修正收集／封口閘門，加入一個舊流程失敗、新流程通過的固定稽核案例；不得只用下修信心度處理。

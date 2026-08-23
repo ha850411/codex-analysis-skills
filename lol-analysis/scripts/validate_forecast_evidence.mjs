@@ -354,6 +354,112 @@ function expectedScoreKeys(format) {
   fail(`unsupported format ${format}`);
 }
 
+function winsNeeded(format) {
+  if (format === "BO1") return 1;
+  if (format === "BO3") return 2;
+  if (format === "BO5") return 3;
+  return null;
+}
+
+function expectedGameTreePaths(format) {
+  const paths = [];
+  const requiredWins = winsNeeded(format);
+
+  function visit(path, team1Wins, team2Wins) {
+    const fixedLengthComplete = format === "BO2" && path.length === 2;
+    const clinched = requiredWins !== null && (
+      team1Wins === requiredWins || team2Wins === requiredWins
+    );
+    if (fixedLengthComplete || clinched) return;
+    paths.push(path);
+    visit(`${path}W`, team1Wins + 1, team2Wins);
+    visit(`${path}L`, team1Wins, team2Wins + 1);
+  }
+
+  visit("", 0, 0);
+  return paths;
+}
+
+function distributionFromGameTree(format, nodeProbabilities) {
+  const outcomes = Object.fromEntries(expectedScoreKeys(format).map((score) => [score, 0]));
+  const requiredWins = winsNeeded(format);
+
+  function visit(path, team1Wins, team2Wins, pathProbability) {
+    const fixedLengthComplete = format === "BO2" && path.length === 2;
+    const clinched = requiredWins !== null && (
+      team1Wins === requiredWins || team2Wins === requiredWins
+    );
+    if (fixedLengthComplete || clinched) {
+      outcomes[`${team1Wins}-${team2Wins}`] += pathProbability;
+      return;
+    }
+    const gameWinProbability = nodeProbabilities.get(path);
+    visit(`${path}W`, team1Wins + 1, team2Wins, pathProbability * gameWinProbability);
+    visit(`${path}L`, team1Wins, team2Wins + 1, pathProbability * (1 - gameWinProbability));
+  }
+
+  visit("", 0, 0, 1);
+  return outcomes;
+}
+
+function validateSeriesGeneration(forecast, label) {
+  const generation = object(
+    forecast.series_generation,
+    `${label}.series_generation`,
+  );
+  if (generation.method !== "conditional_game_tree") {
+    fail(`${label}.series_generation.method must be conditional_game_tree`);
+  }
+  if (generation.probability_team !== forecast.teams[0].name) {
+    fail(`${label}.series_generation.probability_team must equal teams[0]`);
+  }
+  if (!Array.isArray(generation.nodes)) {
+    fail(`${label}.series_generation.nodes must be an array`);
+  }
+
+  const expectedPaths = expectedGameTreePaths(forecast.competition.format);
+  const expectedPathSet = new Set(expectedPaths);
+  const nodeProbabilities = new Map();
+  for (const [index, rawNode] of generation.nodes.entries()) {
+    const nodeLabel = `${label}.series_generation.nodes[${index}]`;
+    const node = object(rawNode, nodeLabel);
+    const encodedPath = nonemptyString(node.path, `${nodeLabel}.path`);
+    const path = encodedPath === "ROOT" ? "" : encodedPath;
+    if (!expectedPathSet.has(path)) {
+      fail(`${nodeLabel}.path is not a valid non-terminal series path`);
+    }
+    if (nodeProbabilities.has(path)) fail(`${nodeLabel}.path is duplicated`);
+    nodeProbabilities.set(
+      path,
+      probability(
+        node.team1_game_win_probability,
+        `${nodeLabel}.team1_game_win_probability`,
+      ),
+    );
+    nonemptyString(node.evidence, `${nodeLabel}.evidence`);
+  }
+  if (
+    nodeProbabilities.size !== expectedPaths.length ||
+    expectedPaths.some((path) => !nodeProbabilities.has(path))
+  ) {
+    fail(
+      `${label}.series_generation.nodes must contain every non-terminal series path exactly once`,
+    );
+  }
+
+  const generatedOutcomes = distributionFromGameTree(
+    forecast.competition.format,
+    nodeProbabilities,
+  );
+  for (const score of expectedScoreKeys(forecast.competition.format)) {
+    if (!close(generatedOutcomes[score], forecast.series_distribution.outcomes[score])) {
+      fail(
+        `${label}.series_distribution.${score} must equal the conditional game-tree result`,
+      );
+    }
+  }
+}
+
 function validateSeriesDistribution(forecast, label) {
   const distribution = object(
     forecast.series_distribution,
@@ -763,10 +869,23 @@ function validateModelEnsemble(
     const kind = nonemptyString(model.kind, `${modelLabel}.kind`);
     if (!MODEL_KINDS.has(kind)) fail(`${modelLabel}.kind is invalid`);
     seenKinds.add(kind);
-    const modelProbability = probability(
+    const rawModelProbability = probability(
       model.series_probability,
       `${modelLabel}.series_probability`,
     );
+    let modelProbability = rawModelProbability;
+    if (schemaVersion >= 7) {
+      const probabilityTeam = nonemptyString(
+        model.probability_team,
+        `${modelLabel}.probability_team`,
+      );
+      if (!teamNames.includes(probabilityTeam)) {
+        fail(`${modelLabel}.probability_team must match a forecast team`);
+      }
+      modelProbability = probabilityTeam === targetTeam
+        ? rawModelProbability
+        : 1 - rawModelProbability;
+    }
     const weight = probability(model.weight, `${modelLabel}.weight`);
     if (weight === 0) fail(`${modelLabel}.weight must be greater than 0`);
     nonemptyString(model.evidence, `${modelLabel}.evidence`);
@@ -836,10 +955,11 @@ function validateModelEnsemble(
     if (!match) {
       fail(`${label}.model_ensemble is missing direct_rematch model for H2H index ${countermodel.matchIndex}`);
     }
-    if (
-      !close(match.series_probability, expectedProbability) ||
-      !close(match.weight, countermodel.ensembleWeight)
-    ) {
+    const directProbabilityMatches = schemaVersion >= 7
+      ? match.probability_team === countermodel.team &&
+        close(match.series_probability, countermodel.seriesProbability)
+      : close(match.series_probability, expectedProbability);
+    if (!directProbabilityMatches || !close(match.weight, countermodel.ensembleWeight)) {
       fail(`${label}.direct_rematch model must match the H2H countermodel output and weight`);
     }
     if (
@@ -966,6 +1086,9 @@ function validateForecast(forecast, index, schemaVersion, factorRegistry = null)
     }
     validateSeriesDistribution(forecast, label);
   }
+  if (schemaVersion >= 7) {
+    validateSeriesGeneration(forecast, label);
+  }
 
   const betting = object(forecast.betting, `${label}.betting`);
   if (
@@ -985,8 +1108,8 @@ function validateForecast(forecast, index, schemaVersion, factorRegistry = null)
 
 export function validateSnapshot(payload) {
   object(payload, "root");
-  if (![1, 2, 3, 4, 5, 6].includes(payload.schema_version)) {
-    fail("schema_version must be 1, 2, 3, 4, 5, or 6");
+  if (![1, 2, 3, 4, 5, 6, 7].includes(payload.schema_version)) {
+    fail("schema_version must be 1, 2, 3, 4, 5, 6, or 7");
   }
   if (!Array.isArray(payload.forecasts) || payload.forecasts.length === 0) {
     fail("forecasts must be a non-empty array");

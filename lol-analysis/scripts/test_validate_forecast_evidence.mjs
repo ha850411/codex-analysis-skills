@@ -282,12 +282,150 @@ function payloadV6(forecast = upgradeToV6()) {
   };
 }
 
+function upgradeToV7(forecast = upgradeToV6()) {
+  forecast.model_ensemble.models.forEach((model) => {
+    model.probability_team = forecast.model_ensemble.target_team;
+  });
+  forecast.series_generation = {
+    method: "conditional_game_tree",
+    probability_team: forecast.teams[0].name,
+    nodes: [
+      {
+        path: "ROOT",
+        team1_game_win_probability: 0.5,
+        evidence: "balanced opening-side scenario",
+      },
+      {
+        path: "W",
+        team1_game_win_probability: 0.4,
+        evidence: "team-one win followed by opponent side and draft response",
+      },
+      {
+        path: "L",
+        team1_game_win_probability: 0.6,
+        evidence: "team-one loss followed by its side and draft response",
+      },
+      {
+        path: "WL",
+        team1_game_win_probability: 0.49166666666666664,
+        evidence: "decider after team one wins then loses",
+      },
+      {
+        path: "LW",
+        team1_game_win_probability: 0.49166666666666664,
+        evidence: "decider after team one loses then wins",
+      },
+    ],
+  };
+  return forecast;
+}
+
+function payloadV7(forecast = upgradeToV7()) {
+  return {
+    schema_version: 7,
+    factor_registry_snapshot: factorRegistrySnapshot(),
+    forecasts: [forecast],
+  };
+}
+
+function constantGameTree(format, team1GameWinProbability) {
+  const requiredWins = format === "BO3" ? 2 : 3;
+  const nodes = [];
+  function visit(path, team1Wins, team2Wins) {
+    if (team1Wins === requiredWins || team2Wins === requiredWins) return;
+    nodes.push({
+      path: path || "ROOT",
+      team1_game_win_probability: team1GameWinProbability,
+      evidence: "fixed pre-match game-level scenario for format coverage",
+    });
+    visit(`${path}W`, team1Wins + 1, team2Wins);
+    visit(`${path}L`, team1Wins, team2Wins + 1);
+  }
+  visit("", 0, 0);
+  return nodes;
+}
+
 assert.doesNotThrow(() => validateSnapshot(payload()));
 assert.doesNotThrow(() => validateSnapshot(payloadV2()));
 assert.doesNotThrow(() => validateSnapshot(payloadV3()));
 assert.doesNotThrow(() => validateSnapshot(payloadV4()));
 assert.doesNotThrow(() => validateSnapshot(payloadV5()));
 assert.doesNotThrow(() => validateSnapshot(payloadV6()));
+assert.doesNotThrow(() => validateSnapshot(payloadV7()));
+
+{
+  const forecast = upgradeToV6();
+  assert.doesNotThrow(() => validateSnapshot(payloadV6(forecast)));
+  assert.throws(
+    () => validateSnapshot({
+      schema_version: 7,
+      factor_registry_snapshot: factorRegistrySnapshot(),
+      forecasts: [forecast],
+    }),
+    /probability_team/,
+  );
+}
+
+{
+  const forecast = upgradeToV7();
+  const underdog = forecast.model_ensemble.models.find(
+    (model) => model.kind === "underdog_countermodel",
+  );
+  underdog.probability_team = forecast.teams[0].name;
+  underdog.series_probability = 0.52;
+  assert.doesNotThrow(() => validateSnapshot(payloadV7(forecast)));
+}
+
+{
+  const forecast = upgradeToV7();
+  delete forecast.series_generation;
+  assert.throws(() => validateSnapshot(payloadV7(forecast)), /series_generation/);
+}
+
+{
+  const forecast = upgradeToV7();
+  forecast.series_generation.nodes.find((node) => node.path === "W")
+    .team1_game_win_probability = 0.45;
+  assert.throws(
+    () => validateSnapshot(payloadV7(forecast)),
+    /conditional game-tree result/,
+  );
+}
+
+{
+  const forecast = upgradeToV7();
+  const team1SeriesProbability = 0.68256;
+  forecast.competition.format = "BO5";
+  forecast.model_ensemble.target_team = forecast.teams[0].name;
+  forecast.model_ensemble.models.forEach((model) => {
+    model.probability_team = forecast.teams[0].name;
+    model.series_probability = team1SeriesProbability;
+  });
+  const directModel = forecast.model_ensemble.models.find(
+    (model) => model.kind === "direct_rematch",
+  );
+  const directCountermodel = forecast.recent_direct_h2h.matches[0]
+    .direct_rematch_countermodel;
+  directCountermodel.team = forecast.teams[1].name;
+  directCountermodel.series_probability = 1 - team1SeriesProbability;
+  directModel.probability_team = forecast.teams[1].name;
+  directModel.series_probability = 1 - team1SeriesProbability;
+  forecast.model_ensemble.central_probability = team1SeriesProbability;
+  forecast.model_ensemble.spread = 0;
+  forecast.series_generation.nodes = constantGameTree("BO5", 0.6);
+  forecast.series_distribution = {
+    outcomes: {
+      "3-0": 0.216,
+      "3-1": 0.2592,
+      "3-2": 0.20736,
+      "2-3": 0.13824,
+      "1-3": 0.1152,
+      "0-3": 0.064,
+    },
+    reported_mode: "3-1",
+  };
+  assert.doesNotThrow(() => validateSnapshot(payloadV7(forecast)));
+}
 
 {
   const forecast = upgradeToV6();

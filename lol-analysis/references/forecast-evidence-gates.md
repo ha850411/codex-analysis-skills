@@ -1,6 +1,6 @@
 # 預測證據與時點資格閘門
 
-`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、候選因子滲入正式集成、比分主分布與摘要漂移，並把開賽後重建混入正式賽前績效。新快照使用 schema v6；v1–v5 只供既有歷史 artifact 重播。
+`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、候選因子滲入正式集成、模型機率方向不明、比分主分布無法由逐局條件重算、摘要漂移，以及把開賽後重建混入正式賽前績效。新快照使用 schema v7；v1–v6 只供既有歷史 artifact 重播。
 
 ## 1. 保存 evidence snapshot
 
@@ -16,8 +16,9 @@
 - 明列 `lineup_uncertainties`，沒有可信分歧時保存空陣列；有分歧時保存隊伍、位置、候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。權重合計必須為 1，`recheck_by` 必須早於開賽。
 - 近 30 天直接交手搜尋結果、來源與 `checked_at`。每筆 H2H 另存 `roster_comparison`：依 Top／Jungle／Mid／ADC／Support 順序保存交手五人、當前快照五人、查核來源與時間；`comparable_roster` 必須由逐位置比對重算，不接受自由文字或未驗證的布林值。同賽事且重算為可比的交手要保存逐局勝方、選邊、BP 與可重複機制。
 - 頂層保存 `factor_registry_snapshot`：來源、查核時間，以及本次所有模型引用因子的 `factor_id`、`status`、`used_for_prediction`。每個正式 `model_ensemble.models[]` 都必須列 `factor_ids`；只有 `status=active` 且 `used_for_prediction=true` 的因子可以取得正權重。
-- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重、`factor_ids` 與證據，以及由加權公式自然得到的中央點與模型 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，只有 active 因子的 `direct_rematch_countermodel.mode=production` 可以加入中央集成；candidate／retired 因子必須標 `mode=shadow`、`ensemble_weight=0`，且不得出現在正式 `models[]`。
-- 保存 `series_distribution.outcomes`：以 `teams[0]-teams[1]` 的比分方向列出該賽制全部互斥結果；`reported_mode` 必須是最高機率比分。目標隊獲勝結果之和須等於 `model_ensemble.central_probability`，並與 `probability-checks.json` 及置底簡表逐場一致。
+- 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重、`factor_ids` 與證據，以及由加權公式自然得到的中央點與模型 spread。每個模型必須以 `probability_team` 指明 `series_probability` 的隊伍座標；驗證器換算到 `target_team` 後才重算中央點與 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，只有 active 因子的 `direct_rematch_countermodel.mode=production` 可以加入中央集成；candidate／retired 因子必須標 `mode=shadow`、`ensemble_weight=0`，且不得出現在正式 `models[]`。
+- 保存 `series_generation`：固定 `method=conditional_game_tree`、`probability_team=teams[0]`；以 `ROOT` 表示 G1，之後用 W/L 路徑表示 `teams[0]` 的逐局勝負歷史。每個尚未終結的路徑都要保存下一局 `team1_game_win_probability` 與賽前證據，讓驗證器依序展開 BO1／BO2／BO3／BO5 的全部終局路徑。
+- 保存 `series_distribution.outcomes`：以 `teams[0]-teams[1]` 的比分方向列出該賽制全部互斥結果；每個結果必須等於 `series_generation` 條件樹聚合值，`reported_mode` 必須是最高機率比分。目標隊獲勝結果之和須等於 `model_ensemble.central_probability`，並與 `probability-checks.json` 及置底簡表逐場一致。
 - `evaluation_status`與投注決策。
 
 執行：
@@ -28,7 +29,7 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
-`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v6 evidence，並核對 schedule、probability checks、decision slate、比分主峰與報告的逐場集合及信心度。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。`established` 已通過固定先發證據閘門，不視為未解先發，也不得在正文或決策表寫「等先發」。
+`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v7 evidence，並核對 schedule、probability checks、decision slate、模型座標、逐局條件樹、比分主峰與報告的逐場集合及信心度。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。`established` 已通過固定先發證據閘門，不視為未解先發，也不得在正文或決策表寫「等先發」。
 
 已發布快照若在開賽前因 H2H、名單、版本或其他證據修正機率，必須建立新的完整 artifact 目錄，重寫 canonical `forecast-evidence.json`、機率檢查、決策與報告，再重跑 daily validator。修正版 sidecar 或單獨的 decision slate 不得宣稱取代原 canonical 快照。
 

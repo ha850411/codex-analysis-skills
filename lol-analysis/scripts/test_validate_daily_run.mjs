@@ -125,7 +125,7 @@ function team(name, suffix) {
 
 function evidence() {
   return {
-    schema_version: 6,
+    schema_version: 7,
     factor_registry_snapshot: {
       schema_version: 1,
       source: ".automation-state/lol/history/factor-registry.json",
@@ -191,6 +191,7 @@ function evidence() {
           {
             name: "strength-prior",
             kind: "baseline_prior",
+            probability_team: "Alpha",
             series_probability: 0.65,
             weight: 0.3,
             evidence: "opponent-adjusted prior",
@@ -199,6 +200,7 @@ function evidence() {
           {
             name: "recent-event",
             kind: "recent_event",
+            probability_team: "Alpha",
             series_probability: 0.60,
             weight: 0.4,
             evidence: "same-event recent form",
@@ -213,6 +215,7 @@ function evidence() {
           {
             name: "underdog-countermodel",
             kind: "underdog_countermodel",
+            probability_team: "Alpha",
             series_probability: 0.55,
             weight: 0.3,
             evidence: "Beta repeatable paths",
@@ -230,6 +233,37 @@ function evidence() {
           "0-2": 0.15,
         },
         reported_mode: "2-0",
+      },
+      series_generation: {
+        method: "conditional_game_tree",
+        probability_team: "Alpha",
+        nodes: [
+          {
+            path: "ROOT",
+            team1_game_win_probability: 0.5,
+            evidence: "balanced opening-side scenario",
+          },
+          {
+            path: "W",
+            team1_game_win_probability: 0.6,
+            evidence: "Alpha response after a game-one win",
+          },
+          {
+            path: "L",
+            team1_game_win_probability: 0.7,
+            evidence: "Alpha response after a game-one loss",
+          },
+          {
+            path: "WL",
+            team1_game_win_probability: 0.5454545454545454,
+            evidence: "decider after Alpha wins then loses",
+          },
+          {
+            path: "LW",
+            team1_game_win_probability: 0.5454545454545454,
+            evidence: "decider after Alpha loses then wins",
+          },
+        ],
       },
       betting: { stake_units: 0 },
     }],
@@ -314,8 +348,8 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
 
 {
   const run = validRun();
-  run.evidence.schema_version = 5;
-  assert.throws(() => validateDailyRun(run), /must use schema_version 6/);
+  run.evidence.schema_version = 6;
+  assert.throws(() => validateDailyRun(run), /must use schema_version 7/);
 }
 
 {
