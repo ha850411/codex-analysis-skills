@@ -24,17 +24,37 @@ EV_adj = 市場賠率 × p_bet - 1
 ```
 
 - `p_point` 是市場資訊進入前已鎖定的中央點；`spread` 只能使用預先保存的模型與情境，不得看完價格後補造悲觀模型。
-- 沒有可重現的多模型差距時，`haircut` 使用 3pp，並標記缺口。關鍵先發的最差合理情境若會讓 `EV_adj` 翻負，改為 `等先發`，公告後建立新快照重算。
+- 沒有可重現的多模型差距時，`haircut` 使用 3pp，並標記缺口。只有已在 evidence 保存非空 `lineup_uncertainties`，且關鍵先發的最差合理情境會讓 `EV_adj` 翻負時，才改為 `等先發`，公告後建立新快照重算；`established` 固定先發不可套用本條。
 - 2% 是最低調整後 EV 門檻，不是獲利承諾。不得在上述折價之外再以模糊的「風險偏高」做第二次隱藏折價；市場專屬證據不足則明列硬阻擋。
 - 模型信心度與投注機率不同。信心度只設定注碼上限：60% 以下只列條件；60–69% 上限 0.25u；70–79% 上限 0.5u；80–89% 上限 1u；90% 以上上限 1.5u。只有 post-lineup／post-draft、價格與結算皆新鮮且 `EV_adj ≥ 15%` 時才可到 2u。
 - 通過市場專屬閘門且沒有硬阻擋時，依 `EV_adj` 給基礎注碼：2–4.9% = 0.25u；5–9.9% = 0.5u；10–14.9% = 0.75u；15% 以上 = 1u，再套用信心度上限。`EV_adj < 2%` 不下注。
 
 硬阻擋只限：已開賽後重建、模型信心度低於 60%、結算／選項映射不明、價格已失效或暫停、關鍵先發的合理情境會使調整後 EV 翻負，或本文件要求的該市場專屬取圖／一致性閘門未通過。首局選邊未定、VOD 不完整、樣本少或模型分歧本身是折價與限注因素，不得自動封鎖所有市場。
 
+### A.1 賽制別必要市場與同源機率
+
+投注候選不得只建立 ML。每場先完成下列最低查核；「必查」表示要嘗試取價並留下 `priced`、`unavailable`、`unmapped` 或 `failed` artifact，不表示沒有正 EV 也必須下注。
+
+| 賽制 | 必查市場 |
+|---|---|
+| BO3 | 系列賽 ML、系列賽地圖讓分絕對值 1.5、總局數 O/U 2.5 |
+| BO5 | 系列賽 ML、系列賽地圖讓分絕對值 1.5 與 2.5、總局數 O/U 3.5 與 O/U 4.5 |
+
+- 供應商每一個已開的 Spread／Totals row 都要評估雙邊價格；例如 `hdp=-1.5` 同時代表事件第一隊 `-1.5` 與第二隊 `+1.5`。若同時另開反向或其他盤線，也全部加入候選。
+- ML、Spread 與 Totals 一起按 `EV_adj` 排序；先通過各自證據閘門，再選合格者中最高值。不得先選 ML 再把其他玩法降成附註，也不得為產出非 ML 推薦而放寬門檻。
+- 精確比分、首局與雙方各取一局屬額外候選；它們不能取代上表的最低覆蓋。
+
+所有市場點估計都由同一份 `series_distribution.outcomes` 逐結果加總。一般公式為：ML 取該隊獲勝結果；隊伍讓分以 `該隊局數 - 對手局數 + handicap > 0` 判定；Over／Under 以兩隊局數和相對盤線判定。半局盤沒有 push。常用等價式：
+
+- BO3：第一隊 `-1.5 = P(2-0)`、`+1.5 = 1-P(0-2)`；`Over 2.5 = P(2-1)+P(1-2)`，`Under 2.5 = P(2-0)+P(0-2)`。
+- BO5：第一隊 `-1.5 = P(3-0)+P(3-1)`、`+1.5 = 1-P(0-3)-P(1-3)`、`-2.5 = P(3-0)`、`+2.5 = 1-P(0-3)`；`Over 3.5` 是全部非橫掃結果，`Over 4.5 = P(3-2)+P(2-3)`，Under 為各自補集。第二隊以比分方向對調。
+
+`daily-summary` 必須在 schema v2 `decision-slate.json` 保存逐場 `market_checks` 與每個已定價選項的 `market_evaluations`。`market_checks.status=priced` 時至少有雙邊兩筆 evaluation；缺盤時 count 為 0 並保留成功／失敗 artifact。`model_probability` 在 artifact 保留足以讓重算誤差不超過 0.002 的精度，對外百分比才可再四捨五入。最終 `matches[].market_evaluation_id` 必須連回實際比較過的選項；只取得或只計算 ML 的 BO3／BO5 日報不得通過驗證。
+
 每場最後使用一個決策狀態：
 
 - `立即可打`：當前價達最低價，證據閘門通過且無硬阻擋；注碼必須大於 0u。
-- `等價／等先發`：方向成立但價格未達、價格缺失，或關鍵先發尚待確認；列當前價、最低價及尚差百分比，或列公告後重跑條件。
+- `等價／等資訊`：方向成立但價格未達、價格缺失，或存在會改變下注資格的真正未解資訊；列當前價、最低價及尚差百分比，或列資訊落定後的重跑條件。只有具名先發情境未解時才可顯示 `等先發`；固定先發已核實時不得把例行 match-day 公告列為條件。
 - `只看 live`：賽前衍生市場證據不足但存在可觀察的 BP／選邊／前期觸發；明列觸發後必須重算機率，不得把模糊的「看臨場」當建議。
 - `完全避開`：結算不清、模型與市場都沒有方向，或風險無法由價格補償；說明不可投注原因。
 
@@ -58,31 +78,71 @@ EV_adj = 市場賠率 × p_bet - 1
 5. 同時列出：各筆投入、待配置額、可能淨利、合計最大損失，以及在獨立性近似下全部落敗的機率。這是風險揭露，不得寫成勝率保證。
 6. 使用者改變每日預算或配置偏好時，以當次請求為準；不要把特定金額永久寫成通用規則。
 
-`daily-summary` 的 `decision-slate.json` 使用下列欄位；機率與 EV 使用 0..1，賠率使用十進位。`ranking` 要涵蓋每場一次；`table_cell` 必須逐字出現在置底簡表。缺價或未建模的數值欄位明確填 `null`，不可省略。全日注碼皆為 0 時，`all_zero_audit` 不得為 null。
+`daily-summary` 的 schema v2 `decision-slate.json` 使用下列欄位；機率與 EV 使用 0..1，賠率使用十進位。`ranking` 要涵蓋每場一次；`table_cell` 必須逐字出現在置底簡表。缺價或未建模的最終決策數值欄位明確填 `null`，不可省略。全日注碼皆為 0 時，`all_zero_audit` 不得為 null。以下範例示範 ML 與 Totals 缺盤時，仍可由已評估的 BO3 `+1.5` 成為最終推薦：
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-08-14T13:30:00+08:00",
   "market_coverage": {
     "status": "partial",
-    "checked_market_types": ["ML"],
-    "unavailable_or_unmapped_market_types": ["1st Map ML"]
+    "checked_market_types": ["ML", "Spread", "Totals"],
+    "unavailable_or_unmapped_market_types": ["bo3:123456 ML", "bo3:123456 Totals 2.5"],
+    "market_checks": [
+      {"match_key": "bo3:123456", "format": "BO3", "market_family": "series_ml", "line": null, "status": "unavailable", "evaluated_selection_count": 0, "artifact_path": "odds-bo3-123456.json"},
+      {"match_key": "bo3:123456", "format": "BO3", "market_family": "series_spread", "line": 1.5, "status": "priced", "evaluated_selection_count": 2, "artifact_path": "odds-bo3-123456.json"},
+      {"match_key": "bo3:123456", "format": "BO3", "market_family": "series_total_maps", "line": 2.5, "status": "unavailable", "evaluated_selection_count": 0, "artifact_path": "odds-bo3-123456.json"}
+    ]
   },
+  "market_evaluations": [
+    {
+      "evaluation_id": "bo3:123456:we-plus-1.5",
+      "match_key": "bo3:123456",
+      "selection": "WE +1.5",
+      "market_family": "series_spread",
+      "selection_side": "team1",
+      "line": 1.5,
+      "model_probability": 0.72,
+      "betting_probability": 0.69,
+      "current_odds": 1.55,
+      "minimum_acceptable_odds": 1.48,
+      "adjusted_ev": 0.0695,
+      "market_gate": "pass",
+      "hard_blockers": [],
+      "source_artifact": "odds-bo3-123456.json"
+    },
+    {
+      "evaluation_id": "bo3:123456:tes-minus-1.5",
+      "match_key": "bo3:123456",
+      "selection": "TES -1.5",
+      "market_family": "series_spread",
+      "selection_side": "team2",
+      "line": -1.5,
+      "model_probability": 0.28,
+      "betting_probability": 0.25,
+      "current_odds": 3.00,
+      "minimum_acceptable_odds": 4.08,
+      "adjusted_ev": -0.25,
+      "market_gate": "pass",
+      "hard_blockers": [],
+      "source_artifact": "odds-bo3-123456.json"
+    }
+  ],
   "matches": [{
     "match_key": "bo3:123456",
     "action": "bet_now",
-    "selection": "WE ML",
-    "current_odds": 3.00,
-    "betting_probability": 0.37,
-    "minimum_acceptable_odds": 2.76,
-    "adjusted_ev": 0.11,
+    "selection": "WE +1.5",
+    "market_evaluation_id": "bo3:123456:we-plus-1.5",
+    "current_odds": 1.55,
+    "betting_probability": 0.69,
+    "minimum_acceptable_odds": 1.48,
+    "adjusted_ev": 0.0695,
     "model_confidence": 0.70,
     "stake_units": 0.50,
     "hard_blockers": [],
     "trigger": null,
-    "reason": "調整後 EV 通過且無硬阻擋",
-    "table_cell": "立即可打：WE ML @3.00；底價 2.76；0.5u"
+    "reason": "跨市場比較後為最高合格 EV，且取圖閘門通過",
+    "table_cell": "立即可打：WE +1.5 @1.55；底價 1.48；0.5u"
   }],
   "ranking": [{"rank": 1, "match_key": "bo3:123456", "rationale": "最高調整後 EV"}],
   "all_zero_audit": null

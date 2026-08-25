@@ -10,6 +10,8 @@
   node shared/markets/collect_odds_api.mjs --sport esports \
      --event "LNG Esports - Ninjas in Pyjamas" \
      --home-outcome lng_ml --away-outcome nip_ml \
+     --home-prefix lng --away-prefix nip \
+     --market ML --market Spread --market Totals \
      --output odds-snapshot.json \
      --error-output odds-snapshot.error.json
    ```
@@ -37,7 +39,9 @@
    node shared/markets/merge_odds_api_snapshots.mjs event-1.json event-2.json --output odds-snapshot.json
    ```
 
-`attach-market` 不重跑主預測、agy 或最終裁決；它只重建市場盲 input 與市場比較。收集器目前將 `ML` 映射為 pipeline `market_data`（二路或足球三路）；其他 API 可見玩法會列入快照覆蓋資訊，但在建立相應機率 outcome key 前不得納入 EV，也不得將這種部分覆蓋宣稱為完整盤口分析。
+`attach-market` 不重跑主預測、agy 或最終裁決；它只重建市場盲 input 與市場比較。收集器會把 `ML` 映射為 pipeline `market_data`（二路或足球三路）；電競系列賽另可映射 `Spread` 與 `Totals`。Spread 以 API `hdp` 代表事件第一隊盤線、第二隊使用相反號；Totals 同時接受 API 的 `hdp` 或 `max` 盤線欄位。重複使用 `--market` 時，只要至少一個指定市場有價就保存成功快照，缺少者列在 `coverage.requested_but_unavailable`。未安全映射的其他 API 玩法只列入覆蓋資訊，不得納入 EV，也不得把部分覆蓋宣稱為完整盤口分析。
+
+LoL 決策的最低要求不是「至少抓到 ML」，而是 BO3 查 ML、絕對值 1.5 讓分與 O/U 2.5；BO5 查 ML、絕對值 1.5／2.5 讓分與 O/U 3.5／4.5。收集快照保存市場家族，日報的 `market_checks` 再逐線確認 priced／unavailable／unmapped／failed，所有已定價雙邊選項都要進 EV 比較。
 
 `.env` 需有 `ODDS_API_KEY`；`.env.example` 只保留空白範本。不要將金鑰傳為 CLI 參數、寫進測資或放進 Git。Odds-API.io 同時回傳指定 bookmaker 的深連結、來源擷取時間與原始回應雜湊，供事後稽核。
 

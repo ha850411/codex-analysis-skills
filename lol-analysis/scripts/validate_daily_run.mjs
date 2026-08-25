@@ -20,6 +20,22 @@ function fail(message) {
   throw new Error(message);
 }
 
+function displayAbbreviation(team, label) {
+  if (typeof team.abbreviation !== "string" || team.abbreviation.trim() === "") {
+    fail(`${label}.abbreviation is required for daily-summary display`);
+  }
+  const abbreviation = team.abbreviation.trim();
+  if (!/^[A-Z0-9]{2,8}$/.test(abbreviation)) {
+    fail(`${label}.abbreviation must be a 2-8 character uppercase alphanumeric code`);
+  }
+  return abbreviation;
+}
+
+function includesDisplayToken(text, token) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^A-Za-z0-9])${escaped}($|[^A-Za-z0-9])`).test(text);
+}
+
 function exactKeySet(actual, expected, label) {
   if (
     actual.size !== expected.size ||
@@ -27,6 +43,17 @@ function exactKeySet(actual, expected, label) {
   ) {
     fail(`${label} match keys must exactly equal the verified schedule`);
   }
+}
+
+function usesLineupWaitLanguage(value) {
+  if (typeof value !== "string") return false;
+  return [
+    /等(?:待)?(?:雙方)?(?:正式)?先發/,
+    /(?:須|需|待|尚待).{0,12}(?:雙方)?(?:正式)?先發/,
+    /(?:正式)?先發(?:尚未|未|待)(?:確認|公布)/,
+    /(?:正式)?先發一致/,
+    /確認先發.{0,4}(?:後|才|且)/,
+  ].some((pattern) => pattern.test(value));
 }
 
 function validateEvidenceCoverage(evidence, schedule) {
@@ -64,6 +91,12 @@ function validateEvidenceCoverage(evidence, schedule) {
     ) {
       fail(`${forecast.match_key} teams must match the verified schedule`);
     }
+    const abbreviations = forecast.teams.map((team, teamIndex) =>
+      displayAbbreviation(team, `${forecast.match_key}.teams[${teamIndex}]`)
+    );
+    if (new Set(abbreviations).size !== abbreviations.length) {
+      fail(`${forecast.match_key} team abbreviations must be unique`);
+    }
   }
 }
 
@@ -73,17 +106,49 @@ function validateDecisionEligibility(evidence, decisions) {
   );
   for (const forecast of evidence.forecasts) {
     const decision = decisionByKey.get(forecast.match_key);
-    if (
-      (
-        forecast.lineup_uncertainties.length > 0 ||
-        forecast.teams.some((team) => team.projected_lineup.status === "projected")
-      ) &&
-      decision.action === "bet_now"
-    ) {
+    const statusByTeam = new Map(
+      forecast.teams.map((team) => [team.name, team.projected_lineup.status]),
+    );
+    const uncertaintyTeams = new Set(
+      forecast.lineup_uncertainties.map((uncertainty) => uncertainty.team),
+    );
+    const projectedTeams = forecast.teams
+      .filter((team) => team.projected_lineup.status === "projected")
+      .map((team) => team.name);
+    for (const team of projectedTeams) {
+      if (!uncertaintyTeams.has(team)) {
+        fail(
+          `${forecast.match_key} projected lineup for ${team} requires a concrete ` +
+          "lineup_uncertainty with named candidates",
+        );
+      }
+    }
+    for (const team of uncertaintyTeams) {
+      if (statusByTeam.get(team) !== "projected") {
+        fail(`${forecast.match_key} lineup uncertainty for ${team} requires projected status`);
+      }
+    }
+
+    const hasUnresolvedLineup = projectedTeams.length > 0 || uncertaintyTeams.size > 0;
+    if (hasUnresolvedLineup && decision.action === "bet_now") {
       fail(
         `${forecast.match_key} unresolved lineup uncertainty cannot use bet_now; ` +
         "publish a conditional decision or create a post-lineup snapshot",
       );
+    }
+    if (!hasUnresolvedLineup) {
+      const decisionLanguage = [
+        decision.reason,
+        decision.trigger,
+        decision.table_cell,
+        ...(Array.isArray(decision.hard_blockers) ? decision.hard_blockers : []),
+      ];
+      if (decisionLanguage.some(usesLineupWaitLanguage)) {
+        fail(
+          `${forecast.match_key} established or confirmed lineups cannot be used as ` +
+          "a wait-for-lineup condition",
+        );
+      }
     }
   }
 }
@@ -104,6 +169,26 @@ function markdownCells(line) {
     .replace(/\|$/, "")
     .split("|")
     .map((cell) => cell.trim());
+}
+
+function validateReportTeamDisplay(evidence, report) {
+  for (const forecast of evidence.forecasts) {
+    for (const [teamIndex, team] of forecast.teams.entries()) {
+      const abbreviation = displayAbbreviation(
+        team,
+        `${forecast.match_key}.teams[${teamIndex}]`,
+      );
+      if (!includesDisplayToken(report, abbreviation)) {
+        fail(`${forecast.match_key} report must display team abbreviation ${abbreviation}`);
+      }
+      if (team.name !== abbreviation && report.includes(team.name)) {
+        fail(
+          `${forecast.match_key} report must use team abbreviations only; ` +
+          `found full team name ${team.name}`,
+        );
+      }
+    }
+  }
 }
 
 function validateReportedModes(evidence, decisions, report) {
@@ -131,9 +216,18 @@ function validateReportedModes(evidence, decisions, report) {
     const [left, right] = score.split("-").map(Number);
     const winner = left === right
       ? null
-      : forecast.teams[left > right ? 0 : 1].name;
-    if (winner !== null && !corePrediction.includes(winner)) {
-      fail(`${forecast.match_key} final summary must use the canonical predicted winner ${winner}`);
+      : forecast.teams[left > right ? 0 : 1];
+    const winnerAbbreviation = winner === null
+      ? null
+      : displayAbbreviation(winner, `${forecast.match_key}.predicted_winner`);
+    if (
+      winnerAbbreviation !== null &&
+      !includesDisplayToken(corePrediction, winnerAbbreviation)
+    ) {
+      fail(
+        `${forecast.match_key} final summary must use the predicted winner ` +
+        `abbreviation ${winnerAbbreviation}`,
+      );
     }
     if (
       !corePrediction.includes(score) &&
@@ -204,6 +298,56 @@ function validateProbabilityCoverage(probabilities, scheduleKeys, decisions, evi
   }
 }
 
+function scoreParts(score, label) {
+  const match = /^(\d+)-(\d+)$/.exec(score);
+  if (!match) fail(`${label} is not a valid exact-series score`);
+  return [Number(match[1]), Number(match[2])];
+}
+
+function derivedMarketProbability(forecast, evaluation) {
+  let total = 0;
+  for (const [score, probability] of Object.entries(forecast.series_distribution.outcomes)) {
+    const [team1Games, team2Games] = scoreParts(score, `${forecast.match_key}.${score}`);
+    let wins = false;
+    if (evaluation.market_family === "series_ml") {
+      wins = evaluation.selection_side === "team1"
+        ? team1Games > team2Games
+        : team2Games > team1Games;
+    } else if (evaluation.market_family === "series_spread") {
+      const margin = evaluation.selection_side === "team1"
+        ? team1Games - team2Games
+        : team2Games - team1Games;
+      wins = margin + evaluation.line > 0;
+    } else if (evaluation.market_family === "series_total_maps") {
+      const maps = team1Games + team2Games;
+      wins = evaluation.selection_side === "over"
+        ? maps > evaluation.line
+        : maps < evaluation.line;
+    }
+    if (wins) total += probability;
+  }
+  return total;
+}
+
+function validateMarketEvaluationProbabilities(evidence, decisions) {
+  const forecastByKey = new Map(
+    evidence.forecasts.map((forecast) => [forecast.match_key, forecast]),
+  );
+  for (const [index, evaluation] of decisions.market_evaluations.entries()) {
+    const forecast = forecastByKey.get(evaluation.match_key);
+    if (!forecast) {
+      fail(`market_evaluations[${index}] references an unknown forecast`);
+    }
+    const expected = derivedMarketProbability(forecast, evaluation);
+    if (Math.abs(evaluation.model_probability - expected) > 0.002) {
+      fail(
+        `${evaluation.evaluation_id} model_probability must be derived from ` +
+        `series_distribution (expected ${expected.toFixed(4)})`,
+      );
+    }
+  }
+}
+
 export function validateDailyRun({
   schedule: rawSchedule,
   evidence,
@@ -214,9 +358,11 @@ export function validateDailyRun({
   const schedule = validateSchedule(rawSchedule);
   const scheduleKeys = schedule.matches.map((match) => match.match_key);
   validateEvidenceCoverage(evidence, schedule);
-  validateDecisionSlate(decisions, report, scheduleKeys);
+  validateDecisionSlate(decisions, report, schedule.matches);
   validateDecisionEligibility(evidence, decisions);
   validateProbabilityCoverage(probabilities, scheduleKeys, decisions, evidence);
+  validateMarketEvaluationProbabilities(evidence, decisions);
+  validateReportTeamDisplay(evidence, report);
   validateReportedModes(evidence, decisions, report);
   return {
     pass: true,

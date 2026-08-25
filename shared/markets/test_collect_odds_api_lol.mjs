@@ -17,7 +17,62 @@ assert.equal(result.source.sport, 'esports');
 assert.equal(result.event.provider_event_id, 4242135875);
 assert.deepEqual(result.market_data.map((item) => item.decimal_odds), [1.95, 1.75]);
 assert.deepEqual(result.market_data.map((item) => item.outcome_key), ['lng_ml', 'nip_ml']);
-assert.deepEqual(result.coverage.available_market_types, ['ML', '1st Map Moneyline']);
+assert.deepEqual(result.coverage.available_market_types, ['ML', 'Spread', 'Totals', '1st Map Moneyline']);
+
+const multiMarketOutput = join(target, 'multi-market-snapshot.json');
+execFileSync('node', [
+  join(root, 'collect_odds_api.mjs'),
+  '--sport', 'esports',
+  '--response', join(root, 'testdata/odds-api-lng-nip.json'),
+  '--bookmaker', 'Stake',
+  '--home-outcome', 'lng_ml',
+  '--away-outcome', 'nip_ml',
+  '--market', 'ML',
+  '--market', 'Spread',
+  '--market', 'Totals',
+  '--output', multiMarketOutput,
+], { stdio: 'inherit', env: noNetworkEnv });
+const multiMarket = JSON.parse(await readFile(multiMarketOutput, 'utf8'));
+assert.equal(multiMarket.schema_version, '1.2');
+assert.equal(multiMarket.coverage.status, 'full');
+assert.deepEqual(multiMarket.coverage.requested_market_types, ['ML', 'Spread', 'Totals']);
+assert.deepEqual(multiMarket.coverage.captured_market_types, ['ML', 'Spread', 'Totals']);
+assert.deepEqual(multiMarket.market_data.map((item) => item.outcome_key), [
+  'lng_ml',
+  'nip_ml',
+  'lng_spread_minus_1_5',
+  'nip_spread_plus_1_5',
+  'lng_spread_plus_1_5',
+  'nip_spread_minus_1_5',
+  'total_maps_over_2_5',
+  'total_maps_under_2_5',
+]);
+assert.deepEqual(
+  multiMarket.market_data.filter((item) => item.market_family === 'series_spread').map((item) => item.line),
+  [-1.5, 1.5, 1.5, -1.5],
+);
+assert.deepEqual(
+  multiMarket.market_data.filter((item) => item.market_family === 'series_total_maps').map((item) => item.line),
+  [2.5, 2.5],
+);
+
+const partialMarketOutput = join(target, 'partial-market-snapshot.json');
+execFileSync('node', [
+  join(root, 'collect_odds_api.mjs'),
+  '--sport', 'esports',
+  '--response', join(root, 'testdata/odds-api-drx-ns.json'),
+  '--bookmaker', 'Stake',
+  '--home-outcome', 'drx_ml',
+  '--away-outcome', 'ns_ml',
+  '--market', 'ML',
+  '--market', 'Spread',
+  '--market', 'Totals',
+  '--output', partialMarketOutput,
+], { stdio: 'inherit', env: noNetworkEnv });
+const partialMarket = JSON.parse(await readFile(partialMarketOutput, 'utf8'));
+assert.equal(partialMarket.coverage.status, 'partial');
+assert.deepEqual(partialMarket.coverage.requested_but_unavailable, ['Spread', 'Totals']);
+assert.deepEqual(partialMarket.market_data.map((item) => item.outcome_key), ['drx_ml', 'ns_ml']);
 const threeWayOutput = join(target, 'three-way-snapshot.json');
 execFileSync('node', [join(root, 'collect_odds_api.mjs'), '--sport', 'football', '--response', join(root, 'testdata/odds-api-home-away-draw.json'), '--bookmaker', 'Stake', '--home-outcome', 'home_ml', '--draw-outcome', 'draw_ml', '--away-outcome', 'away_ml', '--output', threeWayOutput], { stdio: 'inherit', env: noNetworkEnv });
 const threeWay = JSON.parse(await readFile(threeWayOutput, 'utf8'));

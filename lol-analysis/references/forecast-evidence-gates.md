@@ -7,13 +7,14 @@
 每場在當次輸出目錄寫入 `forecast-evidence.json`；互動式分析未指定目錄時，使用 `.automation-state/lol/manual-forecasts/<YYYY-MM-DD>/<timestamp>/`。保留：
 
 - `match_key`、`scheduled_start`、可取得時的 `actual_start`、`predicted_at`、`snapshot`。
+- `teams[].name` 保留來源中的完整正式隊名，供賽程、模型與市場映射；新 `daily-summary` 同時保存唯一的 `teams[].abbreviation`（2–8 碼大寫英數官方／通用縮寫），供報告與 Notion 顯示。兩者不可互相覆寫。
 - `competition` 保存 league、event、stage、format；`patch_context` 的 scope 必須逐字對應，禁止用日報頂層共用版本代替逐場證據。
 - `patch_context.status=confirmed` 時保存單一版本、查核時間與至少一個官方規章／公告／比賽頁來源；每個來源同時保存 league、event、stage 與 `checked_at`。只有第三方同週賽後頁不得宣告 confirmed。
 - 版本來源衝突無法消解時使用 `status=scenario`，保存衝突與至少兩個版本情境、權重及證據；權重合計為 1。不得把舊週、舊 Split 或其他賽區版本快取寫成當場確認值。
 - 雙方最近正式系列使用穩定 `series_key`，保存日期、實際五人、來源與 `checked_at`。
 - 每隊另存 `recent_series`：scope 必須對應本場 league／event；保存查找時間、`search_complete=true`，以及同一賽事最新兩個系列的 `series_key`、日期、對手、比分、賽制、版本、實際五人、來源與 `checked_at`，按新到舊排序。不足兩場時列出全部並保存 `insufficient_reason`；不得用較早的亮眼系列跳過更晚一場。
-- 本場五人；`projected_lineup` 保存 `status=confirmed|established|projected`、`source_kind`、來源與 `checked_at`。`confirmed` 只接受當場官方名單／隊伍公告。`established` 必須由同一五人連續出戰同賽事最新兩個正式系列、Leaguepedia／Liquipedia／官方 roster 仍列現役，且近 30 天沒有實際輪替或較新的變更公告共同支持；另存 `established_basis.series_keys`、`roster_sources` 與空的 `rotation_candidates`，不可只靠 roster 頁。`projected` 才必須另存晚於快照、早於開賽的 `recheck_by`。與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`；不得用重新查閱舊頁面的時間冒充新公告。
-- 明列 `lineup_uncertainties`，沒有可信分歧時保存空陣列；有分歧時保存隊伍、位置、候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。權重合計必須為 1，`recheck_by` 必須早於開賽。
+- 本場五人；`projected_lineup` 保存 `status=confirmed|established|projected`、`source_kind`、來源與 `checked_at`。`confirmed` 只接受當場官方名單／隊伍公告。分類前先查 `established`：同一五人連續出戰同賽事最新兩個正式系列、Leaguepedia／Liquipedia／官方 roster 仍列現役，且近 30 天沒有實際輪替或較新的變更公告時，必須使用 `established`，另存 `established_basis.series_keys`、`roster_sources` 與空的 `rotation_candidates`。第三方 match page 的 projected 標籤與缺少當場官宣都不能推翻此分類。`projected` 才必須另存晚於快照、早於開賽的 `recheck_by`。與最近五人不同時，保存晚於最近系列且早於預測快照的 `published_at`、來源、原因與 `checked_at`；不得用重新查閱舊頁面的時間冒充新公告。
+- 明列 `lineup_uncertainties`。沒有可信分歧時保存空陣列，且不得把任何隊伍標成 `projected`；有分歧時保存隊伍、位置、至少兩名具名候選人、各情境權重、該情境系列賽機率、證據、`recheck_by` 與解決條件。每個 `projected` 隊伍必須至少對應一筆 uncertainty，非 `projected` 隊伍不得保留 uncertainty；權重合計必須為 1，`recheck_by` 必須早於開賽。
 - 近 30 天直接交手搜尋結果、來源與 `checked_at`。每筆 H2H 另存 `roster_comparison`：依 Top／Jungle／Mid／ADC／Support 順序保存交手五人、當前快照五人、查核來源與時間；`comparable_roster` 必須由逐位置比對重算，不接受自由文字或未驗證的布林值。同賽事且重算為可比的交手要保存逐局勝方、選邊、BP 與可重複機制。
 - 頂層保存 `factor_registry_snapshot`：來源、查核時間，以及本次所有模型引用因子的 `factor_id`、`status`、`used_for_prediction`。每個正式 `model_ensemble.models[]` 都必須列 `factor_ids`；只有 `status=active` 且 `used_for_prediction=true` 的因子可以取得正權重。
 - 保存 `model_ensemble`：目標隊伍、至少 `baseline_prior`、`recent_event`、`underdog_countermodel` 三個模型的具名輸出、預定權重、`factor_ids` 與證據，以及由加權公式自然得到的中央點與模型 spread。每個模型必須以 `probability_team` 指明 `series_probability` 的隊伍座標；驗證器換算到 `target_team` 後才重算中央點與 spread。`recent_event.evidence_refs` 必須引用雙方 `last_series.series_key` 與全部已保存的同賽事近期 `series_key`，避免正文只挑有利樣本。存在可比直接再戰時，只有 active 因子的 `direct_rematch_countermodel.mode=production` 可以加入中央集成；candidate／retired 因子必須標 `mode=shadow`、`ensemble_weight=0`，且不得出現在正式 `models[]`。
@@ -29,7 +30,7 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 
 驗證失敗時不得鎖定機率、發布 Notion 或給注碼。
 
-`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v7 evidence，並核對 schedule、probability checks、decision slate、模型座標、逐局條件樹、比分主峰與報告的逐場集合及信心度。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。`established` 已通過固定先發證據閘門，不視為未解先發，也不得在正文或決策表寫「等先發」。
+`daily-summary` 不得以逐個 CLI 曾經成功或對話中的文字宣告代替整批驗證。完成 `prediction.md` 與 post-market 決策後，必須讓同一 artifact 目錄通過 `validate_daily_run.mjs`；它會重新驗證 schema v7 evidence，並核對 schedule、probability checks、schema v2 decision slate、模型座標、逐局條件樹、比分主峰與報告的逐場集合及信心度。對 BO3／BO5，它還會要求賽制別 ML／地圖讓分／總局數最低查核，並從同一 `series_distribution.outcomes` 重算每筆已定價 `market_evaluations.model_probability`；只替 ML 建立 EV 的日報不得封口。任一隊 `projected_lineup.status=projected` 或仍有未解 `lineup_uncertainties` 時，對應決策不得為 `bet_now`；先發布條件版，正式先發落定後建立 post-lineup 新快照。驗證器同時拒絕沒有具名 uncertainty 的空泛 `projected`，以及已通過 `established` 後仍在決策理由、觸發條件或簡表寫「等先發」「須正式先發一致」等候語言。
 
 已發布快照若在開賽前因 H2H、名單、版本或其他證據修正機率，必須建立新的完整 artifact 目錄，重寫 canonical `forecast-evidence.json`、機率檢查、決策與報告，再重跑 daily validator。修正版 sidecar 或單獨的 decision slate 不得宣稱取代原 canonical 快照。
 

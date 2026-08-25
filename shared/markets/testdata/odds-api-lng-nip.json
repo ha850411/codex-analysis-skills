@@ -9,6 +9,19 @@
   "bookmakers": {
     "Stake": [
       { "name": "ML", "updatedAt": "2026-07-26T02:51:39.241Z", "odds": [{ "home": "1.95", "away": "1.75" }] },
+      {
+        "name": "Spread",
+        "updatedAt": "2026-07-26T02:51:39.241Z",
+        "odds": [
+          { "hdp": -1.5, "home": "3.40", "away": "1.28" },
+          { "hdp": 1.5, "home": "1.42", "away": "2.75" }
+        ]
+      },
+      {
+        "name": "Totals",
+        "updatedAt": "2026-07-26T02:51:39.241Z",
+        "odds": [{ "max": 2.5, "over": "1.95", "under": "1.82" }]
+      },
       { "name": "1st Map Moneyline", "updatedAt": "2026-07-26T02:51:39.241Z", "odds": [{ "home": "1.92", "away": "1.78" }] }
     ]
   }

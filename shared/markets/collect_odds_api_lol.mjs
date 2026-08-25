@@ -41,6 +41,8 @@ function parseArgs(argv) {
     else if (token === '--market') args.markets.push(argv[++index]);
     else if (token === '--home-outcome') args.homeOutcome = argv[++index];
     else if (token === '--away-outcome') args.awayOutcome = argv[++index];
+    else if (token === '--home-prefix') args.homePrefix = argv[++index];
+    else if (token === '--away-prefix') args.awayPrefix = argv[++index];
     else if (token === '--draw-outcome') args.drawOutcome = argv[++index];
     else if (token === '--env-file') args.envFile = argv[++index];
     else if (token === '--events-response') args.eventsResponse = argv[++index];
@@ -60,7 +62,8 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   node collect_odds_api.mjs --sport esports --event "DRX - Nongshim RedForce" \\
-    --home-outcome drx_ml --away-outcome ns_ml --output odds-snapshot.json
+    --home-outcome drx_ml --away-outcome ns_ml \\
+    --market ML --market Spread --market Totals --output odds-snapshot.json
 
   node collect_odds_api.mjs --sport football --event-id 4242135875 --bookmaker Stake \\
     --home-outcome home_ml --draw-outcome draw_ml --away-outcome away_ml \\
@@ -71,7 +74,9 @@ The default bookmaker is Stake. Transient network, rate-limit, and 5xx failures
 are retried three times by default. A failed run writes --error-output, or
 <output>.error.json when that flag is omitted. --response and --events-response
 are local mocked /v3/odds and /v3/events responses for tests; they never make
-network requests.`;
+network requests. ML is the default market. Spread and Totals can be requested
+repeatedly with --market; their outcome keys use --home-prefix/--away-prefix,
+or derive the prefixes from --home-outcome/--away-outcome.`;
 }
 
 function normalise(value) {
@@ -271,11 +276,61 @@ async function resolveEvent(args, apiKey, mockedEvents = null) {
 function selectMarkets(event, bookmaker, names) {
   const markets = event.bookmakers?.[bookmaker];
   if (!Array.isArray(markets)) fail(`${bookmaker} has no odds for event ${event.id}`, { kind: 'market_unavailable' });
-  const requested = names.length ? names : ['ML'];
-  const selected = requested.map((name) => markets.find((market) => normalise(market.name) === normalise(name))).filter(Boolean);
-  const missing = requested.filter((name) => !selected.some((market) => normalise(market.name) === normalise(name)));
-  if (missing.length) fail(`${bookmaker} does not offer requested market(s): ${missing.join(', ')}`, { kind: 'market_unavailable' });
-  return { selected, all: markets };
+  const requested = [...new Map((names.length ? names : ['ML']).map((name) => [normalise(name), name])).values()];
+  const offered = requested
+    .map((name) => markets.find((market) => normalise(market.name) === normalise(name)))
+    .filter(Boolean);
+  const missing = requested.filter((name) => !offered.some((market) => normalise(market.name) === normalise(name)));
+  const supportedNames = new Set(['ml', 'spread', 'totals']);
+  const unmapped = offered.filter((market) => !supportedNames.has(normalise(market.name)));
+  const selected = offered.filter((market) => supportedNames.has(normalise(market.name)));
+  if (selected.length === 0) {
+    if (unmapped.length > 0) {
+      fail(`requested market(s) are not mapped: ${unmapped.map((market) => market.name).join(', ')}`, {
+        kind: 'market_not_mapped'
+      });
+    }
+    fail(`${bookmaker} does not offer requested market(s): ${missing.join(', ')}`, { kind: 'market_unavailable' });
+  }
+  return { requested, selected, missing, unmapped, all: markets };
+}
+
+function outcomePrefix(explicit, mlOutcome, label) {
+  const value = explicit || String(mlOutcome || '').replace(/_ml$/i, '');
+  const prefix = normalise(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  if (!prefix) {
+    fail(`${label} requires --${label}-prefix or --${label}-outcome`, { kind: 'usage' });
+  }
+  return prefix;
+}
+
+function numericLine(value, label) {
+  const line = Number(value);
+  if (!Number.isFinite(line)) fail(`${label} is not a valid market line`, { kind: 'invalid_response' });
+  return line;
+}
+
+function signedLine(value) {
+  const line = numericLine(value, 'market line');
+  return line > 0 ? `+${line}` : String(line);
+}
+
+function lineToken(value) {
+  const line = numericLine(value, 'market line');
+  const sign = line < 0 ? 'minus' : line > 0 ? 'plus' : 'zero';
+  return `${sign}_${String(Math.abs(line)).replace('.', '_')}`;
+}
+
+function commonMarketFields(event, bookmaker, market, retrievedAt, sourceUrl) {
+  return {
+    book: bookmaker,
+    retrieved_at: retrievedAt,
+    market_updated_at: market.updatedAt ?? null,
+    source_url: sourceUrl,
+    provider: 'Odds-API.io',
+    event_id: event.id,
+    market_type: market.name
+  };
 }
 
 function marketDataForMl(event, bookmaker, market, args, retrievedAt, sourceUrl) {
@@ -284,16 +339,101 @@ function marketDataForMl(event, bookmaker, market, args, retrievedAt, sourceUrl)
   if (!row || row.home == null || row.away == null) fail(`${bookmaker} ML response is missing home/away prices`, { kind: 'invalid_response' });
   const prefix = `odds-api:${event.id}:${slug(bookmaker)}:${slug(market.name)}`;
   const data = [
-    { bet_id: `${prefix}:home`, outcome_key: args.homeOutcome, decimal_odds: oddsNumber(row.home, 'home odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.home}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name },
-    { bet_id: `${prefix}:away`, outcome_key: args.awayOutcome, decimal_odds: oddsNumber(row.away, 'away odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.away}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name }
+    { bet_id: `${prefix}:home`, outcome_key: args.homeOutcome, decimal_odds: oddsNumber(row.home, 'home odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.home}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name, market_family: 'series_ml', selection_side: 'home', line: null },
+    { bet_id: `${prefix}:away`, outcome_key: args.awayOutcome, decimal_odds: oddsNumber(row.away, 'away odds'), book: bookmaker, label: `${bookmaker} ${market.name} — ${event.away}`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name, market_family: 'series_ml', selection_side: 'away', line: null }
   ];
   if (row.draw != null) {
     if (!args.drawOutcome) fail('three-way ML import requires --draw-outcome from final_prediction.json', { kind: 'usage' });
-    data.splice(1, 0, { bet_id: `${prefix}:draw`, outcome_key: args.drawOutcome, decimal_odds: oddsNumber(row.draw, 'draw odds'), book: bookmaker, label: `${bookmaker} ${market.name} — draw`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name });
+    data.splice(1, 0, { bet_id: `${prefix}:draw`, outcome_key: args.drawOutcome, decimal_odds: oddsNumber(row.draw, 'draw odds'), book: bookmaker, label: `${bookmaker} ${market.name} — draw`, retrieved_at: retrievedAt, market_updated_at: market.updatedAt ?? null, source_url: sourceUrl, provider: 'Odds-API.io', event_id: event.id, market_type: market.name, market_family: 'series_ml', selection_side: 'draw', line: null });
   } else if (args.drawOutcome) {
     fail('draw outcome was supplied but the ML response has no draw price', { kind: 'invalid_response' });
   }
   return data;
+}
+
+function marketDataForSpread(event, bookmaker, market, args, retrievedAt, sourceUrl) {
+  const homePrefix = outcomePrefix(args.homePrefix, args.homeOutcome, 'home');
+  const awayPrefix = outcomePrefix(args.awayPrefix, args.awayOutcome, 'away');
+  if (!Array.isArray(market.odds) || market.odds.length === 0) {
+    fail(`${bookmaker} Spread response has no prices`, { kind: 'invalid_response' });
+  }
+  const prefix = `odds-api:${event.id}:${slug(bookmaker)}:${slug(market.name)}`;
+  const common = commonMarketFields(event, bookmaker, market, retrievedAt, sourceUrl);
+  return market.odds.flatMap((row, index) => {
+    if (row.hdp == null || row.home == null || row.away == null) {
+      fail(`${bookmaker} Spread row ${index} is missing hdp/home/away`, { kind: 'invalid_response' });
+    }
+    const homeLine = numericLine(row.hdp, `Spread row ${index} hdp`);
+    const awayLine = -homeLine;
+    return [
+      {
+        bet_id: `${prefix}:${index}:home:${slug(String(homeLine))}`,
+        outcome_key: `${homePrefix}_spread_${lineToken(homeLine)}`,
+        decimal_odds: oddsNumber(row.home, `Spread row ${index} home odds`),
+        label: `${bookmaker} ${market.name} — ${event.home} ${signedLine(homeLine)}`,
+        market_family: 'series_spread',
+        selection_side: 'home',
+        line: homeLine,
+        ...common
+      },
+      {
+        bet_id: `${prefix}:${index}:away:${slug(String(awayLine))}`,
+        outcome_key: `${awayPrefix}_spread_${lineToken(awayLine)}`,
+        decimal_odds: oddsNumber(row.away, `Spread row ${index} away odds`),
+        label: `${bookmaker} ${market.name} — ${event.away} ${signedLine(awayLine)}`,
+        market_family: 'series_spread',
+        selection_side: 'away',
+        line: awayLine,
+        ...common
+      }
+    ];
+  });
+}
+
+function marketDataForTotals(event, bookmaker, market, retrievedAt, sourceUrl) {
+  if (!Array.isArray(market.odds) || market.odds.length === 0) {
+    fail(`${bookmaker} Totals response has no prices`, { kind: 'invalid_response' });
+  }
+  const prefix = `odds-api:${event.id}:${slug(bookmaker)}:${slug(market.name)}`;
+  const common = commonMarketFields(event, bookmaker, market, retrievedAt, sourceUrl);
+  return market.odds.flatMap((row, index) => {
+    const rawLine = row.hdp ?? row.max;
+    if (rawLine == null || row.over == null || row.under == null) {
+      fail(`${bookmaker} Totals row ${index} is missing hdp/max, over, or under`, { kind: 'invalid_response' });
+    }
+    const line = numericLine(rawLine, `Totals row ${index} line`);
+    const token = String(line).replace('.', '_');
+    return [
+      {
+        bet_id: `${prefix}:${index}:over:${slug(String(line))}`,
+        outcome_key: `total_maps_over_${token}`,
+        decimal_odds: oddsNumber(row.over, `Totals row ${index} over odds`),
+        label: `${bookmaker} ${market.name} — Over ${line}`,
+        market_family: 'series_total_maps',
+        selection_side: 'over',
+        line,
+        ...common
+      },
+      {
+        bet_id: `${prefix}:${index}:under:${slug(String(line))}`,
+        outcome_key: `total_maps_under_${token}`,
+        decimal_odds: oddsNumber(row.under, `Totals row ${index} under odds`),
+        label: `${bookmaker} ${market.name} — Under ${line}`,
+        market_family: 'series_total_maps',
+        selection_side: 'under',
+        line,
+        ...common
+      }
+    ];
+  });
+}
+
+function marketDataFor(event, bookmaker, market, args, retrievedAt, sourceUrl) {
+  const name = normalise(market.name);
+  if (name === 'ml') return marketDataForMl(event, bookmaker, market, args, retrievedAt, sourceUrl);
+  if (name === 'spread') return marketDataForSpread(event, bookmaker, market, args, retrievedAt, sourceUrl);
+  if (name === 'totals') return marketDataForTotals(event, bookmaker, market, retrievedAt, sourceUrl);
+  fail(`market is not mapped: ${market.name}`, { kind: 'market_not_mapped' });
 }
 
 async function writeFailureArtifact(args, error) {
@@ -371,18 +511,19 @@ async function collect(args) {
   if (!event || typeof event !== 'object' || !event.id || !event.home || !event.away) {
     fail('response is not a valid Odds-API.io event', { kind: 'invalid_response' });
   }
-  const { selected, all } = selectMarkets(event, args.bookmaker, args.markets);
-  if (selected.some((market) => normalise(market.name) !== 'ml')) {
-    fail('only ML can currently be mapped to pipeline outcome keys; other API markets are retained as available_markets', {
-      kind: 'market_not_mapped'
-    });
-  }
+  const { requested, selected, missing, unmapped, all } = selectMarkets(event, args.bookmaker, args.markets);
   const retrievedAt = new Date().toISOString();
   const sourceUrl = event.urls?.[args.bookmaker] || `${API_BASE}/odds`;
-  const marketData = selected.flatMap((market) => marketDataForMl(event, args.bookmaker, market, args, retrievedAt, sourceUrl));
+  const marketData = selected.flatMap((market) => marketDataFor(event, args.bookmaker, market, args, retrievedAt, sourceUrl));
   const raw = JSON.stringify(event);
+  const captured = selected.map((market) => market.name);
+  const unavailableOrUnmapped = [
+    ...missing,
+    ...unmapped.map((market) => market.name),
+    ...all.filter((market) => !selected.includes(market) && !unmapped.includes(market)).map((market) => market.name)
+  ];
   const result = {
-    schema_version: '1.1',
+    schema_version: '1.2',
     status: 'success',
     collection: {
       event_resolution: resolution.method,
@@ -391,7 +532,15 @@ async function collect(args) {
     },
     source: { book: args.bookmaker, provider: 'Odds-API.io', sport: args.sport, source_url: sourceUrl, provider_url: `${API_BASE}/odds`, retrieved_at: retrievedAt, response_sha256: createHash('sha256').update(raw).digest('hex'), rate_limit_remaining: remaining },
     event: { provider_event_id: event.id, display_name: eventName(event), participants: [event.home, event.away], start_time: event.date, competition: event.league?.name ?? null, status: event.status },
-    coverage: { status: 'partial', captured_market_types: selected.map((market) => market.name), available_market_types: all.map((market) => market.name), unavailable_or_not_mapped: all.filter((market) => !selected.includes(market)).map((market) => market.name) },
+    coverage: {
+      status: missing.length === 0 && unmapped.length === 0 ? 'full' : 'partial',
+      requested_market_types: requested,
+      captured_market_types: captured,
+      requested_but_unavailable: missing,
+      requested_but_unmapped: unmapped.map((market) => market.name),
+      available_market_types: all.map((market) => market.name),
+      unavailable_or_not_mapped: [...new Set(unavailableOrUnmapped)]
+    },
     market_data: marketData
   };
   await writeFile(args.output, `${JSON.stringify(result, null, 2)}\n`, 'utf8');

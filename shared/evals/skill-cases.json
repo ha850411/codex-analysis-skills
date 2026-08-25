@@ -75,7 +75,15 @@
       "prompt": "整理今天 LCK、LPL、LCP、LEC 的 LoL 預測，列出版本、先發與完整比分機率。",
       "shouldTrigger": true,
       "mode": "daily-summary",
-      "invariants": ["先通過跨賽區賽程完整性閘門", "bo3.gg 只作候選且不得計入獨立 coverage group", "每個目標聯賽都有非 bo3 獨立子集合且聯集等於官方集合", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果", "模型信心度的 forecast、正文與檢查都使用非補償上限後同一最終值", "逐場決策不能只寫 0u 而須為立即可打、等價／等先發、只看 live 或完全避開", "當前價達最低價且無硬阻擋時給非零注碼", "若全日 0u 則列前三個近門檻候選、價差、未映射市場與重跑條件", "decision-slate 與置底簡表逐場同步"]
+      "invariants": ["先通過跨賽區賽程完整性閘門", "bo3.gg 只作候選且不得計入獨立 coverage group", "每個目標聯賽都有非 bo3 獨立子集合且聯集等於官方集合", "每個聯賽分別驗證版本來源與 checked_at", "逐隊保存最近正式系列實際五人", "逐隊列出同賽事最近至少兩個系列或全部可用樣本", "新先發公告觸發 post-lineup 新快照", "不得以跨 Split 先驗取代缺失的同賽事查找結果", "模型信心度的 forecast、正文與檢查都使用非補償上限後同一最終值", "BO3 必查 ML、絕對值 1.5 讓分與 O/U 2.5，BO5 必查 ML、絕對值 1.5／2.5 讓分與 O/U 3.5／4.5", "所有已定價雙邊選項建立 market_evaluations 並由同一比分分布推導", "逐場決策不能只寫 0u 而須為立即可打、等價／等先發、只看 live 或完全避開", "當前價達最低價且無硬阻擋時給非零注碼", "若全日 0u 則列前三個近門檻候選、價差、未映射市場與重跑條件", "decision-slate 與置底簡表逐場同步"]
+    },
+    {
+      "id": "lol-multi-market-betting-regression",
+      "skill": "lol-analysis",
+      "prompt": "這場 BO5 不要只看獨贏，請一起比較弱方 +1.5、熱門方 -1.5、-2.5，以及 Over 3.5／4.5，挑出真正有價值的玩法。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["逐項查核 ML、絕對值 1.5／2.5 讓分與 O/U 3.5／4.5", "缺盤逐線標 unavailable 或 unmapped 而不是省略", "每個已定價雙邊選項保存模型機率、p_bet、底價與 EV_adj", "讓分與總局數機率由同一精確比分分布加總", "最終推薦選通過專屬閘門後最高 EV 而不保留 ML 優先權", "不得為了產出非 ML 推薦放寬證據或 EV 門檻"]
     },
     {
       "id": "lol-roster-freshness-krx-regression",

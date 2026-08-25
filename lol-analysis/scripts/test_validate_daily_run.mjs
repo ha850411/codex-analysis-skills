@@ -11,7 +11,7 @@ import { validateDailyRun } from "./validate_daily_run.mjs";
 const matchKey = "bo3:daily-1";
 const start = "2026-08-17T16:00:00+08:00";
 const predictedAt = "2026-08-17T12:00:00+08:00";
-const tableCell = "等價：Alpha ML @1.80；≥2.04 才進場；目前 0u";
+const tableCell = "等價：ALP ML @1.70；≥1.79 才進場；目前 0u";
 
 function match() {
   return {
@@ -67,13 +67,14 @@ function schedule() {
   };
 }
 
-function team(name, suffix) {
+function team(name, suffix, abbreviation) {
   const players = ["Top", "Jungle", "Mid", "ADC", "Support"].map(
     (position) => `${position}${suffix}`,
   );
   const seriesKey = `lck-2026-08-10-${suffix}`;
   return {
     name,
+    abbreviation,
     last_series: {
       series_key: seriesKey,
       played_at: "2026-08-10T16:00:00+08:00",
@@ -83,11 +84,19 @@ function team(name, suffix) {
     },
     projected_lineup: {
       players: [...players],
-      status: "projected",
-      source_kind: "latest_formal_series",
-      source: "https://example.test/last-series",
+      status: "established",
+      source_kind: "stable_recent_starters",
+      source: "https://lol.fandom.com/wiki/Example_Team",
       checked_at: predictedAt,
-      recheck_by: "2026-08-17T15:30:00+08:00",
+      established_basis: {
+        series_keys: [seriesKey, `lck-2026-08-06-${suffix}`],
+        roster_sources: [{
+          url: "https://lol.fandom.com/wiki/Example_Team",
+          kind: "leaguepedia_roster",
+          checked_at: predictedAt,
+        }],
+        rotation_candidates: [],
+      },
     },
     recent_series: {
       league: "LCK",
@@ -152,9 +161,9 @@ function evidence() {
       match_key: matchKey,
       scheduled_start: start,
       predicted_at: predictedAt,
-      snapshot: "pre-lineup/pre-draft",
+      snapshot: "established-lineup/pre-draft",
       evaluation_status: "prospective_pre_match",
-      teams: [team("Alpha", "A"), team("Beta", "B")],
+      teams: [team("Alpha", "A", "ALP"), team("Beta", "B", "BET")],
       competition: {
         league: "LCK",
         event: "LCK 2026 Rounds 3-4",
@@ -299,39 +308,143 @@ function probabilities() {
 
 function decisions() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-08-17T12:30:00+08:00",
     market_coverage: {
-      status: "partial",
-      checked_market_types: ["ML"],
-      unavailable_or_unmapped_market_types: ["map handicap"],
+      status: "full",
+      checked_market_types: ["ML", "Spread", "Totals"],
+      unavailable_or_unmapped_market_types: [],
+      market_checks: [
+        { match_key: matchKey, format: "BO3", market_family: "series_ml", line: null, status: "priced", evaluated_selection_count: 2, artifact_path: "odds-daily-1.json" },
+        { match_key: matchKey, format: "BO3", market_family: "series_spread", line: 1.5, status: "priced", evaluated_selection_count: 2, artifact_path: "odds-daily-1.json" },
+        { match_key: matchKey, format: "BO3", market_family: "series_total_maps", line: 2.5, status: "priced", evaluated_selection_count: 2, artifact_path: "odds-daily-1.json" },
+      ],
     },
+    market_evaluations: [
+      {
+        evaluation_id: "alp-ml",
+        match_key: matchKey,
+        selection: "ALP ML",
+        market_family: "series_ml",
+        selection_side: "team1",
+        line: null,
+        model_probability: 0.60,
+        betting_probability: 0.57,
+        current_odds: 1.70,
+        minimum_acceptable_odds: 1.79,
+        adjusted_ev: -0.031,
+        market_gate: "not_required",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+      {
+        evaluation_id: "bet-ml",
+        match_key: matchKey,
+        selection: "BET ML",
+        market_family: "series_ml",
+        selection_side: "team2",
+        line: null,
+        model_probability: 0.40,
+        betting_probability: 0.37,
+        current_odds: 2.40,
+        minimum_acceptable_odds: 2.76,
+        adjusted_ev: -0.112,
+        market_gate: "not_required",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+      {
+        evaluation_id: "alp-plus-1.5",
+        match_key: matchKey,
+        selection: "ALP +1.5",
+        market_family: "series_spread",
+        selection_side: "team1",
+        line: 1.5,
+        model_probability: 0.85,
+        betting_probability: 0.82,
+        current_odds: 1.15,
+        minimum_acceptable_odds: 1.25,
+        adjusted_ev: -0.057,
+        market_gate: "pass",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+      {
+        evaluation_id: "bet-minus-1.5",
+        match_key: matchKey,
+        selection: "BET -1.5",
+        market_family: "series_spread",
+        selection_side: "team2",
+        line: -1.5,
+        model_probability: 0.15,
+        betting_probability: 0.12,
+        current_odds: 6.50,
+        minimum_acceptable_odds: 8.50,
+        adjusted_ev: -0.22,
+        market_gate: "pass",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+      {
+        evaluation_id: "over-2.5",
+        match_key: matchKey,
+        selection: "Over 2.5",
+        market_family: "series_total_maps",
+        selection_side: "over",
+        line: 2.5,
+        model_probability: 0.55,
+        betting_probability: 0.52,
+        current_odds: 1.80,
+        minimum_acceptable_odds: 1.97,
+        adjusted_ev: -0.064,
+        market_gate: "pass",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+      {
+        evaluation_id: "under-2.5",
+        match_key: matchKey,
+        selection: "Under 2.5",
+        market_family: "series_total_maps",
+        selection_side: "under",
+        line: 2.5,
+        model_probability: 0.45,
+        betting_probability: 0.42,
+        current_odds: 2.00,
+        minimum_acceptable_odds: 2.43,
+        adjusted_ev: -0.16,
+        market_gate: "pass",
+        hard_blockers: [],
+        source_artifact: "odds-daily-1.json",
+      },
+    ],
     matches: [{
       match_key: matchKey,
       action: "price_watch",
-      selection: "Alpha ML",
-      current_odds: 1.8,
-      betting_probability: 0.5,
-      minimum_acceptable_odds: 2.04,
-      adjusted_ev: -0.1,
+      selection: "ALP ML",
+      market_evaluation_id: "alp-ml",
+      current_odds: 1.7,
+      betting_probability: 0.57,
+      minimum_acceptable_odds: 1.79,
+      adjusted_ev: -0.031,
       model_confidence: 0.7,
       stake_units: 0,
       hard_blockers: [],
-      trigger: "價格升至 2.04 後重跑",
+      trigger: "價格升至 1.79 後重跑",
       reason: "當前價未達門檻",
       table_cell: tableCell,
     }],
     ranking: [{ rank: 1, match_key: matchKey, rationale: "唯一場次" }],
     all_zero_audit: {
-      why_no_bet_now: "唯一已映射市場未達底價",
+      why_no_bet_now: "所有已映射市場皆未達底價",
       closest_candidate_match_key: matchKey,
-      rerun_triggers: ["價格達 2.04"],
+      rerun_triggers: ["任一候選價格達底價"],
     },
   };
 }
 
 function report() {
-  return `分析正文\n\n### 簡表總結\n\n| 比賽 | 核心預測 | 決策 |\n|---|---|---|\n| Alpha vs Beta | Alpha 2-0 | ${tableCell} |\n`;
+  return `分析正文：ALP 與 BET\n\n### 簡表總結\n\n| 比賽 | 核心預測 | 決策 |\n|---|---|---|\n| ALP vs BET | ALP 2-0 | ${tableCell} |\n`;
 }
 
 function validRun() {
@@ -341,6 +454,20 @@ function validRun() {
     probabilities: probabilities(),
     decisions: decisions(),
     report: report(),
+  };
+}
+
+function setProjectedLineup(run, teamIndex = 0) {
+  const forecast = run.evidence.forecasts[0];
+  const forecastTeam = forecast.teams[teamIndex];
+  forecast.snapshot = "pre-lineup/pre-draft";
+  forecastTeam.projected_lineup = {
+    players: [...forecastTeam.last_series.players],
+    status: "projected",
+    source_kind: "latest_formal_series",
+    source: "https://example.test/last-series",
+    checked_at: predictedAt,
+    recheck_by: "2026-08-17T15:30:00+08:00",
   };
 }
 
@@ -354,20 +481,43 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
 
 {
   const run = validRun();
-  run.report = run.report.replace("Alpha 2-0", "Alpha 2-1");
+  run.report = run.report.replace("ALP 2-0", "ALP 2-1");
   assert.throws(() => validateDailyRun(run), /score must match/);
 }
 
 {
   const run = validRun();
-  run.report = run.report.replace("Alpha 2-0", "Beta 2-0");
-  assert.throws(() => validateDailyRun(run), /canonical predicted winner/);
+  run.report = run.report.replace("ALP 2-0", "BET 2-0");
+  assert.throws(() => validateDailyRun(run), /predicted winner abbreviation/);
+}
+
+{
+  const run = validRun();
+  run.report = run.report.replace("ALP vs BET", "Alpha vs BET");
+  assert.throws(() => validateDailyRun(run), /team abbreviations only/);
+}
+
+{
+  const run = validRun();
+  delete run.evidence.forecasts[0].teams[0].abbreviation;
+  assert.throws(() => validateDailyRun(run), /abbreviation is required/);
 }
 
 {
   const run = validRun();
   run.probabilities.checks[0].values = [25, 35, 25, 15];
   assert.throws(() => validateDailyRun(run), /must match series_distribution/);
+}
+
+{
+  const run = validRun();
+  run.decisions.market_evaluations.find(
+    (evaluation) => evaluation.evaluation_id === "over-2.5",
+  ).model_probability = 0.56;
+  assert.throws(
+    () => validateDailyRun(run),
+    /model_probability must be derived from series_distribution/,
+  );
 }
 
 {
@@ -392,6 +542,16 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
 
 {
   const run = validRun();
+  setProjectedLineup(run);
+  assert.throws(
+    () => validateDailyRun(run),
+    /requires a concrete lineup_uncertainty with named candidates/,
+  );
+}
+
+{
+  const run = validRun();
+  setProjectedLineup(run);
   run.evidence.forecasts[0].lineup_uncertainties = [{
     team: "Alpha",
     position: "Jungle",
@@ -414,15 +574,32 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
     resolution_trigger: "official match roster",
   }];
   const decision = run.decisions.matches[0];
+  const evaluation = run.decisions.market_evaluations.find(
+    (item) => item.evaluation_id === decision.market_evaluation_id,
+  );
   decision.action = "bet_now";
   decision.current_odds = 2.1;
-  decision.adjusted_ev = 0.05;
+  decision.adjusted_ev = 0.197;
   decision.stake_units = 0.25;
   decision.trigger = null;
-  decision.table_cell = "立即可打：Alpha ML @2.10；底價 2.04；0.25u";
+  decision.table_cell = "立即可打：ALP ML @2.10；底價 1.79；0.25u";
+  evaluation.current_odds = decision.current_odds;
+  evaluation.adjusted_ev = decision.adjusted_ev;
   run.decisions.all_zero_audit = null;
   run.report = report().replace(tableCell, decision.table_cell);
   assert.throws(() => validateDailyRun(run), /unresolved lineup uncertainty/);
+}
+
+{
+  const run = validRun();
+  const decision = run.decisions.matches[0];
+  decision.trigger = "雙方正式先發一致後再進場";
+  decision.table_cell = "等先發：ALP ML @1.70；正式先發一致後再進場；目前 0u";
+  run.report = report().replace(tableCell, decision.table_cell);
+  assert.throws(
+    () => validateDailyRun(run),
+    /cannot be used as a wait-for-lineup condition/,
+  );
 }
 
 {
@@ -450,12 +627,17 @@ assert.doesNotThrow(() => validateDailyRun(validRun()));
     };
   });
   const decision = run.decisions.matches[0];
+  const evaluation = run.decisions.market_evaluations.find(
+    (item) => item.evaluation_id === decision.market_evaluation_id,
+  );
   decision.action = "bet_now";
   decision.current_odds = 2.1;
-  decision.adjusted_ev = 0.05;
+  decision.adjusted_ev = 0.197;
   decision.stake_units = 0.25;
   decision.trigger = null;
-  decision.table_cell = "立即可打：Alpha ML @2.10；底價 2.04；0.25u";
+  decision.table_cell = "立即可打：ALP ML @2.10；底價 1.79；0.25u";
+  evaluation.current_odds = decision.current_odds;
+  evaluation.adjusted_ev = decision.adjusted_ev;
   run.decisions.all_zero_audit = null;
   run.report = report().replace(tableCell, decision.table_cell);
   assert.doesNotThrow(() => validateDailyRun(run));
