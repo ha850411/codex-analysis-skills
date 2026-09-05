@@ -84,7 +84,7 @@ def prompt_for(
 1. 使用 MLB 官方 box score／Gameday 等即時來源查核每場最終結果與實際事件；保留當時可知資訊和賽後資訊的時間邊界。
 2. 將含 actual_away_runs、actual_home_runs 的完整紀錄寫到 {review_dir / 'evaluated-forecasts.jsonl'}，保留原預測欄位，不覆寫原檔。
 3. 執行 `python mlb-analysis/scripts/evaluate_forecasts.py {review_dir / 'evaluated-forecasts.jsonl'}`，將輸出與逐場歸因整理到 {review_dir / 'postmortem.md'}。若歷史檔存在，再對歷史 + 本批依 status + model_version + snapshot 分 cohort 評估，另列跨日累積樣本與指標；不可只看單日。若原紀錄未建模，保留原 N/A，不得賽後補造機率；改做 modeled coverage、status 與 missing_data 頻率稽核。
-4. 檢討的首要目標是改善未來樣本的 Brier、log loss、得分誤差、bias 與 interval coverage，不是降低信心度、注碼、推薦資格或語氣。後四者可以是附帶風控，但不得作為 skill 修正或 PR 的唯一內容。
+4. 檢討以未來樣本的勝方命中優先、比分與得分誤差次之；同時檢查 Brier、log loss、bias、interval coverage 與預測覆蓋率。降低信心度、注碼、推薦資格或語氣只是附帶風控，不得作為 skill 修正或 PR 的唯一內容。
 5. 每次都深查可能漏掉的賽前因子，也檢查既有因子／預測性來源是否無增量效益、重複計數、易造成過度反應或含時序洩漏。每個錯誤建立「賽前可觀察觸發條件 → 錯誤機制 → 候選修正 → 預期改善指標 → 可能退步 → 否決條件」。不得因資料越多越好就新增；單場冷門、BABIP、單次全壘打等合理變異不得直接改生產權重。
 6. 若修改特徵、權重、先驗或得分分布，必須用相同 game IDs、snapshot 與賽前資料做 baseline/challenger paired walk-forward；若修資料、結算或實作 bug，加入舊版失敗、新版通過的回歸測試。沒有通過驗證就不得修改 {worktree / 'mlb-analysis'}。
 7. 依 `shared/postmortem-improvement.md` 建立完整 {review_dir / 'factor-registry.json'}。新因子先設 candidate 且不得影響正式機率；active 因子只有在 ablation 顯示移除較佳時才能 retired。retired 因子之後不再抓取、判斷或報告，但必須保留停用證據與明確 revisit_triggers；只有觸發條件成立且重新通過 paired walk-forward 才能 restored。賽程、身分、正式先發／打線、規則、結算與賽果等完整性資料不屬可退休預測因子。
@@ -326,6 +326,8 @@ def main() -> int:
                 cwd=worktree,
             )
             paths = changed_paths(worktree)
+            run([sys.executable, str(REPO_ROOT / "shared/forecast/bridge.py"), "--sport", "mlb",
+                 "--results", str(review_dir / "evaluated-forecasts.jsonl"), "--module-state-dir", str(STATE_ROOT)])
             next_registry, factor_transitions = load_factor_registry(
                 review_dir / "factor-registry.json",
                 prior_path=(

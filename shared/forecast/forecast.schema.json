@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Canonical forecast v2 (semantic validation: core.validate)",
+  "type": "object",
+  "required": ["schema_version", "probability_unit", "forecast_id", "event_id", "sport", "competition", "snapshot", "created_at", "data_cutoff", "scheduled_start", "model_version", "parameter_version", "status", "participants", "evidence", "missing_data", "confidence", "scope", "eligibility"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "probability_unit": {"const": "fraction"},
+    "forecast_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$"},
+    "event_id": {"type": "string", "minLength": 1},
+    "sport": {"enum": ["lol", "cs", "valorant", "dota2", "mlb", "nba", "soccer"]},
+    "status": {"enum": ["baseline", "experiment", "production", "unmodeled"]},
+    "eligibility": {"enum": ["prospective", "historical_replay", "reconstructed_after_start", "legacy_unverified"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "data_cutoff": {"type": "string", "format": "date-time"},
+    "scheduled_start": {"type": "string", "format": "date-time"},
+    "participants": {"type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "score_distribution": {"type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[0-9]+-[0-9]+$"}, "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}},
+    "evidence": {"type": "array", "items": {"type": "object", "required": ["id", "url", "claim", "available_at", "retrieved_at"]}},
+    "confidence": {"type": ["object", "null"]},
+    "missing_data": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [{"if": {"properties": {"status": {"enum": ["baseline", "experiment", "production"]}}}, "then": {"required": ["score_distribution"]}}]
+}

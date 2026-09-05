@@ -261,8 +261,10 @@ def summarize(records: list[dict[str, Any]], bin_width: float) -> dict[str, Any]
 
     result: dict[str, Any] = {
         "n": len(records),
+        "objective": "winner_accuracy_then_exact_score",
         "small_sample_warning": len(records) < 200,
         "moneyline": {
+            "winner_accuracy": _round(_mean([float((p >= 0.5) == bool(y)) for p, y in zip(probabilities, outcomes)])),
             "brier": _round(_mean([(p - y) ** 2 for p, y in zip(probabilities, outcomes)])),
             "log_loss": _round(_mean([_log_loss(p, y) for p, y in zip(probabilities, outcomes)])),
             "directional_accuracy_diagnostic": _round(
@@ -359,6 +361,8 @@ def availability_audit(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _paired_loss(record: dict[str, Any], metric: str) -> float:
     outcome = _outcome(record)
+    if metric == "winner_error_rate":
+        return float((record["home_win_prob"] >= 0.5) != bool(outcome))
     if metric == "brier":
         return (record["home_win_prob"] - outcome) ** 2
     if metric == "log_loss":
@@ -394,7 +398,7 @@ def compare_versions(
         "interpretation": "delta is new minus old; negative is better",
         "metrics": {},
     }
-    for metric in ("brier", "log_loss", "team_run_mae"):
+    for metric in ("winner_error_rate", "brier", "log_loss", "team_run_mae"):
         deltas = [
             _paired_loss(by_version[new_version][key], metric)
             - _paired_loss(by_version[old_version][key], metric)

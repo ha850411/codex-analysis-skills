@@ -544,6 +544,7 @@ def finalize_prediction(output_dir: Path, date: str) -> str:
         raise JobError("refusing to publish an all-N/A MLB report")
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
+    run([sys.executable, "shared/forecast/bridge.py", "--sport", "mlb", "--run-dir", str(output_dir), "--module-state-dir", str(STATE_ROOT)])
     notion_url = publish_to_notion(output_dir)
     report_quality = str(validation["report_quality"])
     notify_by_email(output_dir, date, notion_url, report_quality)

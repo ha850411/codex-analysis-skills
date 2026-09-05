@@ -114,7 +114,7 @@ python3 prediction-pipeline/scripts/pipeline.py export --run-dir <run>
 
 sport 對應固定為 CS2／Dota 2／LoL／Valorant=`esports`、MLB=`mlb`、NBA=`nba`、世界盃=`football`。收集器測試只可傳入 `--events-response` 與 `--response` 的本地 mock fixture，禁止以真實 Odds-API.io 呼叫作測試。
 
-`primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。裁決後正文的非空白字元不得少於主報告的 70%，避免修訂階段把全文壓成簡報式摘要。
+`primary_prediction.json.analysis_sections` 是 agy 實際審查的完整主報告；不得只讓主預測輸出 thesis、機率與因子。`final_prediction.json` 的 `presentation.analysis_sections` 是 agy 回饋經 Codex 裁決後的完整可讀報告，不是摘要。它必須依領域 skill 與 `input.mode` 保留仍有效的名單、數據對比、逐圖／逐場分析、veto／draft、校準檢核及情境風險；`presentation.key_points` 只供摘要，不能取代完整章節。每個章節使用唯一 `heading` 與非空白 `markdown`。來源、免責文字與 `簡表總結` 由匯出器統一附加，不得放入章節正文。以原章節標題檢查覆蓋，逐項保留答案、缺口或不適用原因；不使用原文字數比例。排版依 `../../shared/forecast/report-template.md`，匯出另含 `chat-summary.md`。
 
 agy 每次 stdout 都保存為 `red-team-attempt-<n>-raw.txt`；stderr 非空時另存。解析器必須檢查所有候選 JSON，拒絕 `{}` 或缺少紅隊核心欄位的物件，且正式 `red_team_review.json` 只能在完整 schema 與跨檔驗證通過後原子寫入。第一次失敗可用同一模型做一次契約修復，第二次失敗即停止並保留 `invalid.json` 與 `errors.txt` 診斷檔。
 

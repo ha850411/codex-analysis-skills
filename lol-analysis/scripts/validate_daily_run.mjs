@@ -213,10 +213,8 @@ function validateReportedModes(evidence, decisions, report) {
       fail(`${forecast.match_key} final summary is missing its core prediction cell`);
     }
     const score = forecast.series_distribution.reported_mode;
-    const [left, right] = score.split("-").map(Number);
-    const winner = left === right
-      ? null
-      : forecast.teams[left > right ? 0 : 1];
+    const winnerIndex = winnerFromScoreDistribution(forecast.series_distribution.outcomes);
+    const winner = winnerIndex === null ? null : forecast.teams[winnerIndex];
     const winnerAbbreviation = winner === null
       ? null
       : displayAbbreviation(winner, `${forecast.match_key}.predicted_winner`);
@@ -236,6 +234,16 @@ function validateReportedModes(evidence, decisions, report) {
       fail(`${forecast.match_key} final summary score must match series_distribution.reported_mode`);
     }
   }
+}
+
+export function winnerFromScoreDistribution(outcomes) {
+  const mass = [0, 0, 0];
+  for (const [score, probability] of Object.entries(outcomes)) {
+    const [a, b] = score.split("-").map(Number);
+    mass[a > b ? 0 : b > a ? 1 : 2] += probability;
+  }
+  const index = mass.indexOf(Math.max(...mass));
+  return index === 2 ? null : index;
 }
 
 function validateProbabilityCoverage(probabilities, scheduleKeys, decisions, evidence) {

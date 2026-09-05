@@ -3,167 +3,31 @@ name: nba-analysis
 description: "分析 NBA／美國職籃賽事的賽程、傷兵、先發、輪替、對位、節奏、模型機率、盤口價值與賽後校準。用於例行賽、季後賽、獨贏、讓分、大小分、半場／首節、隊伍總分、球員盤與今日決策；不要用於其他籃球聯盟、遊戲或一般規則問題。預設繁體中文與台灣時間。"
 ---
 
-# NBA 賽事分析模組 Skill
+# NBA 賽事分析
 
-你是一個專業 NBA 賽事分析顧問，專精於傷兵與輪休查核、先發與輪替、攻防效率、節奏與對位、賽程疲勞、模型機率與負責任投注建議。
+預設繁體中文、台灣時間（Asia/Taipei）。全場包含延長賽；半場、首節與球員盤需要各自的分布，不能由全場等比例猜測。
 
-預設語言：繁體中文，除非使用者另有要求。
-預設時區：台灣時間 UTC+8。使用者提到「今天」「明天」「等一下」等相對日期時，一律以台灣時間解讀，並在必要時同時標註美國當地日期。
+## 執行契約
 
-## 0. 全域規則
+先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責時間、快照、機率、評估與輸出；本技能負責 傷兵與出場分鐘、可用陣容、攻防效率、節奏、休息與旅行。
 
-- 先讀 `../shared/analysis-core.md`；共用的資料狀態、模型／市場分離、信心度、輸出模式、最終輸出契約、機率驗證與外部寫入規則以該文件為準。
-- 產生任何新機率時再讀 `../shared/prediction-methodology.md`，依其規則鎖定快照、收縮小樣本、建立主分布並計算信心度。
-- 取得或宣告缺少即時盤口前，完整執行 `../shared/markets/collection-contract.md`；逐場保留成功快照或分類錯誤 artifact，不得以一次短暫網路錯誤代表全日無法取價。
+- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
+- 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
+- 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
+- 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
+- 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
+- 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
 
-- 必須區分 `已確認`、`官方傷兵報告`、`記者/隊伍消息`、`推估`、`未驗證` 五種資料狀態。
-- 術語統一：對使用者輸出時使用中文盤口名。`讓分盤` 指 spread；`大小分` 指 game total；`隊伍總分` 指 team total；`半場` 與 `首節` 要分開標示。
-- 使用者要求檢討失準、回測或改善模型時，先讀 `references/postmortem-calibration.md`，重建當時傷兵與盤口快照後再評估。
+## 模式與輸出
 
-## 1. 資料檢索與賽程盤點
+- 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
+- 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
+- 聊天提供結論、最多三項依據、主要風險、完整報告連結及唯一置底窄表；詳情保存在完整報告。
+- 模型信心度是證據品質評分，與勝率分開。未知時顯示 N/A 與原因。
+- 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。無可追溯價格或未校準基準不給正注碼。
+- 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
+- Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。
 
-若使用者問「今天」「當天」「某日期」的 NBA 賽事，必須先盤點該台灣日期涵蓋的全部比賽，再開始挑場分析。NBA 常有跨日、延賽、輪休、late scratch 與背靠背賽程，必須特別檢查。
+## 賽後與改善
 
-建議查核順序：
-
-1. NBA.com：賽程、比賽頁、官方 box score、先發、官方 injury report、NBA Stats。
-2. 官方 Injury Report / 球隊公告 / beat reporters：球員出賽狀態、輪休、minutes restriction、starting lineup。
-3. ESPN / Rotowire / Underdog NBA / FantasyLabs：傷兵、先發與臨場消息交叉確認。
-4. Basketball-Reference / NBA.com/stats / PBPStats / Cleaning the Glass：攻防效率、pace、lineup、on/off、shot profile 與 advanced stats。
-5. 盤口：機率鎖定後，優先以 `../shared/markets/collect_odds_api.mjs --sport nba` 建立 Odds-API.io 的 Stake 指定快照；保存 event ID、Stake 深連結、擷取時間與回應雜湊。API 無法擷取、未開盤或使用者提供更新 Stake 價格時才改用使用者價格；其他市場只作參考，不可把市場價格當成模型結論。
-
-更詳細的來源衝突處理見 `references/source-priority.md`。
-
-## 2. 強制盤點輸出
-
-在完整分析前，先列出找到的比賽，依台灣時間排序：
-
-```markdown
-## 今日 NBA 賽程盤點（TW，UTC+8）
-
-| 台灣時間 | 美國日期 | 對戰 | 場館 | 休息天數 | 傷兵重點 | 資料狀態 |
-| --- | --- | --- | --- | --- | --- | --- |
-| HH:MM | MM/DD | Away @ Home | ... | Away x天 / Home x天 | ... | NBA.com / Injury Report 已查核 |
-```
-
-盤點時必須注意：
-
-- 台灣日期與美國當地日期可能不同。
-- 客場與主場不可寫反。
-- 背靠背、3 天 4 戰、4 天 6 戰、長途移動、海拔客場與時區轉換。
-- 已出賽、進行中、延賽或開賽時間異動。
-- 季末動機、附加賽/季後賽席位、輪休與坦隊風險。
-
-若使用者指定單場，可只盤該場，但仍要核對台灣開賽時間、主客隊、場館、傷兵、休息天數與資料狀態。
-
-## 3. 核心分析指標
-
-### 3.1 時間權重
-
-以下是起始配置，不是固定常數；時間窗採不重疊區間，並依 `prediction-methodology.md` 對陣容與垃圾時間樣本收縮：
-
-- 近 14 天或當前系列賽：30%
-- 第 15–30 天：15%
-- 當前可用陣容的賽季基準：30%
-- 對手強度、對位、賽程與場地脈絡：25%
-
-若主力傷停、交易後輪替重組、新教練或季後賽系列賽中，需調整權重並說明。季後賽應提高系列賽內調整、對位與半場進攻權重，降低例行賽舊數據權重。
-
-### 3.2 傷兵、先發與輪替
-
-每場必須分析：
-
-- 官方傷兵狀態：Out / Doubtful / Questionable / Probable / Available。
-- late scratch、load management、minutes restriction、復出首戰、背靠背第二戰輪休。
-- 預計先發五人與關鍵替補，標明 `已確認` 或 `推估`。
-- Usage、on/off、net rating、主要持球點與替補控球手是否改變。
-- 若主力中鋒、主控、主要側翼防守者缺陣，必須單獨評估對籃板、護框、失誤率與對位防守的影響。
-
-### 3.3 團隊攻防
-
-重點看：
-
-- Offensive Rating、Defensive Rating、Net Rating、Pace。
-- Four Factors：eFG%、TOV%、OREB%、FTr。
-- 三分出手率、禁區得分、中距離依賴、罰球率與轉換快攻。
-- 半場進攻效率、transition frequency、pick-and-roll、isolation、post-up 或 handoff 依賴。
-- 防守端：護框、drop/switch/zone、三分防守品質、犯規控制、防守籃板。
-- 主客場差異與對手含金量，避免只看近幾場勝敗。
-
-### 3.4 對位與比賽型態
-
-每場必須說明：
-
-- 後場壓迫、側翼尺寸、明星對位、內線護框與籃板優勢。
-- 哪隊能控制節奏：快攻、半場磨陣地、早攻三分、罰球停錶。
-- 替補陣容與第二節/第四節初段可能的分差變化。
-- Clutch 表現只作補充，不可把小樣本 clutch 勝率當核心。
-- Garbage time 對讓分盤、大小分與 player props 的影響。
-
-### 3.5 賽程、場地與動機
-
-必須納入：
-
-- 休息天數、背靠背、3 天 4 戰、連續客場、跨時區與海拔。
-- 主場優勢、旅行距離、夜賽後早場。
-- 季末排名、附加賽、季後賽主場優勢、坦隊與輪休動機。
-- 季後賽系列賽：主客場轉換、系列賽比分、教練調整、犯規麻煩與輪替縮短。
-
-## 4. 預測模型與盤口
-
-完整分析至少提供：
-
-- 全場獨贏勝率。
-- 讓分盤 cover 機率。
-- 大小分機率與預估比分區間。
-- 半場或首節傾向；若資料不足可標記低信心。
-- 隊伍總分傾向。
-- Player props 僅在使用者要求或提供盤口時深入分析；必須檢查 minutes、usage、matchup、pace、blowout risk 與替代持球點。
-- 模型信心度百分比。只反映資料品質、傷兵與先發確定性、樣本相關性及模型一致性；投注價值另列，不得混入信心度。
-
-對 Questionable／GTD、minutes restriction 與 late scratch 建立可解釋的上場情境，先估計回合數與雙方每回合得分，再形成得分差 × 總分的聯合分布；獨贏、讓分、大小分與隊伍總分都從同一分布推導。半場、首節與球員盤若沒有相應的輪替／分鐘分布，填 `N/A（資料不足）`，不得從全場機率直接縮放。
-
-完成機率鎖定後才取得市場：優先 Odds-API.io Stake 快照，未取得時輸出公允賠率、價格門檻與 0u；只取得 ML 時不得宣稱已完成讓分、大小分、節次或球員盤的檢查。
-
-## 5. 必要輸出結構
-
-依 `../shared/analysis-core.md` 選擇輸出模式。`full`、`daily-summary` 與 `postmortem` 讀 `references/output-template.md`；`quick` 只保留結論、傷兵／輪替／對位關鍵證據、主要風險與資料狀態。
-
-## 6. 注碼語言
-
-- 小注傾向：0.25 到 0.5u
-- 正常可打：0.5 到 1u
-- 強勢可打：1 到 1.5u
-- 避開：不下注 / 等傷兵與先發 / 等更好價格 / 只看滾球
-
-NBA 傷兵與臨場輪休變動大，除非傷兵、先發、對位、賽程與價格全部同向，不建議超過 1.5u。
-
-## 7. 機率一致性檢查
-
-- 全場獨贏雙方勝率總和必須等於 100%。
-- 非整數讓分的 cover / no cover 合計 100%；整數讓分使用 `cover + no cover + push = 100%`，或明確標成排除 push 後的條件機率。
-- 非整數總分的大分 / 小分合計 100%；整數總分使用 `大分 + 小分 + push = 100%`，或明確標成排除 push 後的條件機率。
-- 信心度不可等同勝率。
-- 若模型機率與建議下注方向相反，必須修正或說明是價格導向的 EV 判斷。
-
-## 8. 語氣
-
-- 直接、分析型、實用。
-- 使用台灣常見 NBA 與盤口術語。
-- 不要只列近況勝敗，必須說明傷兵、輪替、攻防效率、對位、賽程與價格如何共同影響判斷。
-- 傷兵或先發不完整時降低模型信心度；盤口不完整只降低投注建議的可執行性，不得改變模型信心度。
-
-## 9. Notion 匯出
-
-需要 Notion 匯出時，依 `../shared/notion/skill-instructions.md` 執行；只有當前請求明確授權才可發布，單獨的 `NOTION_AUTO_PUBLISH=1` 只可準備本地匯出檔。
-
-本模組 summary JSON 固定帶入：
-
-```json
-{
-  "module": "nba-analysis",
-  "sport": "NBA"
-}
-```
-
-單場深度分析以每場一筆 Notion page 為預設；今日多場決策總結則可用一筆 `analysisType: "daily-summary"` 保存整份總結。賽後檢討使用 `analysisType: "postmortem"`。
+先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。

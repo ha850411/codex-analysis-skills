@@ -1014,6 +1014,7 @@ def finalize_prediction(output_dir: Path, target: str) -> str:
     ])
     validate_notion_summary(output_dir / "notion-summary.json")
     run(["node", "shared/validate_probabilities.mjs", str(output_dir / "probability-checks.json")])
+    run([sys.executable, "shared/forecast/bridge.py", "--sport", "lol", "--run-dir", str(output_dir), "--module-state-dir", str(STATE_ROOT)])
     notion_url = publish_to_notion(output_dir)
     notify_by_email(output_dir, target, notion_url)
     write_status(

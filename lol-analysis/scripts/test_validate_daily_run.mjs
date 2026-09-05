@@ -6,7 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { validateDailyRun } from "./validate_daily_run.mjs";
+import { validateDailyRun, winnerFromScoreDistribution } from "./validate_daily_run.mjs";
+
+assert.equal(winnerFromScoreDistribution({ "2-0": 0.27, "2-1": 0.26, "1-2": 0.40, "0-2": 0.07 }), 0);
+assert.equal(winnerFromScoreDistribution({ "2-0": 0.2, "1-1": 0.6, "0-2": 0.2 }), null);
 
 const matchKey = "bo3:daily-1";
 const start = "2026-08-17T16:00:00+08:00";

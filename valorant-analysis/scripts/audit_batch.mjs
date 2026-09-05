@@ -174,6 +174,9 @@ const output = {
   matches: matchAudits,
   summary: {
     match_count: count,
+    objective: "winner_accuracy_then_exact_score",
+    winner_accuracy: round(winnerCorrect / count),
+    exact_score_accuracy: round(exactScoreCorrect / count),
     winner_correct: winnerCorrect,
     exact_score_correct: exactScoreCorrect,
     winner_brier: round(winnerBrier / count),

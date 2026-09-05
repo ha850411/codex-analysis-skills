@@ -12,6 +12,27 @@ import pipeline
 
 
 class PipelineUnitTests(unittest.TestCase):
+    def test_computed_forecast_is_locked_across_model_stages(self) -> None:
+        import sys
+        sys.path.insert(0, str(pipeline.ROOT.parent))
+        from shared.forecast.fixtures import event, history
+        from shared.forecast.models import train
+        from shared.forecast.cli import forecast
+        from shared.forecast.pipeline_adapter import pipeline_input
+        e = event()
+        source = pipeline_input(forecast(train(history(), "lol", e["data_cutoff"]), e))
+        self.assertEqual(pipeline.validate_input(source), [])
+        primary = {"prediction_id": source["prediction_id"], "probability_groups": source["model_data"]["computed_probability_groups"], "key_factors": []}
+        self.assertEqual(pipeline.cross_validate(source, primary), [])
+        import copy
+        changed = copy.deepcopy(primary)
+        changed["probability_groups"][0]["outcomes"][0]["probability"] += 1
+        self.assertTrue(any("differs from computed" in x for x in pipeline.cross_validate(source, changed)))
+
+    def test_malformed_computed_groups_are_validation_errors(self) -> None:
+        errors = pipeline.cross_validate({"model_data": {"computed_probability_groups": [{}]}})
+        self.assertTrue(any("invalid computed" in x for x in errors))
+
     def complete_review(self) -> dict:
         return {
             "schema_version": "1.0",
@@ -497,7 +518,7 @@ class PipelineUnitTests(unittest.TestCase):
         errors = pipeline.cross_validate(input_data, primary, review, final)
         self.assertTrue(any("red-team findings not adjudicated" in error for error in errors))
         self.assertTrue(any("question_resolutions" in error for error in errors))
-        self.assertTrue(any("report collapsed" in error for error in errors))
+        self.assertTrue(any("missing required coverage" in error for error in errors))
 
         final["accepted_findings"] = ["f1"]
         final["finding_adjudications"] = [{
@@ -512,7 +533,7 @@ class PipelineUnitTests(unittest.TestCase):
             "response": "缺少資料",
             "impact": "降低信心",
         }]
-        final["presentation"]["analysis_sections"][0]["markdown"] = "甲" * 70
+        final["presentation"]["analysis_sections"][0] = {"heading": "完整分析", "markdown": "資料不足；保留原限制。"}
         self.assertEqual(pipeline.cross_validate(input_data, primary, review, final), [])
 
     def test_export_keeps_full_red_team_review_in_json_and_only_lists_changes_in_markdown(self) -> None:

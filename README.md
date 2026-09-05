@@ -4,6 +4,23 @@ AI 驅動的體育賽事與電競分析技能集（Sports & Esports Analytics Sk
 
 ## 📌 專案目錄結構
 
+### 預測核心 v2
+
+七個賽事 skills 共用 [預測契約](shared/forecast/contract.md) 與 [報告模板](shared/forecast/report-template.md)。勝方命中優先、比分次之；基準／實驗／正式模型分開，歷史快照不可覆寫。新增工具不會啟用其他排程、呼叫市場、寄信或發布。
+
+重構範圍、測試結果與尚待驗證事項見 [v2 工程驗收紀錄](shared/evals/refactor-v2-report.md)。
+
+```bash
+python3 shared/forecast/examples.py --output-dir .runs/forecast-preview
+python3 shared/forecast/cli.py train history.json --sport lol --cutoff 2026-09-05T10:00:00+08:00 --output model.json
+python3 shared/forecast/cli.py predict event.json --model model.json --output forecast.json
+python3 shared/forecast/cli.py record forecast.json
+python3 shared/forecast/cli.py render forecast.json --output-dir .runs/forecast-report
+python3 -m unittest shared.forecast.test_forecast
+```
+
+`examples.py` 僅產生合成排版示例，不能用來預測真實賽事。模型的領域數值因子須具賽前資料與登錄定義；缺資料保留基準限制。工程驗收不等於已提升命中率，升版必須另有配對樣本外證據。MLB／LoL 既有排程在發布前封存原始報告及預測，賽後將結果接回共用評分格式。
+
 ```text
 .agents/skills/
 ├── mlb-analysis/          # MLB 美國職棒分析模組

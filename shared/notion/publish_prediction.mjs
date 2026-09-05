@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const API_BASE = "https://api.notion.com/v1";
 const DEFAULT_NOTION_VERSION = "2026-03-11";
@@ -536,6 +537,11 @@ function shouldRenderTableAsCards(parsed, tableLayout) {
   }
   if (tableLayout === "cards") {
     return true;
+  }
+  if (parsed.width === 5 && ["比賽", "核心預測", "模型信心度", "建議", "核心風險"].every(
+    (label, index) => compactTableCell(parsed.rows[0][index]) === label,
+  )) {
+    return false;
   }
 
   const hasLongCell = bodyRows.some((row) =>
@@ -1191,7 +1197,12 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.message}\n`);
-  process.exitCode = 1;
-});
+export { markdownToBlocks, shouldRenderTableAsCards };
+
+const invokedPath = process.argv[1] ? await fs.realpath(process.argv[1]).catch(() => null) : null;
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+  main().catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
+}
