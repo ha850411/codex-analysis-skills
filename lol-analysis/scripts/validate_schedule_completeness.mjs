@@ -162,6 +162,72 @@ function assertSameSet(left, right, label) {
   }
 }
 
+function provenance(sourceSet, label, windowStart, windowEnd) {
+  for (const [field, expected] of [["coverage_start", windowStart], ["coverage_end", windowEnd]]) {
+    if (timestamp(sourceSet[field], `${label}.${field}`) !== expected) {
+      fail(`${label}.${field} must cover the full report window`);
+    }
+  }
+  nonemptyString(sourceSet.evidence_note, `${label}.evidence_note`);
+  const providers = stringList(sourceSet.provider_ids, `${label}.provider_ids`);
+  if (providers.some((id) => !/^[a-z0-9][a-z0-9-]*$/.test(id))) {
+    fail(`${label}.provider_ids must use canonical lowercase IDs`);
+  }
+  const host = new URL(sourceSet.source).hostname.toLowerCase().replace(/^www\./, "");
+  const families = { "fandom.com": "leaguepedia", "liquipedia.net": "liquipedia", "op.gg": "opgg" };
+  const ids = new Set(providers);
+  ids.add(`host:${host}`);
+  for (const [domain, provider] of Object.entries(families)) {
+    if (host === domain || host.endsWith(`.${domain}`)) ids.add(provider);
+  }
+  return ids;
+}
+
+function validateMultiSource(payload, targetLeagues, windowStart, windowEnd) {
+  if (!Array.isArray(payload.primary_sets) || payload.primary_sets.length === 0) {
+    fail("primary_sets must contain at least one primary league set");
+  }
+  if (!Array.isArray(payload.official_checks) || payload.official_checks.length === 0) {
+    fail("official_checks must document official availability or announcements");
+  }
+  const checked = new Set();
+  for (const check of payload.official_checks) {
+    object(check, "official check");
+    if (!targetLeagues.includes(check.league)) fail("official check has non-target league");
+    nonemptyString(check.source, "official check source");
+    timestamp(check.checked_at, "official check checked_at");
+    nonemptyString(check.note, "official check note");
+    if (!["consistent", "missing", "unavailable", "stale", "conflict"].includes(check.status)) {
+      fail("invalid official check status");
+    }
+    if (check.status === "conflict") fail("unresolved official announcement conflict");
+    checked.add(check.league);
+  }
+  const primaryProviders = new Map();
+  const primaryMatches = payload.primary_sets.flatMap((sourceSet, index) => {
+    const label = `primary_sets[${index}]`;
+    const league = sourceSet?.league;
+    if (!targetLeagues.includes(league)) fail(`${label} has non-target league`);
+    const matches = validateSourceSet(sourceSet, label, "primary_league", windowStart, windowEnd, league);
+    const ids = provenance(sourceSet, label, windowStart, windowEnd);
+    const existing = primaryProviders.get(league) || new Set();
+    for (const id of ids) existing.add(id);
+    primaryProviders.set(league, existing);
+    return matches;
+  });
+  for (const league of targetLeagues) {
+    if (!primaryProviders.has(league)) fail(`primary coverage is missing target league ${league}`);
+    if (!checked.has(league)) fail(`official checks are missing target league ${league}`);
+  }
+  for (const [index, sourceSet] of payload.independent_coverage.entries()) {
+    const ids = provenance(sourceSet, `independent_coverage[${index}]`, windowStart, windowEnd);
+    if ([...ids].some((id) => primaryProviders.get(sourceSet.league).has(id))) {
+      fail(`sources must have independent operators and upstream providers for ${sourceSet.league}`);
+    }
+  }
+  return primaryMatches;
+}
+
 export function validateSchedule(payload) {
   object(payload, "root");
   if (payload.schema_version !== 2) fail("schema_version must be 2");
@@ -184,10 +250,12 @@ export function validateSchedule(payload) {
   stringList(payload.added_matches, "added_matches", true);
   stringList(payload.removed_candidates, "removed_candidates", true);
 
-  if (!Array.isArray(payload.official_sets) || payload.official_sets.length === 0) {
+  const mode = payload.verification_mode ?? "official_crosscheck";
+  if (!["official_crosscheck", "multi_source_crosscheck"].includes(mode)) fail("invalid verification_mode");
+  if (mode === "official_crosscheck" && (!Array.isArray(payload.official_sets) || payload.official_sets.length === 0)) {
     fail("official_sets must contain at least one official global set");
   }
-  const officialMatches = payload.official_sets.flatMap((sourceSet, index) =>
+  const officialMatches = mode === "multi_source_crosscheck" ? [] : payload.official_sets.flatMap((sourceSet, index) =>
     validateSourceSet(
       sourceSet,
       `official_sets[${index}]`,
@@ -231,11 +299,14 @@ export function validateSchedule(payload) {
     if (!targetLeagues.includes(league)) fail(`matches contains non-target league ${league}`);
   }
 
-  const officialMap = toMap(officialMatches, "official_sets");
+  const referenceMatches = mode === "multi_source_crosscheck"
+    ? validateMultiSource(payload, targetLeagues, windowStart, windowEnd)
+    : officialMatches;
+  const referenceMap = toMap(referenceMatches, mode === "multi_source_crosscheck" ? "primary_sets" : "official_sets");
   const independentMap = toMap(independentMatches, "independent_coverage");
   const finalMap = toMap(finalMatches, "matches");
-  assertSameSet(officialMap, independentMap, "official and independent unions");
-  assertSameSet(officialMap, finalMap, "verified schedule and source unions");
+  assertSameSet(referenceMap, independentMap, "reference and independent unions");
+  assertSameSet(referenceMap, finalMap, "verified schedule and source unions");
   return payload;
 }
 

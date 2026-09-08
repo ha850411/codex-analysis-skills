@@ -3,8 +3,8 @@
 ## 優先順序
 
 1. 賽程來源
-   - Riot／各賽區官方賽程確認官方場次與改期；跨賽區日報使用能涵蓋整個視窗的全域／多賽區官方清單。
-   - Leaguepedia（`lol.fandom.com`）、Liquipedia 或 OP.GG Esports 作為不同營運方的獨立來源；可用單一全域清單，或以逐聯賽頁面組成 coverage group，其聯集核對完整集合、階段與格式。
+   - 主動並查 Riot／賽區官方與 LoL Fandom／Leaguepedia（`lol.fandom.com` 的賽事、賽程或 Match History 頁），再用 Liquipedia、OP.GG Esports 或其他有事件資料的獨立來源交叉確認。Fandom 若轉址，保留實際 URL；無法讀取時記錄原因並改查其他來源，不停在 Riot 空頁。
+   - 官方明確的改期、取消與賽制公告優先；官方前端漏列、TBD、空回應或快取落後不代表沒有比賽，也不自動否定已被兩個獨立來源確認的場次。可由逐聯賽頁面拼成使用者指定範圍，不要求一定有單一官方全域清單。
    - bo3.gg 提供候選賽程、provider Match ID 與比賽頁對照；官方前端更新延遲時，也可作已解析對戰索引。不得標成官方來源，也不得單獨決定完整集合。
    - 官方 bracket 與已完成前序賽果已唯一決定參賽者、bo3.gg 顯示同一對戰，且至少一個非 bo3 即時事件來源以事件 ID、時間與賽制交叉吻合時，可把 Riot 前端 placeholder 解析為 `resolved_from_bracket`。這是可稽核的降級路徑，不是把 bo3.gg 升格為官方來源。
 
@@ -37,12 +37,14 @@
 
 - 如果陣容或先發資料衝突，採用時間較新且更接近當場的官方公告；若只有社群 wiki，列出差異並降低信心度。
 - 如果賽程時間衝突，全部轉換為台灣時間，並說明採用的來源。
-- `daily-summary` 必須由官方全域來源列出整個視窗的 S-Tier 事件鍵集合；獨立側可用全域來源，或將逐聯賽頁面組成 coverage group。每個聯賽頁只貢獻自身子集合，獨立來源聯集必須精確等於官方集合。只查單一聯賽、聯集不完整，或來源場數／對戰組合不一致且無法消解時，停止預測與發布。
-- 官方與獨立集合都要保存逐場身分，不得只保存來源 URL 或場數。每筆必須包含 `match_key`、UTC+8 時間、聯賽、階段、賽制、雙方隊名與參賽者狀態。一般情況使用 `participant_status=confirmed`；官方前端仍為 `TBD`、條件式排名賽或 placeholder 時，只有在官方 bracket／前序賽果能唯一解析，且 bo3.gg 與至少一個非 bo3 即時事件來源完全交叉吻合時，才可使用 `participant_status=resolved_from_bracket`。否則仍只能保留為候選。
-- bo3.gg 不得計入上述獨立 coverage group。寫入 `complete=true` 前，先排除所有 bo3.gg 子集合，再確認每個目標聯賽都有 Leaguepedia、Liquipedia、OP.GG Esports、具事件 ID 的盤口供應商或其他不同營運方的獨立子集合，且其聯集等於官方集合。採用 `resolved_from_bracket` 時，獨立 coverage 不得與 `resolution_evidence.candidate_url` 使用相同營運方。
+- 賽程 schema v2 支援兩條驗證路徑。`verification_mode=official_crosscheck`（舊檔省略此欄亦同）保留 `official_sets` 與 `independent_coverage` 的聯集比對。`verification_mode=multi_source_crosscheck` 以 `primary_sets` 與 `independent_coverage` 的聯集比對；優先以 Leaguepedia 為主集合，另一側用不同營運方且不同資料上游的來源。兩側都須逐一覆蓋 `target_leagues` 及完整台灣日期視窗。只有使用者指定 LPL 時就只驗證 LPL，不擴張為所有賽區。
+- 多來源路徑不要求 Riot 完整集合，也不把社群站標成官方。`primary_sets[]` 使用 `role=primary_league`；與 `independent_coverage[]` 一樣保存 `league`、`source`、`checked_at`、`coverage_start`、`coverage_end`、`provider_ids`、`evidence_note`、`matches`。`provider_ids` 列所有已知資料上游的固定小寫 ID，例如 `leaguepedia`、`liquipedia`、`pandascore`；直接自採來源列自身營運方。`evidence_note` 說明資料來自何處、頁面覆蓋及去重方式；無法判定上游獨立性時補查另一來源。Leaguepedia 的鏡像、轉載或引用其資料的聚合站不能算第二份獨立證據。來源標籤及算術驗證不能替代實際讀取。
+- 多來源路徑保存 `official_checks[]`：每個目標聯賽至少一筆 `league`、`source`、`checked_at`、`status`、`note`，狀態為 `consistent`、`missing`、`unavailable`、`stale` 或 `conflict`。有可讀的明確官方改期／取消衝突時，先消解並重新建集合；不得把此類衝突寫成 stale 來繞過。單純缺場記為 missing，可在雙獨立集合一致後繼續。發布／更新時間未知時留 null，查核時間不能冒充公告時間。
+- 兩側集合都保存逐場身分，不得只保存 URL 或場數。每筆包含 `match_key`、UTC+8 `start`、`league`、`stage`、`format`、`team1`、`team2` 與 `participant_status`。兩個獨立來源已明確列出相同雙方時使用 `confirmed`，意指賽程身分已交叉確認，不等同官方先發確認。仍需由 bracket 推導時沿用 `resolved_from_bracket` 與解析證據；未能唯一解出雙方則保留候選，不猜隊名。
+- bo3.gg 保留候選與比賽索引用途，不計入任一完整性驗證側。兩側聯集與最終去重集合必須一致，且不可漏掉目標聯賽；同場不同 provider ID、隊名順序或輪次翻譯先正規化，保留原值及映射，不重複計場。真正的時間、隊伍或賽制衝突未消解時，才停止鎖定預測。
 - 外層預查清單只是候選集合。交叉來源找到額外目標賽事時必須補入；若無法建立可重現的 `match_key`，標記驗證失敗並等待重查。
-- bo3.gg 沒有 Match ID 但官方與獨立來源都確認場次時，不得漏場；改用技能規定的穩定 `match_key`，並明示 `bo3_match_id=null` 與上游資料缺口。
-- 「沒有比賽」也必須由官方來源與獨立來源共同支持，不能依單一空回應直接跳過。
+- bo3.gg 沒有 Match ID 但任一驗證路徑已確認場次時，不得漏場；改用穩定 `lol:<league>:<YYYYMMDDTHHMM+0800>:<team1>:<team2>`，並明示 `bo3_match_id=null` 與上游資料缺口。
+- 「沒有比賽」也須由所選路徑兩側的完整日期覆蓋支持。錯誤、載入中、空回應不能當作已確認的空賽程；跨聯賽逐一驗證，不能以某聯賽休賽代表全日休賽。
 - 新日報使用 schedule schema v2 並執行 `node lol-analysis/scripts/validate_schedule_completeness.mjs <schedule-verification.json>`；legacy schema 只可做歷史稽核，不得支撐新的 `complete=true`。
 - 如果版本資料缺失，只能謹慎根據賽事規則/日期推論，並標記為未確認。
 - 永遠不要捏造先發。只有存在可信輪替候選、近期實際換人或來源缺口時才使用「尚未確認」；通過 `established` 閘門者統一寫「固定先發（已核實；非臨場公告）」。LoL Fandom／Leaguepedia roster 單獨不足以確認，但也不得忽略最近兩個正式系列的固定實戰五人。

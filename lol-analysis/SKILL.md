@@ -11,7 +11,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責時間、快照、機率、評估與輸出；本技能負責 逐聯賽版本、最近正式系列實際五人、選邊、BP 與同賽事內容。
 
-- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
+- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。賽程主動查 LoL Fandom／Leaguepedia，搭配官方與其他獨立來源；Riot 漏列、TBD 或無法讀取時，依 source-priority 的多來源路徑繼續，不把官方頁完整返回當成唯一通行條件。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
 - 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
