@@ -52,6 +52,15 @@
 
 LAN 表現、online ping、跨洲旅行、簽證與時差都可能影響判斷。
 
+## 滾球與即時數據（Live In-Play Data）
+
+1. HLTV Live Scorebot 與主辦方官方 Server API
+2. 賽事官方轉播或主辦方無延遲 Clean Feed
+3. 比分即時網站（Sofascore、Strafe、Flashscore）
+4. 即時盤口更新（Stake live odds、Odds-API live streams）
+
+注意：官方與社群轉播普遍存在 15–30 秒直播延遲（Broadcast Delay）。嚴禁依據直播畫面中未分勝負的交火提前判定局勢；必須以 Scorebot 完整回合結束（Round Ended）並結算經濟與生還人數為準。
+
 ## 盤口
 
 1. Odds-API.io 的 Stake bookmaker 指定快照（`shared/markets/collect_odds_api.mjs --sport esports`）

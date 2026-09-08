@@ -1,6 +1,6 @@
 ---
 name: cs-analysis
-description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、地圖池、veto、系列賽機率、盤口價值與賽後校準。用於 CS2、Counter-Strike、HLTV 對戰、BO3／BO5、至少一圖、總地圖數與今日賽事決策；不要用於遊戲安裝、設定、一般玩法或非賽事問題。預設繁體中文與台灣時間。"
+description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、地圖池、veto、系列賽機率、盤口價值、賽中滾球（live in-play）動態重估與賽後校準。用於 CS2、Counter-Strike、HLTV 對戰、BO1／BO3／BO5、即時比分與經濟滾球、至少一圖、總地圖數與今日賽事決策；不要用於遊戲安裝、設定、一般玩法或非賽事問題。預設繁體中文與台灣時間。"
 ---
 
 # Counter-Strike 賽事分析
@@ -14,13 +14,14 @@ description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、�
 - 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
 - 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
+- 滾球（Live In-Play）動態分析：比賽開打後，依據即時系列賽與單圖比分（MR12／OT）、半場攻守換邊（Side Bias）、手槍局與次輪抗強起轉化、即時經濟與連敗補貼階梯（Loss Bonus $1400–$3400、存槍數量）動態重構系列賽比分主分布與勝率。快照命名採用 `live-m{X}-r{Y}`、`live-post-m{X}` 或 `live-halftime`，`data_cutoff` 為當前即時回合確認時間，`eligibility` 依共用契約標記為 `reconstructed_after_start` 或特定局前瞻，不偽裝為賽前 prospective。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
 - 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
 
 ## 模式與輸出
 
-- 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
+- 單一追問預設 quick；滾球分析預設 live（以當前即時局勢重構勝率，保持文字精簡）；新機率仍須驗證與快照。
 - 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
 - 聊天提供結論、最多三項依據、主要風險、完整報告連結及唯一置底窄表；詳情保存在完整報告。
 - 模型信心度是證據品質評分，與勝率分開。未知時顯示 N/A 與原因。
