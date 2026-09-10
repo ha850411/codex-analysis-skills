@@ -13,6 +13,8 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 - 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。賽程主動查 LoL Fandom／Leaguepedia，搭配官方與其他獨立來源；Riot 漏列、TBD 或無法讀取時，依 source-priority 的多來源路徑繼續，不把官方頁完整返回當成唯一通行條件。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
+- LCK CL／二級聯賽、已知換人或重寫既有報告時，讀 `references/roster-baseline-audit.md`；核對歷史陣容可比性、模型實際輸入與重寫前後的證據差異。
+- 每場預測必須交付明確勝方與勝率、比分眾數與機率、數字信心度。資料不完整時先讀 `references/forecast-fallback.md`，使用可重播的未校準基準完成預測；投注可為 0u，但不能用觀察建議取代預測。真正無法辨識賽事或缺乏最低建模資料時才例外，不得捏造數字。
 - 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
@@ -24,7 +26,7 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 - 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
 - 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
 - 聊天提供結論、最多三項依據、主要風險、完整報告連結及唯一置底窄表；詳情保存在完整報告。
-- 模型信心度是證據品質評分，與勝率分開。未知時顯示 N/A 與原因。
+- 模型信心度是證據品質評分，與勝率分開。每場按五項證據獨立評分；資料缺失是低分的依據，不等於無法評分。只有符合降級契約的真正未建模場次才顯示 N/A 與具體原因。
 - 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。無可追溯價格或未校準基準不給正注碼。
 - 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
 - Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。

@@ -1,6 +1,6 @@
 # 預測證據與時點資格閘門
 
-`full` 與 `daily-summary` 在鎖定機率前執行本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、候選因子滲入正式集成、模型機率方向不明、比分主分布無法由逐局條件重算、摘要漂移，以及把開賽後重建混入正式賽前績效。新快照使用 schema v7；v1–v6 只供既有歷史 artifact 重播。
+本文件是 **legacy v7 完整流程** 的證據閘門；採該流程的 `full` 與 `daily-summary` 在鎖定機率前執行。共用 v2 基準使用 `forecast-fallback.md` 的計算、驗證與輸出路徑，不要求補造 v7 集成或情境，也不宣稱通過本閘門。目標是防止跨聯賽／跨階段版本快取、舊名單覆蓋最近正式先發、近期狀態挑樣本、漏掉最可比的直接交手、候選因子滲入正式集成、模型機率方向不明、比分主分布無法由逐局條件重算、摘要漂移，以及把開賽後重建混入正式賽前績效。新快照使用 schema v7；v1–v6 只供既有歷史 artifact 重播。
 
 ## 1. 保存 evidence snapshot
 
@@ -55,7 +55,7 @@ node lol-analysis/scripts/validate_forecast_evidence.mjs <forecast-evidence.json
 1. 逐局檢查勝方、藍紅方、關鍵 BP、前期起手與收尾。
 2. 把弱方已成功的結構拆成可重複與不可重複；不把單次重擊／偷巴龍當成穩定路徑。
 3. 先以 `roster_comparison` 逐位置重算陣容可比性，再建立具名 `direct-rematch` 反模型，明示機率所屬隊伍、因子、production／shadow 模式與預定集成權重。本閘門不預設 H2H 權重或機械調整機率。
-4. 找到可比 H2H 卻沒有逐局證據時，停止新預測；來源無法存取時標記缺口、觸發非補償式信心上限，且不得宣稱高完整度。
+4. 找到可比 H2H 卻沒有逐局證據時，不得使用依賴該機制的 v7 完整預測；改依 `forecast-fallback.md` 發布共用 v2 基準勝率、比分與數字信心度。來源無法存取時保存缺口，不宣稱高完整度，不把缺少逐局資料解讀為禁止所有新預測。
 5. `factor-registry.json` 若仍把 `direct-rematch-mechanism-persistence` 列為 `candidate`，正式模型可把 H2H 作為收縮先驗，但不得以「上次成功機制必然延續」另加權；重賽後是否仍有效只進 shadow challenger，直到 paired walk-forward 通過升版門檻。
 
 ## 5. 集成可重播閘門
