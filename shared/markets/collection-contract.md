@@ -4,6 +4,7 @@
 
 ## 每場必做
 
+0. 執行收集前必須優先確認 repo 根目錄之 `.env` 存在（確保 `ODDS_API_KEY` 由收集器優先載入），嚴禁在未檢查或未載入 `.env` 前逕自假設無金鑰或宣告缺價。
 1. 對報告範圍內每一場尚未開賽的比賽，執行一次 `shared/markets/collect_odds_api.mjs`。不可因前一場失敗就跳過後續場次。
 2. 每次都傳入獨立 `--output` 與 `--error-output` 路徑。成功必須有 `status=success` 的快照；失敗必須有 `status=failed` 的錯誤憑證。
 3. 收集器預設對網路錯誤、HTTP 429 與可重試 5xx 最多嘗試三次。不可在第一次短暫錯誤後直接宣稱 API 無法使用。

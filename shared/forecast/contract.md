@@ -11,6 +11,8 @@
 
 目前共用基準是隊伍強度與得分環境模型，不代表已擁有完整選手、draft、傷兵或牛棚特徵。未實作的特徵列入 missing_data；資料到位後新增 candidate 並配對比較。不能用手工加減百分點填補模型缺口。
 
+LoL 另有明確隔離的分析者情境入口 `../../lol-analysis/scripts/analyst_forecast.py`，規則見 `../../lol-analysis/references/analyst-scenarios.md`。它以有來源與反證的主觀權重／單局率生成情境樹及混合分布，標 `parameter_source=analyst_elicited`、`status=experiment`，不修改比分基準、不冒充擬合因子或 production。使用者可獲得可檢驗的領域預測，但仍無正式投注資格；除共用驗證外須通過其專用重播驗證。此入口不改其他運動的模型與升版規則。
+
 挑戰版可用 `train --registry factor-registry.json` 擬合可觀察的數值因子。歷史列須有 started_at 與 feature_snapshot（available_at、evidence_ids、values）；時間必須早於開賽。event 的特徵引用必須對應 evidence。只使用 active/candidate，拒絕 retired 及市場因子；樣本不足則不擬合。參數、標準化與 registry hash 均寫入模型。候選參數只進 experiment，不影響正式版本。
 
 電競挑戰版另以歷史系列比分的訓練期 likelihood 選共同狀態幅度；以三點混合及逐路徑後驗生成條件樹。未知 best_of 或不足20場有效系列時維持獨立基準並揭露限制，不能用手工橫掃下限替代。

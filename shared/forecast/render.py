@@ -28,11 +28,25 @@ def label(r,side):
 def headline(r):
     if r["status"]=="unmodeled": return "無法產生預測"
     d=derive(r["score_distribution"])
-    return f"{label(r,d['winner_pick'])} {percentage(d['winner_probabilities'][d['winner_pick']])}；比分眾數 {d['score_mode']}（{percentage(d['score_mode_probability'])}）"
+    prefix=""
+    if r["sport"]=="lol":
+        if r.get("parameter_source")=="analyst_elicited": prefix="分析者情境估計："
+        elif r["status"]=="baseline": prefix="基準數值方向："
+    return prefix+f"{label(r,d['winner_pick'])} {percentage(d['winner_probabilities'][d['winner_pick']])}；比分眾數 {d['score_mode']}（{percentage(d['score_mode_probability'])}）"
 
 
 def confidence(r):
+    if r["sport"]=="lol" and r["confidence"]:
+        return f"{r['confidence']['value']}/100（證據品質）"
     return f"{r['confidence']['value']}%" if r["confidence"] else "N/A（缺評分依據）"
+
+
+def method_label(r):
+    if r["sport"]=="lol":
+        if r.get("parameter_source")=="analyst_elicited":
+            return "分析者情境估計（實驗，未實證校準）"
+        if r["status"]=="baseline": return "僅比分基準（未實證校準）"
+    return r["status"]
 
 
 def table(records):
@@ -63,24 +77,37 @@ def render(records,mode="full",report_link="prediction.md"):
     lines=["# 賽事預測","", "模型信心度是證據品質評分，不是命中機率。",""]
     for r in records:
         lines.extend([f"## {r['competition']}｜{' vs '.join(r['participants'])}","",headline(r),"",
-                      f"狀態：{r['status']}｜快照：{r['snapshot']}｜資料截止：{r['data_cutoff']}",""])
+                      f"方法：{method_label(r)}｜快照：{r['snapshot']}｜資料截止：{r['data_cutoff']}",""])
         for point in r.get("key_points",[])[:3]: lines.append(f"- {point}")
         lines.append("")
         if r["status"]!="unmodeled":
             d=derive(r["score_distribution"])
             if max(d["winner_probabilities"].values())-sorted(d["winner_probabilities"].values())[-2]<.001:
                 lines.extend(["勝負差距小於 0.1 個百分點，視為接近均勢。",""])
+            elif r["sport"]=="lol" and abs(d["winner_probabilities"]["a"]-d["winner_probabilities"]["b"])<.02:
+                # A presentation warning, not a calibration rule or a change to probabilities.
+                lines.extend(["兩隊勝率差距小於 2 個百分點，接近均勢；數值方向不代表已證明實質優勢。",""])
             a,b=score_pair(d["score_mode"])
             score_winner="a" if a>b else "b" if b>a else "draw"
             if score_winner!=d["winner_pick"]:
                 lines.extend(["勝方與比分眾數方向不同：分別由勝負總機率與單一比分峰值決定。",""])
             if len(d["score_ties"])>1 or len(d["winner_ties"])>1:
                 lines.extend(["存在並列最高結果；顯示值依固定順序選取，不代表唯一優勢。",""])
+            elif r["sport"]=="lol" and len(d["score_top3"])>1:
+                first,second=d["score_top3"][:2]
+                gap=r["score_distribution"][first]-r["score_distribution"][second]
+                if gap<.002:
+                    lines.extend([f"比分峰值接近：{first} 只比 {second} 高 {gap*100:.2f} 個百分點，不宜強調單一比分。",""])
             if mode=="full":
                 for section in r.get("analysis_sections",[]):
                     if "簡表總結" in section["heading"]+section["markdown"]:
                         raise ValueError("summary belongs to renderer")
                     lines.extend([f"### {section['heading']}","",section["markdown"],""])
+                if r["sport"]=="lol" and r.get("baseline_comparison"):
+                    base=r["baseline_comparison"]["derived"]
+                    lines.extend(["比分基準比較："+"；".join(
+                        f"{label(r,side)} {percentage(base['winner_probabilities'][side])}" for side in ("a","b"))+
+                        "。主情境估計另列如下；兩者未混合，也不以差距作為校準證據。",""])
                 lines.extend(["### 結果分布","","| 結果 | 機率 | 公允賠率 |","| --- | ---: | ---: |"])
                 for side,p in d["winner_probabilities"].items():
                     if p: lines.append(f"| {cell(label(r,side))} | {percentage(p)} | {1/p:.2f} |")
