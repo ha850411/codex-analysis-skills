@@ -64,7 +64,22 @@ def table(records):
             if instant(decision["market_expires_at"])<=datetime.now(timezone.utc):
                 advice="價格已過期；重新取價與決策，0u"
         risk="；".join(r.get("risks",[])[:1] or r["missing_data"][:1]) or "結果變異"
-        values=[f"{time} {' vs '.join(r['participants'])}",headline(r),confidence(r),advice,risk]
+        pred=headline(r)
+        if r["sport"]=="lol" and r["status"]!="unmodeled":
+            d=derive(r["score_distribution"])
+            bo=r.get("best_of")
+            extra=""
+            if bo==3:
+                extra=f"｜大2.5（各贏一局）{percentage(d['both_at_least_one'])}"
+            elif bo==5:
+                extra=f"｜大3.5（都贏一局以上）{percentage(d['both_at_least_one'])}"
+            p_a=percentage(d["winner_probabilities"]["a"])
+            p_b=percentage(d["winner_probabilities"]["b"])
+            prefix=""
+            if r.get("parameter_source")=="analyst_elicited": prefix="情境："
+            elif r["status"]=="baseline": prefix="基準："
+            pred=f"{prefix}{label(r,'a')} {p_a} vs {label(r,'b')} {p_b}（眾數 {d['score_mode']} {percentage(d['score_mode_probability'])}）{extra}"
+        values=[f"{time} {' vs '.join(r['participants'])}",pred,confidence(r),advice,risk]
         rows.append("| "+" | ".join(map(cell,values))+" |")
     return "\n".join(rows)
 
@@ -120,13 +135,28 @@ def render(records,mode="full",report_link="prediction.md"):
                 if len(shown)<len(keys): lines.append(f"| 其他比分 | {percentage(1-sum(scores[k] for k in shown))} |")
                 lines.append("")
                 if r["sport"] in {"lol","cs","valorant","dota2"} and r.get("best_of",1)>1:
+                    bo=r.get("best_of")
+                    both_label="雙方皆至少一局／圖"
+                    if r["sport"]=="lol":
+                        if bo==3:
+                            both_label="雙方各贏一場（大於 2.5 局／打滿三局）"
+                        elif bo==5:
+                            both_label="雙方皆贏一局以上（大於 3.5 局／拒絕橫掃）"
                     lines.extend(["| 衍生結果 | 機率 |","| --- | ---: |",
                                   f"| {cell(r['participants'][0])} 至少一局／圖 | {percentage(d['a_at_least_one'])} |",
                                   f"| {cell(r['participants'][1])} 至少一局／圖 | {percentage(d['b_at_least_one'])} |",
-                                  f"| 雙方皆至少一局／圖 | {percentage(d['both_at_least_one'])} |"])
+                                  f"| {both_label} | {percentage(d['both_at_least_one'])} |"])
+                    if r["sport"]=="lol" and bo==5:
+                        p_over_4_5=d["total_distribution"].get("5",0.0)
+                        lines.append(f"| 雙方皆贏兩局以上（大於 4.5 局／戰滿五局） | {percentage(p_over_4_5)} |")
                     lines.extend(["","| 系列總局數 | 機率 |","| --- | ---: |"])
                     for total,p in sorted(d["total_distribution"].items(),key=lambda item:int(item[0])):
-                        lines.append(f"| {total} | {percentage(p)} |")
+                        extra=""
+                        if r["sport"]=="lol":
+                            if bo==3 and total=="3": extra="（大 2.5／各贏一局）"
+                            elif bo==5 and total=="4": extra="（大 3.5）"
+                            elif bo==5 and total=="5": extra="（大 4.5／打滿五局）"
+                        lines.append(f"| {total}{extra} | {percentage(p)} |")
                 elif r["sport"] in {"mlb","nba","soccer"}:
                     total=d["total_distribution"];margin=d["margin_distribution"]
                     lines.extend(["| 得分指標 | 模型估計 |","| --- | ---: |",
