@@ -13,10 +13,12 @@ description: "分析 Valorant／特戰英豪電競賽事的賽程、陣容、版
 
 - 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
+- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
+- 聯合檢查逐圖五人、角色、特務組合與 veto 路徑；未展示或常 ban 的地圖保留未知性。先檢查樣本可比性與對手反制，不能為了避免全部預測2-1而改比分。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
 - 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
+- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport valorant`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
 - 舊快照：依 `references/forecast-snapshot.md` 重播，保留原 ID；新 v2 快照使用共用 record。
 
 ## 模式與輸出

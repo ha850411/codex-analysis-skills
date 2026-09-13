@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -180,6 +181,122 @@ class AnalystTests(unittest.TestCase):
             overwrite = subprocess.run(base+["build", str(src), "--output", str(dst)], capture_output=True)
             self.assertNotEqual(overwrite.returncode, 0)
             self.assertEqual(json.loads(dst.read_text())["generation_input"]["judgment"]["scenarios"][0]["game_probabilities"], [.8]*3)
+
+    def test_audit_bo3_bo5_against_closed_form_and_preserves_input(self):
+        for bo in (3, 5):
+            f = module.build(fixture(bo))
+            original = copy.deepcopy(f)
+            result = module.audit(f)
+            self.assertEqual(f, original)
+            self.assertEqual(result, module.audit(f))
+            self.assertFalse(result["production_change"])
+            report = result["forecasts"][0]
+            self.assertEqual(len(report["cases"]), 6)
+            needed = bo//2+1
+            # Independent closed-form score probability for constant game rates.
+            for case in report["cases"]:
+                expected = {}
+                for lost in range(needed):
+                    for winner in ("a", "b"):
+                        key = f"{needed}-{lost}" if winner == "a" else f"{lost}-{needed}"
+                        expected[key] = sum(s["weight"] * math.comb(needed+lost-1, lost)
+                            * (s["game_probabilities"][0] if winner == "a" else 1-s["game_probabilities"][0])**needed
+                            * (1-s["game_probabilities"][0] if winner == "a" else s["game_probabilities"][0])**lost
+                            for s in case["parameters"])
+                for key, probability in expected.items():
+                    self.assertAlmostEqual(case["score_distribution"][key], probability)
+                self.assertAlmostEqual(sum(case["score_distribution"].values()), 1)
+                for line, probability in case["metrics"]["over_probabilities"].items():
+                    self.assertAlmostEqual(probability, sum(p for k, p in expected.items()
+                        if sum(map(int, k.split("-"))) > float(line)))
+                self.assertNotIn("forecast_id", case)
+            self.assertTrue(module.replay(f)["replay_passed"])
+
+    def test_audit_handles_ties_and_real_direction_flips_separately(self):
+        tied = module.audit(module.build(fixture()))["forecasts"][0]
+        self.assertTrue(tied["summary"]["winner_set_change_case_ids"])
+        self.assertFalse(tied["summary"]["winner_flip_case_ids"])
+        payload = fixture()
+        payload["judgment"]["scenarios"][0]["weight"] = .55
+        payload["judgment"]["scenarios"][1]["weight"] = .45
+        r = module.audit(module.build(payload))["forecasts"][0]
+        self.assertIn("weight:0:1:-0.10", r["summary"]["winner_flip_case_ids"])
+
+    def test_audit_skips_invalid_boundaries_without_clamping(self):
+        payload = fixture()
+        for s, w, p in zip(payload["judgment"]["scenarios"], (.1, .9), (.05, .95)):
+            s.update(weight=w, game_probabilities=[p]*3)
+        r = module.audit(module.build(payload))["forecasts"][0]
+        self.assertEqual(len(r["skipped"]), 3)
+        self.assertEqual(len(r["cases"]), 3)
+        self.assertEqual({s["case_id"] for s in r["skipped"]},
+                         {"weight:0:1:-0.10", "game_rates:0:-0.05", "game_rates:1:+0.05"})
+        for case in r["cases"]:
+            self.assertAlmostEqual(sum(s["weight"] for s in case["parameters"]), 1)
+
+    def test_audit_all_scenario_pairs_and_single_scenario(self):
+        p = fixture(5)
+        third = copy.deepcopy(p["judgment"]["scenarios"][0])
+        third.update(id="third", weight=.2, game_probabilities=[.5]*5)
+        for s in p["judgment"]["scenarios"]:
+            s["weight"] = .4
+        p["judgment"]["scenarios"].append(third)
+        self.assertEqual(len(module.audit(module.build(p))["forecasts"][0]["cases"]), 12)
+        p["judgment"]["scenarios"] = [third]
+        third["weight"] = 1
+        r = module.audit(module.build(p))["forecasts"][0]
+        self.assertEqual(len(r["cases"]), 2)
+        self.assertFalse(r["skipped"])
+
+    def test_audit_mirrored_reordered_parameters_flag_review_not_failure(self):
+        p = fixture(5)
+        p["judgment"]["scenarios"][0]["weight"] = .65
+        p["judgment"]["scenarios"][1]["weight"] = .35
+        first = module.build(p)
+        other = copy.deepcopy(p)
+        other["event"]["event_id"] = other["baseline"]["event_id"] = "other-event"
+        for s in other["judgment"]["scenarios"]:
+            s["game_probabilities"] = [1-x for x in s["game_probabilities"]]
+        other["judgment"]["scenarios"].reverse()
+        second = module.build(other)
+        r = module.audit([first, second])
+        self.assertEqual(r["warnings"][0]["kind"], "mirrored_parameters")
+        self.assertEqual(r["warnings"][0]["severity"], "review")
+        a, b = r["forecasts"]
+        self.assertAlmostEqual(a["summary"]["first_team_probability_range"][0],
+                               1-b["summary"]["first_team_probability_range"][1])
+        other["event"]["event_id"] = other["baseline"]["event_id"] = p["event"]["event_id"]
+        self.assertFalse(module.audit([first, module.build(other)])["warnings"])
+        other["event"]["event_id"] = other["baseline"]["event_id"] = "other-event"
+        other["judgment"]["scenarios"] = copy.deepcopy(p["judgment"]["scenarios"])
+        self.assertEqual(module.audit([first, module.build(other)])["warnings"][0]["kind"], "repeated_parameters")
+
+    def test_audit_rejects_tampered_or_duplicate_batch_before_output(self):
+        f = module.build(fixture())
+        for payload in ([], [f, f]):
+            with self.assertRaises(ValueError):
+                module.audit(payload)
+        bad = copy.deepcopy(f)
+        bad["generation_input"]["judgment"]["scenarios"][0]["weight_reason"] = "Changed"
+        with self.assertRaises(ValueError):
+            module.audit([f, bad])
+        with tempfile.TemporaryDirectory() as tmp:
+            src, dst = Path(tmp)/"batch.json", Path(tmp)/"audit.json"
+            src.write_text(json.dumps([f, bad]))
+            cli = [sys.executable, module.__file__, "audit", str(src), "--output", str(dst)]
+            result = subprocess.run(cli, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(dst.exists())
+            src.write_text(json.dumps([f]))
+            result = subprocess.run(cli, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            before = dst.read_bytes()
+            self.assertEqual(subprocess.run(cli, capture_output=True).returncode, 0)
+            p = fixture()
+            p["judgment"]["scenarios"][0]["game_probabilities"] = [.7]*3
+            src.write_text(json.dumps(module.build(p)))
+            self.assertNotEqual(subprocess.run(cli, capture_output=True).returncode, 0)
+            self.assertEqual(dst.read_bytes(), before)
 
 
 if __name__ == "__main__":

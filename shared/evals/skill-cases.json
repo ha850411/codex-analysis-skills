@@ -134,6 +134,46 @@
       "invariants": ["schema v2 artifact 至少保存基準先驗、同賽事近期內容、弱方取勝三個具名模型", "各模型保存輸出、預定權重與證據且權重總和為 1", "中央機率等於同一組模型的加權和", "模型 spread 等於最大值減最小值", "可比 H2H 的 direct-rematch 輸出與權重在 H2H 及中央集成兩處一致"]
     },
     {
+      "id": "lol-postmortem-rewritten-report",
+      "skill": "lol-analysis",
+      "prompt": "檢討昨天三場。原對話08:55發布三場0u，早晨forecast都能重播；目前report.md寫T1配置1%且manifest不符，晚間另有已發布LEC新快照與25%配置。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["先核對檔案hash與發布紀錄，再接賽果", "隔離改寫report而不改舊manifest", "早晨0u不是T1投注推薦", "晚間LEC作該事件最後已發布賽前主快照，早版另列不重複計場", "不將新偏好追溯套到早版", "快照重播成功不證明目前報告就是原發布內容"]
+    },
+    {
+      "id": "lol-bp-game-location-correction",
+      "skill": "lol-analysis",
+      "prompt": "補查既有報告的BP。搜尋摘要說G1是Trundle/ChoGath/Hwei/Lucian/Milio，完整同系列比分表把它列為G3，G1是Ambessa/Vi/Ahri/Ezreal/Karma。請更新分析。",
+      "shouldTrigger": true,
+      "mode": "full",
+      "invariants": ["核對系列ID、局次、隊伍與角色定位，搜尋摘要只作索引", "保存來源衝突與G1/G3更正，不覆寫舊快照", "逐項列出觀察、機制、參數受影響情況", "參數維持時解釋仍支持機制的證據，不以重播成功代替理由", "不因未看VOD降低完成度"]
+    },
+    {
+      "id": "lol-analyst-parameter-stress",
+      "skill": "lol-analysis",
+      "prompt": "稽核兩場不同BO5的情境估計：第一場權重0.65/0.35、單局率0.60/0.42；第二場權重0.65/0.35、單局率0.40/0.58。",
+      "shouldTrigger": true,
+      "mode": "quick",
+      "invariants": ["取得已鎖定完整快照後用analyst_forecast.py audit批次重播", "鏡像參數是複查提示，不是強制改數字的理由", "權重轉移±0.10與情境全部逐局率±0.05分開測試", "非法組合列skipped，不截斷正規化", "保留原分布及資格，不產生新主預測", "範圍不稱信賴區間，無翻轉不等於已校準"]
+    },
+    {
+      "id": "lol-price-publication-time-integrity",
+      "skill": "lol-analysis",
+      "prompt": "把08:51取得的賠率報告於09:57重新排版；provider更新時間08:02，機率與價格都沒有新資料。",
+      "shouldTrigger": true,
+      "mode": "quick",
+      "invariants": ["取價08:51、provider更新08:02、報告發布09:57分開", "純呈現版本沿用原forecast ID及數字", "另存報告與新manifest，不覆寫已發布產物", "配置從同版本獨立附件讀取，不臨時填入新注碼"]
+    },
+    {
+      "id": "lol-postmortem-pending-no-execution",
+      "skill": "lol-analysis",
+      "prompt": "檢討三場：兩場官方已完成，LEC頁面仍Live且0:0；原文曾列大3.5機率並建議LEC主觀配置，但沒有任何成交紀錄。",
+      "shouldTrigger": true,
+      "mode": "postmortem",
+      "invariants": ["LEC保留actual_score=null且不進已評分cohort", "分開報預測覆蓋率與結果可評分率", "衍生機率列出不算實際推薦命中", "沒有成交紀錄則實際ROI為null", "canonical完整a/draw/b Brier與legacy單一二元Brier不混合", "交付已核實部分與待補項，不為等終場停止流程修正"]
+    },
+    {
       "id": "lol-quick",
       "skill": "lol-analysis",
       "prompt": "只簡短說明這場 LPL 對戰最大的 BP 風險。",

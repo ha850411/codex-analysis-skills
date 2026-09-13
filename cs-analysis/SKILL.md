@@ -13,11 +13,13 @@ description: "分析 Counter-Strike 2／CS:GO 電競賽事的賽程、陣容、�
 
 - 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
-- 滾球（Live In-Play）動態分析：比賽開打後，依據即時系列賽與單圖比分（MR12／OT）、半場攻守換邊（Side Bias）、手槍局與次輪抗強起轉化、即時經濟與連敗補貼階梯（Loss Bonus $1400–$3400、存槍數量）動態重構系列賽比分主分布與勝率。快照命名採用 `live-m{X}-r{Y}`、`live-post-m{X}` 或 `live-halftime`，`data_cutoff` 為當前即時回合確認時間，`eligibility` 依共用契約標記為 `reconstructed_after_start` 或特定局前瞻，不偽裝為賽前 prospective。
+- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
+- 核對同陣容、同圖與對手強度後再比較攻守、首殺轉化及經濟局；區分選圖偏差與可重複弱點，veto 推測不能當成已公布結果。
+- 滾球先依 `references/domain-analysis.md` 第7節核對即時比分、隊伍方向、換邊、當前規則及可用經濟狀態；用能接受該狀態的模型重建分布。共用賽前 predict 不支援回合經濟，不得僅改時間與快照名稱冒充 live。快照仍用 `live-m{X}-r{Y}`、`live-post-m{X}` 或 `live-halftime`；`data_cutoff` 為已確認回合時間，依共用契約區分 `reconstructed_after_start` 與特定局前瞻，不偽裝整場賽前 prospective。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
 - 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
+- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport cs`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
 
 ## 模式與輸出
 

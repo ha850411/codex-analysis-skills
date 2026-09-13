@@ -8,6 +8,8 @@ AI 驅動的體育賽事與電競分析技能集（Sports & Esports Analytics Sk
 
 七個賽事 skills 共用 [預測契約](shared/forecast/contract.md) 與 [報告模板](shared/forecast/report-template.md)。勝方命中優先、比分次之；基準／實驗／正式模型分開，歷史快照不可覆寫。新增工具不會啟用其他排程、呼叫市場、寄信或發布。
 
+Gemini／Codex 執行 skill 時，依 [報告自動分類規則](shared/report-storage.md) 呼叫共用工具，將報告與當次附件保存到 `~/prediction-archive/reports/<運動>/<類型>/<台灣日期>/<版本>/` 並更新索引。保留輸出模板與排程原路徑；可用 `PREDICTION_ARCHIVE_ROOT` 指定共用保存位置。
+
 重構範圍、測試結果與尚待驗證事項見 [v2 工程驗收紀錄](shared/evals/refactor-v2-report.md)。
 
 ```bash

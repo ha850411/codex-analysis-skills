@@ -23,9 +23,11 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 - 每次新預測先讀 `references/forecast-fallback.md` 選路：查找適用既有模型 → 完成領域證據 → 選擇正式模型、已實作挑戰版或分析者情境估計；比分基準是資料不足時的最後降級。不能因缺一項 BP／局內資料就自動結束研究。每場保留明確數值方向、勝率、比分眾數與機率、數字證據品質；接近均勢或敏感時直說，不把數值最大者包裝成有實質優勢的主推。
 - `full`、`daily-summary` 都讀 `references/domain-analysis.md`；使用者要求深入時，先完成其證據補查與對位分析，日報不降低逐場深度。領域判斷可透過 `references/analyst-scenarios.md` 成為具名、可重播的實驗情境，不能手改已鎖定分布，也不能冒充擬合參數或已校準模型。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
-- LoL 分析者情境入口：`python3 lol-analysis/scripts/analyst_forecast.py build|validate`。同時保留獨立比分基準，寫清楚哪些證據改變了情境及為何仍可能錯；不得為了遠離 50% 或迎合市場而使用此路徑。
+- 新機率同時依 `../shared/prediction-methodology.md` 核對來源、機制與實際輸入；沿用本技能的 fallback、分析者情境、非影片研究與個人偏好，不把共用原則誤當停做 LoL 分析的理由。
+- LoL 分析者情境入口：`python3 lol-analysis/scripts/analyst_forecast.py build|validate|audit`。保留獨立比分基準；發布前以 `audit` 檢查權重／單局率敏感度，多場一併查鏡像參數。附件只作診斷，不改主分布；解讀依 `references/analyst-scenarios.md`。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
 - 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
+- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport lol`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
 - 舊 LoL 自動流程：保留 `references/forecast-evidence-gates.md`、`references/recommendation-gates.md` 及既有驗證器；共用 v2 不冒充 v7 evidence。同一快照跨格式匯出須保持數字相同；基準與實驗是不同快照，允許結果不同並說明原因。
 
 ## 模式與輸出
@@ -41,6 +43,6 @@ description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名
 
 ## 賽後與改善
 
-先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
+先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。先核對原快照、manifest 與發布證據，再以每事件最後一份可證明已發布的賽前快照計分；改寫報告不得冒充原推薦。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
 
 終場尚未核實時先交付原快照與流程稽核，結果指標留空並保存待補項；不把網站 Live／0:0 占位符當終場，也不把單場低機率結果直接判為校準失敗。各版 schema 的信心與模型規則分開套用。

@@ -13,10 +13,12 @@ description: "只分析 FIFA 世界盃決賽圈，以及使用者明確指定的
 
 - 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
 - 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- 深入領域分析時讀 `references/domain-analysis.md`；只載入本場相關資料。領域推理不能直接覆寫計算結果。
+- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
+- 比較國家隊的對手、陣容與賽事性質；xG 保留供應商及定義，不混用不同口徑。出線動機先算規則與可能狀態，再判斷戰術，不能自動提高和局率。
 - 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
 - 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
 - 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
+- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport soccer`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
 
 ## 模式與輸出
 

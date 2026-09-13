@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "purpose": "offline-development-behavior-cases-not-accuracy-evidence",
+  "cases": [
+    {
+      "id": "roster-publication-vs-retrieval",
+      "skill": "cs-analysis",
+      "input": {
+        "request": "分析今天 A 對 B 的 BO3。",
+        "evidence": [
+          "官網賽季頁發布於09/01、今天16:10重新擷取，仍列舊AWPer。",
+          "當場官方公告發布於今天15:30、16:00擷取，A改用已登錄替補AWPer。",
+          "兩家網站於16:05轉載同一則15:30公告。"
+        ]
+      },
+      "expected": [
+        "當場公告優先於較晚擷取的舊賽季頁；兩則轉載不增加獨立證據數。",
+        "核對替補的角色與可比地圖資料；沒有映射模型時不自動扣固定百分點。"
+      ]
+    },
+    {
+      "id": "nba-ignored-injury-input",
+      "skill": "nba-analysis",
+      "input": {
+        "request": "主控確定缺陣，請更新今天的預測。",
+        "evidence": [
+          "官方傷兵公告早於資料截止，主控Out。",
+          "目前只有shared/forecast/models.py的聚合baseline，沒有feature_model。",
+          "event新增了injury_adjustment=-8，但predict沒有讀取該欄位。"
+        ]
+      },
+      "expected": [
+        "查替代持球、分鐘及對位，核對模型實際支援，不能聲稱-8已生效。",
+        "有適用模型才重算；僅有baseline時保留其方向及未建模限制，不能手改已鎖定機率。"
+      ]
+    },
+    {
+      "id": "lol-detail-source-failure",
+      "skill": "lol-analysis",
+      "input": {
+        "request": "深入分析已確認的A對B BO5，沿用我的結果詳盡、分析精簡格式。",
+        "evidence": [
+          "首個BP網址404；同系列其他逐局頁與非影片結構化數據可讀。",
+          "雙方近期兩系列的實際五人與比分已核對。"
+        ]
+      },
+      "expected": [
+        "定位正確逐局來源並完成可得領域內容，再選既有模型／情境或最後baseline降級。",
+        "不因第一個404就宣稱研究完成或只給N/A；不擅自搜尋VOD。",
+        "保留原輸出順序與欄位，不為研究步驟新增章節。"
+      ]
+    },
+    {
+      "id": "valorant-unsupported-veto-path",
+      "skill": "valorant-analysis",
+      "input": {
+        "request": "用共用v2分析這場pre-veto BO3。",
+        "evidence": [
+          "A常ban某圖，沒有同版本樣本，也沒有特別準備或放行的來源。",
+          "能建立隊伍baseline，但無法可靠指定兩條veto路徑及其權重。"
+        ]
+      },
+      "expected": [
+        "常ban及零樣本不當作實證弱圖；不編造anti-strat情境或55/45權重。",
+        "保留可計算baseline、地圖未知與未建模限制，不稱完成veto集成。"
+      ]
+    },
+    {
+      "id": "soccer-stage-prior",
+      "skill": "soccer-analysis",
+      "input": {
+        "request": "世界盃小組首戰要不要把和局機率提高？",
+        "evidence": [
+          "只有小組首戰標籤，沒有支持保守戰術的當場證據或已校準階段係數。",
+          "原90分鐘比分模型及完整分布可以重播。"
+        ]
+      },
+      "expected": [
+        "先查規則誘因與對位；不自動套30/25/20/15/10權重或和局下限。",
+        "缺新證據時保留分布，不以首戰敘事手調和局。"
+      ]
+    },
+    {
+      "id": "mlb-scope-and-fallback",
+      "skill": "mlb-analysis",
+      "input": {
+        "request": "比較這場前五局與全場方向。",
+        "evidence": [
+          "專用public baseline可重播，含前五局、後段run means與分階段模擬。",
+          "未取得逐投手牛棚投影及正式打線；另有共用聚合比分baseline。"
+        ]
+      },
+      "expected": [
+        "保留專用分階段入口及未校準狀態；不以聚合全場模型直接縮放前五局。",
+        "交付現有數字與缺口，缺完整投影不把全部改N/A；不虛稱逐投手牛棚已建模。"
+      ]
+    },
+    {
+      "id": "market-anchoring-and-red-team",
+      "skill": "prediction-pipeline",
+      "input": {
+        "request": "啟用agy紅隊審查，價格顯示B很熱門。",
+        "evidence": [
+          "canonical已鎖定A勝率0.62。",
+          "紅隊認為應改成0.52，但只有『另一個模型也這樣想』，沒有新事實或計算錯誤。"
+        ]
+      },
+      "expected": [
+        "價格隔離到市場階段；不聲稱對話完全沒接觸市場資訊。",
+        "finding逐項裁決；不同模型同意不構成新增證據，不折衷平均成0.57。",
+        "保留computed_probability_groups，若真有新證據則回上游重建。"
+      ]
+    },
+    {
+      "id": "postmortem-variance-and-holdout",
+      "skill": "dota2-analysis",
+      "input": {
+        "request": "昨天只猜錯一場，請檢討並提升準確度。",
+        "evidence": [
+          "原快照可核驗，實際結果原機率0.30；沒有發現資料或計算錯誤。",
+          "分析者在同一批賽果上試了12組權重，其中一組命中率最高。"
+        ]
+      },
+      "expected": [
+        "單場低機率結果不證明校準失敗；可有依據地no-change。",
+        "保留所有試驗，把已用來選權重的資料當開發集，另留未看過時間區段。",
+        "未有同條件樣本外證據不升production，不用降低信心宣稱改善。"
+      ]
+    },
+    {
+      "id": "cs-live-a-trailing",
+      "skill": "cs-analysis",
+      "input": {
+        "request": "給定以下條件率，計算A-B系列比分與雙方勝率；不要重新估參數。",
+        "best_of": 3,
+        "series_score": [0, 1],
+        "p_a_map2": 0.6,
+        "p_a_map3_given_a_won_map2": 0.55
+      },
+      "expected": {
+        "score_distribution": {"2-0": 0, "2-1": 0.33, "1-2": 0.27, "0-2": 0.4},
+        "winner_probabilities": {"a": 0.33, "draw": 0, "b": 0.67},
+        "behavior": ["B的0-2橫掃仍可能；不能把A的單圖率當作B的單圖率。", "此為給定條件率算術，不能稱已完成經濟live模型或prospective整場預測。"]
+      }
+    },
+    {
+      "id": "cs-live-a-leading",
+      "skill": "cs-analysis",
+      "input": {
+        "request": "給定以下條件率，計算A-B系列比分與雙方勝率；不要重新估參數。",
+        "best_of": 3,
+        "series_score": [1, 0],
+        "p_a_map2": 0.6,
+        "p_a_map3_given_a_lost_map2": 0.55
+      },
+      "expected": {
+        "score_distribution": {"2-0": 0.6, "2-1": 0.22, "1-2": 0.18, "0-2": 0},
+        "winner_probabilities": {"a": 0.82, "draw": 0, "b": 0.18},
+        "behavior": ["A已贏圖一，0-2不可能；圖三率必須以A輸圖二且到達圖三為條件。"]
+      }
+    },
+    {
+      "id": "dota-bo2-complements",
+      "skill": "dota2-analysis",
+      "input": {
+        "request": "從已鎖定BO2分布計算雙方至少一局與A不敗機率。",
+        "score_distribution": {"2-0": 0.4, "1-1": 0.35, "0-2": 0.25}
+      },
+      "expected": {
+        "a_at_least_one": 0.75,
+        "b_at_least_one": 0.6,
+        "both_at_least_one": 0.35,
+        "a_unbeaten": 0.75,
+        "behavior": ["保留1-1，雙方各自至少一局不必合計1，也不同於雙方都至少一局。"]
+      }
+    },
+    {
+      "id": "winner-versus-score-mode",
+      "skill": "valorant-analysis",
+      "input": {
+        "request": "從已鎖定BO3分布取勝方與最可能比分。",
+        "score_distribution": {"2-0": 0.3, "2-1": 0.29, "1-2": 0.4, "0-2": 0.01}
+      },
+      "expected": {
+        "winner_probabilities": {"a": 0.59, "draw": 0, "b": 0.41},
+        "score_mode": "1-2",
+        "behavior": ["勝方A與單一比分眾數B2-1方向不同，保持原分布並解釋，不能改比分以配合勝方。"]
+      }
+    }
+  ]
+}

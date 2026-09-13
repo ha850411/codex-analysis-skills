@@ -66,3 +66,5 @@ walk-forward 為固定外層測試，每事件僅一個預先指定快照；不�
 ## 權限與保存
 
 record 保存於 `.automation-state/<sport>/history/forecasts/`。history 不受短期報告清理影響。CLI 只建立本地 artifact，不寄信、不取市場、不發布、不改 production。外部發布仍由既有排程或明確授權的 exporter 執行。
+
+報告渲染後，agent 另依 `../report-storage.md` 執行共用歸檔工具，保存完整報告與當次附件並更新分類索引。這份副本不取代 record、原 run 目錄或既有發布快照；分類不新增賽前發布證據，也不改 eligibility。

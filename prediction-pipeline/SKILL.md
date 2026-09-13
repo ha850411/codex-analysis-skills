@@ -17,6 +17,7 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
 ## 審查與裁決
 
 - 主報告必須先包含領域必要分析，讓 agy 審查全文。紅隊意見是待裁決的證據，不是替代預測。
+- 紅隊聚焦可能改變結論的事實、時序、輸入映射、最強反證與分布錯誤；finding 引用現有欄位記錄來源定位、受影響假設及可核對的修正。模型彼此同意不構成新增證據，不為湊 finding 或折衷而平均兩個勝率；無實質問題可保留原預測。
 - 主預測與最終裁決必須保留 `computed_probability_groups` 的計算值；需要更改機率時，先重建上游 canonical forecast，再重跑下游。舊 input 沒有此欄位時保留 legacy 模式並揭露計算溯源限制。
 - 每個 finding 都須接受或否決，附理由與處置；每個 unresolved question 都須回覆或說明缺口及影響。實際數字與文字修改全部記入 changes。
 - 以主報告的章節標題維持覆蓋；各節提供答案、缺口或不適用原因。刪除重複文字不受字數比例限制。
@@ -29,3 +30,7 @@ description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，�
 - 執行管線 export 完成 schema、跨階段、信心度、機率、裁決與市場算術驗證；失敗回到上游修正。
 - 依 `../shared/forecast/report-template.md` 輸出完整 prediction.md、prediction.json、chat-summary.md，按需求輸出口播腳本。聊天與完整報告均以唯一五欄簡表收尾，連結和來源放在簡表之前。
 - 完整紅隊 finding 與裁決留在 JSON；正文只列會影響結論的修改。外部發布沿用既有授權，不因啟用 agy 自動取得發布授權。
+
+## 報告保存
+
+export 完成後，依 `../shared/report-storage.md` 呼叫共用 `report_archive.py save`，使用領域 skill 的 sport、實際報告模式及目標台灣日期，封存完整 run 的報告、JSON、來源／快照、驗證、紅隊與裁決附件。Gemini／Codex 都執行同一個工具，agent／model 如實記錄；不改既有模板、模型選擇或排程輸出路徑。流程失敗時只以 `--status validation-failed` 或 `incomplete` 保存診斷產物，不偽裝完成報告。外層 analysis skill 沿用這份成功收據與報告連結；只有附件或內容更新才再次保存。

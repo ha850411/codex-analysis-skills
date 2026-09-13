@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from itertools import combinations
 import json
 from pathlib import Path
 import sys
@@ -157,15 +158,114 @@ def replay(record):
             "status": "experiment", "calibration_verified": False}
 
 
+def audit(payload):
+    """Replay locked forecasts, then stress one parameter group at a time.
+
+    This is a diagnostic attachment, not a forecast or an empirical interval.
+    Never call build() with revised judgments or give stress cases forecast IDs.
+    """
+    records = payload if isinstance(payload, list) else [payload]
+    if not records:
+        raise ValueError("audit requires at least one forecast")
+    seen = set()
+    for record in records:
+        replay(record)
+        if record["forecast_id"] in seen:
+            raise ValueError("duplicate audit forecast ID")
+        seen.add(record["forecast_id"])
+
+    def metrics(scores, best_of):
+        d = derive(scores)
+        lines = {3: (2.5,), 5: (3.5, 4.5)}.get(best_of, ())
+        return {k: d[k] for k in ("winner_probabilities", "winner_pick", "winner_ties",
+                "score_mode", "score_mode_probability", "score_ties", "both_at_least_one")} | {
+            "over_probabilities": {str(line): sum(p for n, p in d["total_distribution"].items()
+                                                 if int(n) > line) for line in lines}}
+
+    reports, signatures = [], []
+    for record in records:
+        best_of = record["best_of"]
+        original = record["generation_input"]["judgment"]["scenarios"]
+        main = metrics(record["score_distribution"], best_of)
+        cases, skipped = [], []
+
+        def stress(case_id, change, scenarios):
+            # Rounding only the perturbation arithmetic avoids accepting e.g.
+            # .1 - .1 as a tiny positive weight. No clipping or renormalization.
+            if any(not 0 < s["weight"] <= 1 or
+                   any(not 0 < p < 1 for p in s["game_probabilities"]) for s in scenarios):
+                skipped.append(dict(case_id=case_id, change=change, reason="parameter_outside_open_bounds"))
+                return
+            scores = mixture([dict(weight=s["weight"], score_distribution=series_tree(
+                best_of, game_tree(best_of, s["game_probabilities"]))) for s in scenarios])
+            result = metrics(scores, best_of)
+            cases.append(dict(case_id=case_id, change=change,
+                parameters=[{k: s[k] for k in ("id", "weight", "game_probabilities")} for s in scenarios],
+                score_distribution=scores, metrics=result,
+                winner_flipped=len(main["winner_ties"]) == len(result["winner_ties"]) == 1
+                    and main["winner_pick"] != result["winner_pick"],
+                winner_set_changed=main["winner_ties"] != result["winner_ties"],
+                score_mode_set_changed=main["score_ties"] != result["score_ties"]))
+
+        for i, j in combinations(range(len(original)), 2):
+            for delta in (-.10, .10):
+                scenarios = copy.deepcopy(original)
+                scenarios[i]["weight"] = round(scenarios[i]["weight"] + delta, 15)
+                scenarios[j]["weight"] = round(scenarios[j]["weight"] - delta, 15)
+                stress(f"weight:{i}:{j}:{delta:+.2f}", dict(kind="weight_transfer",
+                    scenario_ids=[original[i]["id"], original[j]["id"]], delta=delta), scenarios)
+        for i, scenario in enumerate(original):
+            for delta in (-.05, .05):
+                scenarios = copy.deepcopy(original)
+                scenarios[i]["game_probabilities"] = [round(p + delta, 15) for p in scenario["game_probabilities"]]
+                stress(f"game_rates:{i}:{delta:+.2f}", dict(kind="scenario_game_rates",
+                    scenario_ids=[scenario["id"]], delta=delta), scenarios)
+        values = [main] + [case["metrics"] for case in cases]
+        reports.append(dict(forecast_id=record["forecast_id"], event_id=record["event_id"],
+            participants=record["participants"], source_sha256=digest(record), replay_passed=True,
+            original=main, cases=cases, skipped=skipped,
+            summary=dict(evaluated_cases=len(cases), skipped_cases=len(skipped),
+                winner_flip_case_ids=[c["case_id"] for c in cases if c["winner_flipped"]],
+                winner_set_change_case_ids=[c["case_id"] for c in cases if c["winner_set_changed"]],
+                score_mode_change_case_ids=[c["case_id"] for c in cases if c["score_mode_set_changed"]],
+                first_team_probability_range=[min(v["winner_probabilities"]["a"] for v in values),
+                                              max(v["winner_probabilities"]["a"] for v in values)],
+                over_probability_ranges={line: [min(v["over_probabilities"][line] for v in values),
+                                                max(v["over_probabilities"][line] for v in values)]
+                                         for line in main["over_probabilities"]})))
+        # Compare numerical parameter sets independent of names and ordering.
+        # Twelve decimal places absorb 1-(1-p) floating-point noise only.
+        def signature(mirror):
+            return (best_of, tuple(sorted((round(s["weight"], 12), tuple(
+                round(1-p if mirror else p, 12) for p in s["game_probabilities"])) for s in original)))
+        signatures.append((signature(False), signature(True)))
+    warnings = []
+    for i, j in combinations(range(len(records)), 2):
+        if records[i]["event_id"] == records[j]["event_id"]:
+            continue  # Revisions of one event are not independent matchups.
+        direct = signatures[i][0] == signatures[j][0]
+        if direct or signatures[i][0] == signatures[j][1]:
+            warnings.append(dict(kind="repeated_parameters" if direct else "mirrored_parameters",
+                forecast_ids=[records[i]["forecast_id"], records[j]["forecast_id"]],
+                severity="review", reason="Review matchup-specific evidence; identical parameters are not an error."))
+    return dict(schema_version="lol-analyst-audit-v1", artifact_type="sensitivity_audit",
+        method="one_at_a_time_parameter_stress", weight_step=.10, game_probability_step=.05,
+        probability_unit="fraction", calibrated=False, production_change=False,
+        limitations=["Stress ranges are not confidence intervals or new forecasts.",
+                     "No flip within these perturbations does not establish robustness or calibration.",
+                     "Weight transfers and game-rate shifts are separate, not a joint uncertainty search."],
+        forecasts=reports, warnings=warnings)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "validate"))
+    parser.add_argument("command", choices=("build", "validate", "audit"))
     parser.add_argument("input", type=Path)
     parser.add_argument("--output")
     args = parser.parse_args()
     try:
         payload = json.loads(args.input.read_text(encoding="utf8"))
-        result = build(payload) if args.command == "build" else replay(payload)
+        result = {"build": build, "validate": replay, "audit": audit}[args.command](payload)
         if args.output:
             write(args.output, result)
         else:
