@@ -222,6 +222,46 @@ class AnalystTests(unittest.TestCase):
         r = module.audit(module.build(payload))["forecasts"][0]
         self.assertIn("weight:0:1:-0.10", r["summary"]["winner_flip_case_ids"])
 
+    def test_audit_exposes_one_sided_scenario_space_without_changing_forecast(self):
+        p = fixture(5)
+        for s, weight, rate in zip(p["judgment"]["scenarios"], (.7, .3), (.74, .5)):
+            s.update(weight=weight, game_probabilities=[rate]*5)
+        f = module.build(p)
+        before = copy.deepcopy(f)
+        audit = module.audit(f)
+        geometry = audit["forecasts"][0]["scenario_space"]
+        self.assertEqual(f, before)
+        self.assertEqual(geometry["teams_without_strict_favorite_scenario"], ["b"])
+        # With fixed scenario rates, no possible reweighting can favor B.
+        self.assertAlmostEqual(geometry["winner_reweighting_envelope"]["b"][1], .5)
+        self.assertAlmostEqual(geometry["winner_reweighting_envelope"]["a"][0], .5)
+        expected_a = sum(math.comb(5, k)*.74**k*.26**(5-k) for k in range(3, 6))
+        self.assertAlmostEqual(geometry["winner_reweighting_envelope"]["a"][1], expected_a)
+        self.assertIn("one_sided_scenario_space", [w["kind"] for w in audit["warnings"]])
+        self.assertTrue(module.replay(f)["replay_passed"])
+
+    def test_scenario_space_uses_series_tree_not_average_game_rate(self):
+        p = fixture(5)
+        # Late near-certain wins are rarely reached after three near-certain losses.
+        p["judgment"]["scenarios"][0]["game_probabilities"] = [.2, .2, .2, .99, .99]
+        p["judgment"]["scenarios"][1]["game_probabilities"] = [.8, .8, .8, .01, .01]
+        f = module.build(p)
+        g = module.audit(f)["forecasts"][0]["scenario_space"]
+        self.assertEqual(g["teams_without_strict_favorite_scenario"], [])
+        self.assertEqual(g["scenarios"][0]["winner_ties"], ["b"])
+        for s, actual in zip(f["scenarios"], g["scenarios"]):
+            self.assertEqual(actual["winner_probabilities"], derive(s["score_distribution"])["winner_probabilities"])
+
+    def test_scenario_space_ties_and_single_scenario_are_diagnostic(self):
+        p = fixture(2)
+        p["judgment"]["scenarios"] = p["judgment"]["scenarios"][:1]
+        p["judgment"]["scenarios"][0].update(weight=1, game_probabilities=[.5, .5])
+        f = module.build(p)
+        g = module.audit(f)["forecasts"][0]["scenario_space"]
+        self.assertEqual(g["teams_without_strict_favorite_scenario"], ["a", "b"])
+        self.assertEqual(g["scenarios"][0]["winner_ties"], ["draw"])
+        self.assertEqual(g["winner_reweighting_envelope"]["draw"], [.5, .5])
+
     def test_audit_skips_invalid_boundaries_without_clamping(self):
         payload = fixture()
         for s, w, p in zip(payload["judgment"]["scenarios"], (.1, .9), (.05, .95)):
@@ -266,7 +306,8 @@ class AnalystTests(unittest.TestCase):
         self.assertAlmostEqual(a["summary"]["first_team_probability_range"][0],
                                1-b["summary"]["first_team_probability_range"][1])
         other["event"]["event_id"] = other["baseline"]["event_id"] = p["event"]["event_id"]
-        self.assertFalse(module.audit([first, module.build(other)])["warnings"])
+        self.assertFalse([w for w in module.audit([first, module.build(other)])["warnings"]
+                          if w["kind"] in ("mirrored_parameters", "repeated_parameters")])
         other["event"]["event_id"] = other["baseline"]["event_id"] = "other-event"
         other["judgment"]["scenarios"] = copy.deepcopy(p["judgment"]["scenarios"])
         self.assertEqual(module.audit([first, module.build(other)])["warnings"][0]["kind"], "repeated_parameters")
@@ -297,6 +338,158 @@ class AnalystTests(unittest.TestCase):
             src.write_text(json.dumps(module.build(p)))
             self.assertNotEqual(subprocess.run(cli, capture_output=True).returncode, 0)
             self.assertEqual(dst.read_bytes(), before)
+
+
+def conditional_fixture(best_of=5, persistence=.2):
+    """Synthetic prior-result dependence, not an estimate for any real team."""
+    payload = fixture(best_of)
+    s = payload["judgment"]["scenarios"][0]
+    payload["judgment"]["scenarios"] = [s]
+    s["weight"] = 1
+    s["conditional_probabilities"] = {path: .5 if path == "ROOT" else
+        persistence if path.endswith("W") else 1-persistence
+        for path in module.game_tree(best_of, [.5]*best_of)}
+    del s["game_probabilities"]
+    s["dependence_reason"] = "Synthetic symmetric Markov test; not a fitted comeback effect"
+    s["dependence_evidence_ids"] = ["fixture"]
+    return payload
+
+
+class ConditionalTests(unittest.TestCase):
+    def test_constant_mixture_is_weighted_over_not_over_of_average_strength(self):
+        p = fixture(5)
+        template = p["judgment"]["scenarios"][0]
+        p["judgment"]["scenarios"] = [dict(template, id=str(i), weight=w, game_probabilities=[rate]*5)
+            for i, (w, rate) in enumerate(((.5, .38), (.3, .6), (.2, .5)))]
+        f = module.build(p)
+        d = module.length_diagnostics(f)
+        self.assertAlmostEqual(d["over_3_5"], .7194)
+        average = .5*.38+.3*.6+.2*.5
+        self.assertNotAlmostEqual(d["over_3_5"], 3*average*(1-average))
+        self.assertEqual(d["structural_over_3_5_ceiling"], .75)
+
+    def test_negative_and_positive_dependence_have_exact_sweep_probabilities(self):
+        for persistence in (.2, .5, .8):
+            with self.subTest(persistence=persistence):
+                payload = conditional_fixture(persistence=persistence)
+                before = copy.deepcopy(payload)
+                f = module.build(payload)
+                self.assertEqual(payload, before)
+                self.assertEqual(f["model_version"], module.CONDITIONAL_VERSION)
+                self.assertTrue(module.replay(f)["replay_passed"])
+                self.assertAlmostEqual(f["score_distribution"]["3-0"], .5*persistence**2)
+                self.assertAlmostEqual(f["score_distribution"]["0-3"], .5*persistence**2)
+                self.assertAlmostEqual(f["derived"]["both_at_least_one"], 1-persistence**2)
+                self.assertAlmostEqual(f["derived"]["winner_probabilities"]["a"], .5)
+                self.assertAlmostEqual(sum(f["score_distribution"].values()), 1)
+                d = f["length_diagnostics"]
+                self.assertAlmostEqual(d["over_3_5"]+d["under_3_5"], 1)
+                self.assertLessEqual(d["over_4_5"], d["over_3_5"])
+                self.assertEqual(d["structural_over_3_5_ceiling"], .75 if persistence == .5 else None)
+                self.assertFalse(f["recommendation_eligible"])
+
+    def test_all_formats_and_mixed_input_scenarios(self):
+        for bo in (1, 2, 3, 5):
+            p = conditional_fixture(bo)
+            legacy = fixture(bo)["judgment"]["scenarios"][1]
+            p["judgment"]["scenarios"][0]["weight"] = .5
+            p["judgment"]["scenarios"].append(legacy)
+            f = module.build(p)
+            self.assertTrue(module.replay(f)["replay_passed"])
+            self.assertAlmostEqual(sum(f["score_distribution"].values()), 1)
+            self.assertTrue(module.audit(f)["forecasts"][0]["cases"])
+
+    def test_sweeps_use_history_not_game_index_or_average_rate(self):
+        p = conditional_fixture()
+        nodes = p["judgment"]["scenarios"][0]["conditional_probabilities"]
+        nodes.update(ROOT=.6, W=.8, WW=.9, L=.3, LL=.2)
+        f = module.build(p)
+        self.assertAlmostEqual(f["score_distribution"]["3-0"], .6*.8*.9)
+        self.assertAlmostEqual(f["score_distribution"]["0-3"], .4*.7*.8)
+        self.assertAlmostEqual(f["length_diagnostics"]["over_3_5"], 1-.6*.8*.9-.4*.7*.8)
+        original_over = f["length_diagnostics"]["over_3_5"]
+        # Late-game rates can change winners and O4.5, but cannot change O3.5.
+        for path in nodes:
+            if path != "ROOT" and len(path) >= 3:
+                nodes[path] = .91
+        changed = module.build(p)
+        self.assertAlmostEqual(changed["length_diagnostics"]["over_3_5"], original_over)
+        self.assertNotEqual(changed["score_distribution"], f["score_distribution"])
+
+    def test_incomplete_extra_invalid_nodes_and_ambiguous_inputs_rejected(self):
+        for mutation in (lambda s: s["conditional_probabilities"].pop("WL"),
+                         lambda s: s["conditional_probabilities"].update(WWW=.5),
+                         lambda s: s["conditional_probabilities"].update(ROOT=True),
+                         lambda s: s["conditional_probabilities"].update(ROOT=float("nan")),
+                         lambda s: s["conditional_probabilities"].update(ROOT=1),
+                         lambda s: s.update(game_probabilities=[.5]*5),
+                         lambda s: s.update(conditional_probabilities=[.5]*5),
+                         lambda s: s.update(dependence_reason=""),
+                         lambda s: s.update(dependence_evidence_ids=[]),
+                         lambda s: s.update(dependence_evidence_ids=["unknown"])):
+            p = conditional_fixture()
+            mutation(p["judgment"]["scenarios"][0])
+            with self.assertRaises(ValueError):
+                module.build(p)
+
+    def test_dependence_needs_match_detail_not_a_roster_reference(self):
+        p = conditional_fixture()
+        p["event"]["evidence"].append(dict(p["event"]["evidence"][0], id="roster", kind="lineup"))
+        p["judgment"]["scenarios"][0]["dependence_evidence_ids"] = ["roster"]
+        with self.assertRaises(ValueError):
+            module.build(p)
+
+    def test_conditional_mirror_swaps_history_and_next_game_probability(self):
+        p = conditional_fixture()
+        nodes = p["judgment"]["scenarios"][0]["conditional_probabilities"]
+        nodes.update(ROOT=.65, W=.4, L=.8, WW=.3, LL=.75)
+        f = module.build(p)
+        other = copy.deepcopy(p)
+        other["event"]["event_id"] = other["baseline"]["event_id"] = "mirror-event"
+        other["judgment"]["scenarios"][0]["conditional_probabilities"] = {
+            path.translate(str.maketrans("WL", "LW")): 1-rate for path, rate in nodes.items()}
+        m = module.build(other)
+        for score, probability in f["score_distribution"].items():
+            self.assertAlmostEqual(probability, m["score_distribution"]["-".join(score.split("-")[::-1])])
+        self.assertIn("mirrored_parameters", [w["kind"] for w in module.audit([f, m])["warnings"]])
+
+    def test_audit_stresses_dependence_separately_from_strength(self):
+        f = module.build(conditional_fixture())
+        original = copy.deepcopy(f)
+        a = module.audit(f)
+        self.assertEqual(f, original)
+        self.assertEqual(a["schema_version"], "lol-analyst-audit-v2")
+        cases = a["forecasts"][0]["cases"]
+        self.assertEqual(len(cases), 4)
+        dependence = [c for c in cases if c["change"]["kind"] == "previous_result_dependence"]
+        for case in dependence:
+            delta = case["change"]["delta_after_win"]
+            self.assertAlmostEqual(case["metrics"]["winner_probabilities"]["a"], .5)
+            self.assertAlmostEqual(case["metrics"]["over_probabilities"]["3.5"], 1-(.2+delta)**2)
+        self.assertFalse([w for w in a["warnings"] if w["kind"] == "constant_rate_length_constraint"])
+
+    def test_conditional_container_does_not_hide_constant_rate_constraint(self):
+        p = conditional_fixture()
+        p["judgment"]["scenarios"][0]["conditional_probabilities"] = module.game_tree(5, [.6]*5)
+        f = module.build(p)
+        self.assertAlmostEqual(f["length_diagnostics"]["over_3_5"], .72)
+        self.assertIn("constant_rate_length_constraint", [w["kind"] for w in module.audit(f)["warnings"]])
+
+    def test_diagnostics_catch_tampering_and_cli_replays_v2(self):
+        f = module.build(conditional_fixture())
+        tampered = copy.deepcopy(f)
+        tampered["length_diagnostics"]["over_3_5"] = .72
+        with self.assertRaises(ValueError):
+            module.replay(tampered)
+        with tempfile.TemporaryDirectory() as tmp:
+            src, dst = Path(tmp)/"input.json", Path(tmp)/"forecast.json"
+            src.write_text(json.dumps(conditional_fixture()))
+            base = [sys.executable, module.__file__]
+            build = subprocess.run(base+["build", str(src), "--output", str(dst)], capture_output=True)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            check = subprocess.run(base+["validate", str(dst)], capture_output=True)
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertEqual(json.loads(dst.read_text()), f)
 
 
 if __name__ == "__main__":
