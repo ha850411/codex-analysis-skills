@@ -44,6 +44,54 @@ def fixture(best_of=3):
 
 
 class AnalystTests(unittest.TestCase):
+    def test_repeated_risk_wording_never_penalizes_quality_or_probabilities(self):
+        p = fixture(5)
+        p["judgment"]["scenarios"][0]["weight"] = .7
+        p["judgment"]["scenarios"][1]["weight"] = .3
+        p["event"]["missing_data"] = ["Synthetic missing early gold timeline"]
+        p["event"]["risks"] = ["Synthetic uncertainty about the early gold lead"]
+        original = module.build(p)
+        expanded = copy.deepcopy(p)
+        expanded["event"]["missing_data"] *= 5
+        expanded["event"]["risks"] *= 5
+        expanded["event"]["analysis_sections"] = [{"heading": "Same issue restated",
+            "markdown": "The same synthetic timeline is missing; no new information."}]
+        result = module.build(expanded)
+        self.assertEqual(result["confidence"], original["confidence"])
+        self.assertEqual(result["score_distribution"], original["score_distribution"])
+        self.assertEqual(result["derived"], original["derived"])
+
+    def test_evidence_quality_can_rise_or_fall_without_moving_winner_probability(self):
+        p = fixture(5)
+        p["judgment"]["scenarios"][0]["weight"] = .7
+        p["judgment"]["scenarios"][1]["weight"] = .3
+        original = module.build(p)
+        # An absolute quality assessment is separate from team strength inputs.
+        # This checks arithmetic/independence, not whether human scores are justified.
+        for lineup_score, expected_total in ((20, 50), (100, 70)):
+            updated = copy.deepcopy(p)
+            updated["event"]["confidence"]["components"]["lineup_certainty"] = lineup_score
+            updated["event"]["confidence"]["value"] = expected_total
+            result = module.build(updated)
+            self.assertEqual(result["confidence"]["value"], expected_total)
+            self.assertEqual(result["score_distribution"], original["score_distribution"])
+            self.assertEqual(result["derived"], original["derived"])
+            self.assertFalse(result["recommendation_eligible"])
+
+    def test_changed_team_assumptions_can_reverse_direction_without_quality_penalty(self):
+        p = fixture(5)
+        p["judgment"]["scenarios"][0]["weight"] = .7
+        p["judgment"]["scenarios"][1]["weight"] = .3
+        original = module.build(p)
+        updated = copy.deepcopy(p)
+        # Synthetic alternate assumptions, not a rule to reweight real opponents.
+        updated["judgment"]["scenarios"][0]["weight"] = .3
+        updated["judgment"]["scenarios"][1]["weight"] = .7
+        result = module.build(updated)
+        self.assertEqual(original["derived"]["winner_pick"], "a")
+        self.assertEqual(result["derived"]["winner_pick"], "b")
+        self.assertEqual(result["confidence"], original["confidence"])
+
     def test_mixture_preserves_equal_winner_but_changes_sweep_risk(self):
         p = fixture()
         original = copy.deepcopy(p)

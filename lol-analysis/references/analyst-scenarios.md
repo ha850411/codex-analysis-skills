@@ -66,6 +66,8 @@ python3 shared/forecast/cli.py render analyst-forecast.json --output-dir rendere
 
 ## 報告與後續驗收
 
+取價後依 `systematic-validation.md` 執行獨立 `audit_decision.py`。本頁的單項擾動只用來定位敏感參數，不能拿最低值當進場底價的安全勝率；多個假設共同變動可能越過損益兩平線。聯合診斷同樣不改主分布或提供新校準率。
+
 標示「分析者情境估計（實驗，未實證校準）」；正文說明主判斷與反證，簡表可壓縮標示「情境估計」。保留比分基準作比較，不取兩者平均或挑有利端點。情境間的差距只描述假設差異，不是信賴區間。
 
 `status=experiment`、`recommendation_eligible=false`、0u；不能因有來源或驗算通過就標production。日後將事前鎖定的情境預測與基準配對回收，分別檢查勝方、比分及機率校準。方法文件與程式上線只代表能實際執行情境估計，不代表命中率已改善。

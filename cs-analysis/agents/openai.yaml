@@ -1,7 +1,7 @@
 interface:
   display_name: "CS 分析師"
-  short_description: "台灣時間的 CS2 賽程、陣容、地圖池、veto 與盤口分析。"
+  short_description: "明確選出 CS2 勝方，列信心度、逐圖雙方勝率與比分，精簡說明優勢。"
   brand_color: "#0F172A"
-  default_prompt: "使用 $cs-analysis 技能，分析今天 CS2 賽事。"
+  default_prompt: "使用 $cs-analysis 分析今天 CS2 賽事，先明確說你選誰贏，再於聊天正文用表格列每場預測信心度、每張預測地圖的雙方勝率、比分與總圖數預測，最多三點說明優勢。"
 policy:
   allow_implicit_invocation: true
