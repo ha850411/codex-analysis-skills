@@ -35,12 +35,15 @@
 
 ## JSON 與 CLI
 
-輸入物件為 `event`、`baseline`、`judgment`；`event` 與共用CLI相同，另將引用資料標記 `kind=match_detail|lineup|patch|schedule|context`、`teams`（該證據實際涵蓋的隊伍縮寫）。兩隊皆須有被情境引用的 `match_detail`。不要把賽程加上kind就冒充局內內容。
+輸入物件為 `event`、`baseline`、`judgment`；`event` 與共用CLI相同，另將引用資料標記 `kind=match_detail|lineup|patch|schedule|context|solo_queue`、`teams`（該證據實際涵蓋的隊伍縮寫）。兩隊皆須有被情境引用的正式賽 `match_detail`。不要把賽程或排位資料改標成正式賽局內內容。
+
+排位指標依 `solo-queue-indicators.md` 保存 `solo-queue-evidence.json` 及未使用／加入排位後的判斷。有效來源以 `solo_queue` 加入支持或反證引用；若改變情境，交代具體英雄、對位、可轉移條件及受影響參數。此標籤不附帶自動加權，也不滿足正式賽證據或局間依賴的 `match_detail` 要求。未採用的資料記錄原因；先前已看過排位的控制版本不能冒充未受影響的前瞻對照。
 
 `baseline` 是同事件、同隊伍順序、同資料截止、同賽制的已驗證比分基準完整JSON；兩者建立時間可以不同。`judgment` 包含 `locked_at`、`baseline_departure`、`counterargument`、`scenarios`。每個 scenario 的欄位如上。`locked_at` 在資料截止之後、event 建立時間之前或相等，且必須早於開賽。資料、輸入不含市場；不得用賽後資訊生成標為賽前的估計。
 
 ```bash
-python3 lol-analysis/scripts/analyst_forecast.py build analyst-input.json --output analyst-forecast.json
+python3 lol-analysis/scripts/analyst_forecast.py build-paired analyst-input.json \
+  --history history.json --output analyst-forecast.json --pair-output-dir strength-pair
 python3 lol-analysis/scripts/analyst_forecast.py validate analyst-forecast.json
 python3 shared/forecast/cli.py validate analyst-forecast.json
 python3 shared/forecast/cli.py record analyst-forecast.json
@@ -48,6 +51,8 @@ python3 shared/forecast/cli.py render analyst-forecast.json --output-dir rendere
 ```
 
 腳本展開逐局樹、聚合各情境及主分布，並保存原始輸入與雜湊。LoL專用validate重新計算並比較整份預測；不能只用共用validate取代它。市場決策獨立保存，不能修改鎖定輸入；報告增補市場段落須引用獨立決策並保留分布不變。
+
+新的 pre-draft BO3／BO5 使用 `build-paired`，一次產生原主預測與 `strength-experiment.md` 的固定影子對照；不把候選混入主分布。舊 `build` 保留供歷史重播、合成測試、排位研究的隔離控制版本及此候選不支援的 BO1／BO2／其他快照，不能用它規避新主預測的實際配對。配對失敗先修正 history／身分；確實不適用則保存缺候選原因與原預測，回收時留在 coverage 分母。
 
 腳本的驗證只檢查結構、時點、引用、機率與重播，不會證明來源內容正確或參數合理。發布前人工核對來源是否真的支持每項機制，是否正反證同等處理，是否以結果偏好反推權重。
 

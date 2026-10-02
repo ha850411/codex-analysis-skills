@@ -5,18 +5,21 @@
 
 ## 1. 先重建事實
 
-- 先用報告內的 `forecast_id` 讀取 `.automation-state/valorant/history/forecasts/` 原快照；再查當次 run artifact 與已授權的匯出頁。找不到時標記 `baseline artifact missing`，不得事後重建原機率或計算 Brier／log loss。
+- 先用已發布報告內的 `forecast_id` 讀取 `.automation-state/valorant/history/forecasts/` 原快照；再查當次 run artifact 與已授權的匯出頁。保存來源檔雜湊；文字修訂版與未發布版本不能重複計分。找不到時標記 `baseline artifact missing`，不得事後重建原機率或計算 Brier／log loss。
 - 核對比賽：賽事、階段、日期、賽制、Patch、場地或線上/線下、先發五人與是否有 stand-in。
 - 核對結果：系列比分、每張地圖比分、pick/ban 順序、pick owner、選邊、OT、手槍局、eco/thrifty、關鍵 timeout 後回合。
 - 核對內容：官方 VOD、VLR match page、RIB.gg/THESPIKE 數據、Valorant Esports match centre、官方賽後摘要。
 - 若只能取得使用者截圖、部分 VOD 或社群摘要，必須標記資料限制，不得硬補未知比分或選手數據。
-- 另建 `scenario coverage` 欄：逐圖實際五人、首兩輪 ban、兩張 pick、pick owner、decider 是否出現在賽前加權情境中。六人名單若只覆蓋系列賽其中一組五人，標記 `lineup_by_map coverage miss`；只在風險段提到、但未進入主分布者，也視為未覆蓋。
+- 另建 `scenario coverage` 欄：逐圖實際五人、首兩輪 ban、兩張 pick、pick owner、decider 是否出現在賽前主分布的正權重情境中；完整覆蓋須由同一條情境同時成立。六人名單若只覆蓋其中一組五人，標記 `lineup_by_map coverage miss`。敏感度路徑即使完全命中，也只記研究命中，不計入主分布覆蓋。
+- 分清「預估五人／特務是否正確」與「是否實際入模」。`scenario_coverage` 各維度用 `true`（覆蓋）、`false`（已建模但漏掉實際路徑）、`not_modeled`（未建模）、`unknown`（缺驗證證據）；主情境只有 `unresolved-map-order` 時使用 `not_modeled`，不能誤報臨時換人。另存敏感度與逐圖事實核對，不把兩種覆蓋相加。
+- 枚舉所有合法 veto 時，另列實際完整行動路徑的原權重，以及圖序／pick owner 組合的原權重；正權重覆蓋不證明偏好估計準確。五人、player→agent 配置與起始攻守分開核對；未打決勝圖不補造實際五人／特務。用 `forecast-engine.md` 的 `audit-model-use` 區分主系列與單圖補充中的特徵使用。
 
 ## 2. 重建原預測
 
 - 原推薦勝方、精確比分、勝率、至少一圖機率、信心度與注碼。
 - 原快照保存狀態、`forecast_id`、模型版本、skill revision、資料截止與預定開賽時間；若缺失，把所有需原機率的指標填 `N/A（baseline artifact missing）`。
 - 原本支撐預測的核心假設：Patch、同賽事樣本、H2H、地圖池、已公布 veto、pick owner、特務池、主 Duelist 狀態、熱手/休息。
+- 分開記錄勝方／比分命中與核心論述是否成立。勝方命中仍可伴隨關鍵自選圖被禁或選圖方判錯；兩圖小比分差的2–0，也不能單憑系列比分倒推原勝率偏低。角色與經濟歸因須有逐圖數據，不能把單場首殺極端值當成持續能力。
 - 若原預測是在官方 veto 公布後做出，必須檢查是否真的 post-veto 重算，或只是把已公布 veto 填進賽前模型。
 
 ## 3. 判定失準等級
@@ -24,13 +27,13 @@
 | 等級 | 定義 | 處理 |
 | --- | --- | --- |
 | 小偏差 | 勝方正確，比分差一張圖 | 檢查精確比分分布是否過窄 |
-| 中偏差 | 勝方錯誤但系列接近，例如 BO3 1:2、BO5 2:3 | 降低勝率集中度，重新檢查取圖路徑 |
-| 大偏差 | 勝方錯誤且比分差至少兩張圖，或內容明顯反向 | 建立 veto／權重／分布 challenger |
+| 中偏差 | 勝方錯誤但系列接近，例如 BO3 1:2、BO5 2:3 | 核對原勝率、取圖路徑與同類殘差，不直接拉向 50% |
+| 大偏差 | 勝方錯誤且比分差至少兩張圖，或內容明顯反向 | 找可重複機制；有賽前可觀察觸發條件才建 challenger |
 | 地圖分布大偏差 | 勝方方向正確，但至少一圖、+1.5 maps、3:1/3:2 分布明顯錯 | 分開檢討獨贏模型與地圖分布模型 |
 | Post-veto 失準 | 已公布 veto 後仍錯估 pick/ban 訊號、選邊或 anti-strat | 強制加入 left-through 與 map order 重算 |
 | 系統性偏差 | 同賽事、同隊伍、同類 BO5 或同 Patch 連續錯 | 用同類 cohort 做 paired walk-forward |
 | 情境覆蓋失敗 | 實際 lineup 或關鍵 veto 路徑不在賽前主分布情境內 | 修正情境生成；即使勝方正確也算流程缺口 |
-| 比分分布壓縮 | 多場眾數反覆落在 2:1／3:1，橫掃或打滿尾部系統性不足 | 加入系列賽共同狀態與批次集中度檢查 |
+| 比分眾數集中 | 多場眾數反覆落在 2:0、2:1 或同類 BO5 比分 | 同看完整尾部機率與跨日賽果；眾數一致本身不證明失校 |
 
 ## 4. 錯誤歸因框架
 
@@ -45,7 +48,7 @@
 - 手槍與經濟誤判：是否低估手槍局、bonus、eco/thrifty 對 Valorant 小樣本地圖的放大效果。
 - 教練組與 timeout 誤判：是否低估勝方局間修正、暫停後回合成功率、或敗方連續被同一弱點打穿。
 - 市場/品牌偏誤：是否因 PRX、SEN、Fnatic、DRX、G2、LEV 等隊名或人氣敘事提高信心。
-- 合理變異：若主要來自 OT、連續 eco、極端 clutch 或單圖手感，標記為變異；但多圖重複出現時要視為模型錯誤。
+- 合理變異：以逐回合或 VOD 證據判斷 OT、eco、clutch 等影響；多圖重複只能形成待驗證假設，不能直接判定模型錯誤或推論教練準備。
 - 未展示誤當弱圖：是否把零樣本、常 ban 或未被選到誤當成負面戰績，忽略 veto 的選擇偏差。
 - 情境有寫但未入模：是否在正文寫出「若 X 則翻盤」，卻沒有給情境權重，也沒有混入精確比分主分布。
 - 信心度可用性錯配：是否因資料新鮮就給高信心，卻沒有讓未確認 veto、pick owner、map order 或交叉名單組合進入 `名單／先發確定度` 與 `模型穩定性`。
@@ -60,8 +63,8 @@
 - 若原模型把落敗方至少一圖給到高機率但實際被橫掃，重建精確比分主分布並檢查取圖路徑與 map order；只有確認流程錯誤才調整，不能因一次賽果硬設 65–70% 上限。
 - 若高機率熱門方實際輸掉，檢查逐圖相關性、veto 與同 Patch 樣本；下一場機率仍由新快照證據計算，不硬設 58–60% 上限。
 - 若官方 veto 已公布後仍失準，下一次分析要先寫「post-veto 重新校準」小節，再輸出模型機率。
-- 若實際 lineup / veto 未被任何賽前情境覆蓋，先修正情境生成與權重，再談調整隊伍強度；不得把覆蓋失敗歸因為純冷門。
-- 若同批至少四場 BO3，檢查 2-1 眾數比例與整批預期橫掃場數。集中度異常時加入 team-day / series-state 共同狀態，不得逐場手動提高 2-0。
+- 若實際 lineup / veto 未進主分布，先分辨漏掉有證據路徑、研究未入模與原證據不足。資料映射錯誤可修復；新增路徑權重或角色效果須隔離驗證，不憑這次賽果補權重，也不直接調整隊伍強度。
+- 若同批至少四場 BO3，對稱檢查 2-0 與 2-1 眾數比例、整批預期橫掃與實際橫掃。共同狀態、尾部或收縮參數僅可作 challenger，不因眾數集中就自動加入或加重；原模型已有共同狀態時避免重複計算。
 
 ## 6. Post-veto 重算檢查
 
@@ -75,14 +78,17 @@
 
 ## 7. 批次機率診斷
 
-四場以上的同批報告使用 `../scripts/audit_batch.mjs`。輸入每場賽前 `A/B` 勝率、四項精確比分與實際比分，至少記錄：
+先以共用 `shared/forecast/cli.py evaluate` 評分原 v2 快照的副本，只附加實際結果、來源與觀察時間，不改賽前欄位。實際比分按原 `participants` 的 A/B 順序重排。將 evaluated forecasts 與逐場誤差帳本保存至 `.automation-state/valorant/history/`；先讀同 model／parameter version、snapshot 的歷史 cohort，再加入本批。不同版本、條件單圖、敏感度與事後重算分開；同場修訂版本只選實際發布者。
+
+四場以上的同批／跨日同類 BO3 使用 `../scripts/audit_batch.mjs`，小批亦可用於診斷。輸入 `{ "matches": [...] }`：v2 保留 fraction 主分布、`actual_score`（如 `2-1`）、五維 `scenario_coverage`，全部維度為 true 時另附 `joint_scenario_covered`；legacy 百分比與 `a_2_1` 格式仍相容。至少記錄：
 
 - 勝方命中為主要指標、比分命中為次要；Brier score、log loss、情境覆蓋與預測可用率同步評估，不以單一指標宣稱改善。
 - 精確比分使用 multiclass log loss，並列出模型給實際比分的機率。
 - 預期橫掃場數為 `Σ[P(A 2-0)+P(B 2-0)]`；與實際橫掃場數比較。
-- 用 Poisson-binomial 尾端機率描述「至少出現這麼多場橫掃」在原分布下是否罕見。
-- 計算 2-1 眾數比例；若 ≥80%，檢查是否存在機械式 2-1 壓縮。
-- 統計 `lineup_by_map`、`first_bans`、`map_picks`、`pick_owners`、`decider` 各維度的 scenario coverage miss；這是流程品質指標，不受賽果是否猜對影響。新資料使用 `scenario_coverage` 物件；`scenario_covered` 只供舊快照相容。
+- 共用 `brier` 採 A/B/draw 誤差平方加總（無和局時等於二元 Brier 的兩倍）。批次工具保留舊 `winner_brier`，並以 `winner_brier_sum` 對齊 v2；比較時不可混用。
+- 用 Poisson-binomial 同時列「至多／至少／恰好」實際橫掃數；零橫掃時只看至少零場必為 100%，沒有診斷力。註明系列間獨立假設，不能把此尾機率當校準證明。
+- 同時計算 2-0 與 2-1 眾數比例；≥80% 只觸發檢查。比較的是總橫掃機率和賽果，而非把 27% 的比分眾數誤讀成 100% 橫掃預測。
+- 分別統計五維 verified miss、not_modeled、unknown 與 joint coverage；這是流程品質指標，不受勝方是否猜對影響。`scenario_covered` 只供舊快照相容。
 
 單批樣本不足以宣稱模型已失校。只有同類 cohort 或 walk-forward 回測重複出現，才調整長期先驗；但資料漏列、情境未入模、相依機率不一致可立即修正。
 

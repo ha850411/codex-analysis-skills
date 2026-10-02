@@ -1,36 +1,36 @@
 ---
 name: prediction-pipeline
-description: 協調可稽核的預測流程：使用者觸發 agy 紅隊時，先告知 Codex 主預測、agy 紅隊審查、Codex 最終裁決與條件式 post-market 決策使用的模型，無須等待確認便建立標準 input.json、執行主預測、紅隊審查、最終裁決、驗證並輸出 Markdown、JSON 與 YouTube 腳本。當預測或 *-analysis 請求提到「啟用 agy 紅隊」、「agy 紅隊審查」、「交給 agy 複核」、「雙模型審查」、agy、agy-cli 或模型互審時使用；一般單模型預測不得顯示模型計畫。
+description: "Coordinate auditable predictions when the user requests 「啟用 agy 紅隊」「agy 紅隊審查」「交給 agy 複核」「雙模型審查」, agy, agy-cli or 「模型互審」 in a prediction or *-analysis request. Announce models for the Codex primary forecast, agy review, Codex final adjudication and conditional post-market decision; proceed without confirmation to create input.json, forecast, review, adjudicate, validate and export Markdown, JSON and YouTube scripts. Never show a model plan for ordinary single-model predictions."
 ---
 
-# Codex × agy 預測管線
+# Codex × agy Prediction Pipeline
 
-只處理明確要求 agy、紅隊或模型互審的預測；一般單模型分析不額外啟動模型。領域分析依對應的 `*-analysis` skill。
+Respond in Traditional Chinese (Taiwan). Handle only predictions explicitly requesting agy, 「紅隊」 or 「模型互審」; do not start extra models for ordinary single-model analysis. Use the corresponding `*-analysis` skill for domain analysis.
 
-## 啟動與資料
+## Startup and data
 
-1. 讀 `references/model-defaults.json`，以使用者當次指定值優先；執行 `agy models` 驗證可用模型。設定無效或模型不可用時回報，不靜默換模型。
-2. 告知本次主預測、紅隊、最終裁決與條件式市場決策模型，隨即執行；不等待再次確認。一般對話預設沿用目前會話模型，只有設定要求時才啟動 Codex CLI。
-3. 讀 `references/runbook.md` 與 `references/contracts.md`，依對應 schema 建立 input 與 run 目錄；使用者不必自行提供 JSON 或 CLI。
-4. 新計算使用 `../shared/forecast/contract.md` 的 canonical forecast，再以 `pipeline-input` 轉為既有 v1 輸入。主預測、紅隊與最終裁決只看市場隔離輸入。
+1. Read `references/model-defaults.json`; the user's current selections take precedence. Run `agy models` to verify availability. Report invalid settings or unavailable models; never silently substitute a model.
+2. Announce the models for the primary forecast, red team, final adjudication and conditional market decision, then proceed without another confirmation. In ordinary conversations, default to the current session model; start Codex CLI only when the configuration requires it.
+3. Read `references/runbook.md` and `references/contracts.md`; create input and run directories under the relevant schemas. The user need not supply JSON or CLI commands.
+4. For new calculations, use the canonical forecast in `../shared/forecast/contract.md`, then convert it to existing v1 input with `pipeline-input`. The primary forecast, red team and final adjudication receive only inputs isolated from market data.
 
-## 審查與裁決
+## Review and adjudication
 
-- 主報告必須先包含領域必要分析，讓 agy 審查全文。紅隊意見是待裁決的證據，不是替代預測。
-- 紅隊聚焦可能改變結論的事實、時序、輸入映射、最強反證與分布錯誤；finding 引用現有欄位記錄來源定位、受影響假設及可核對的修正。模型彼此同意不構成新增證據，不為湊 finding 或折衷而平均兩個勝率；無實質問題可保留原預測。
-- 主預測與最終裁決必須保留 `computed_probability_groups` 的計算值；需要更改機率時，先重建上游 canonical forecast，再重跑下游。舊 input 沒有此欄位時保留 legacy 模式並揭露計算溯源限制。
-- 每個 finding 都須接受或否決，附理由與處置；每個 unresolved question 都須回覆或說明缺口及影響。實際數字與文字修改全部記入 changes。
-- 以主報告的章節標題維持覆蓋；各節提供答案、缺口或不適用原因。刪除重複文字不受字數比例限制。
-- agy 格式失敗先保存 raw 與錯誤，只允許同模型一次格式修復；再次失敗即停止該流程，不偽造成功 artifact。
+- Include required domain analysis in the primary report before agy reviews the full text. Red-team comments are evidence to adjudicate, not a replacement forecast.
+- Focus the red team on facts, chronology, input mapping, strongest counterevidence and distribution errors that could change conclusions. Record source locations, affected assumptions and verifiable corrections in existing finding fields. Model agreement is not new evidence. Do not average two win probabilities to manufacture findings or compromise; retain the original forecast if no substantive issue exists.
+- The primary forecast and final adjudication must retain computed values in `computed_probability_groups`. To change probabilities, rebuild the upstream canonical forecast first, then rerun downstream stages. For old inputs without this field, retain legacy mode and disclose calculation-provenance limits.
+- Accept or reject every finding with reasons and disposition. Answer every unresolved question or explain the gap and impact. Record all actual numerical and textual edits in changes.
+- Preserve coverage using the primary report's section headings. Each section must contain an answer, gap or reason it does not apply. Removing repetition has no word-count-ratio constraint.
+- On agy formatting failure, save raw output and errors first. Allow one format-repair attempt with the same model; if it fails again, stop that workflow. Never fabricate a successful artifact.
 
-## 市場與交付
+## Markets and delivery
 
-- 機率鎖定後才按 `../shared/markets/collection-contract.md` 逐場收集價格、重試與保存成功／失敗憑證。市場不能回寫機率。
-- 有價格才建立獨立 post-market 決策，覆蓋每個 bet_id 與簡表列；無價格仍完成模型報告並標 0u。玩法覆蓋不完整須明示。
-- 執行管線 export 完成 schema、跨階段、信心度、機率、裁決與市場算術驗證；失敗回到上游修正。
-- 依 `../shared/forecast/report-template.md` 輸出完整 prediction.md、prediction.json、chat-summary.md，按需求輸出口播腳本。聊天與完整報告均以唯一五欄簡表收尾，連結和來源放在簡表之前。
-- 完整紅隊 finding 與裁決留在 JSON；正文只列會影響結論的修改。外部發布沿用既有授權，不因啟用 agy 自動取得發布授權。
+- Only after locking probabilities, collect prices per match, retry and save success/failure evidence under `../shared/markets/collection-contract.md`. Market data must not feed back into probabilities.
+- Create a separate post-market decision only when prices exist, covering every bet_id and summary-table row. Without prices, still complete the model report and label 0u. Disclose incomplete market coverage.
+- Run pipeline export to validate schemas, cross-stage consistency, confidence, probabilities, adjudication and market arithmetic. Fix failures upstream.
+- Under `../shared/forecast/report-template.md`, output complete prediction.md, prediction.json and chat-summary.md, plus a narration script when requested. End both chat and the full report with exactly one five-column summary table; place links and sources before it.
+- Keep full red-team findings and adjudications in JSON; include only conclusion-changing edits in the report body. External publication requires existing authorization; activating agy does not itself authorize publication.
 
-## 報告保存
+## Report storage
 
-export 完成後，依 `../shared/report-storage.md` 呼叫共用 `report_archive.py save`，使用領域 skill 的 sport、實際報告模式及目標台灣日期，封存完整 run 的報告、JSON、來源／快照、驗證、紅隊與裁決附件。Gemini／Codex 都執行同一個工具，agent／model 如實記錄；不改既有模板、模型選擇或排程輸出路徑。流程失敗時只以 `--status validation-failed` 或 `incomplete` 保存診斷產物，不偽裝完成報告。外層 analysis skill 沿用這份成功收據與報告連結；只有附件或內容更新才再次保存。
+After export, call shared `report_archive.py save` under `../shared/report-storage.md` with the domain skill's sport, actual report mode and target Taiwan date. Archive the full run's reports, JSON, sources/snapshots, validation, red-team and adjudication attachments. Gemini and Codex use the same tool; record agent/model truthfully. Preserve existing templates, model selections and scheduled output paths. On workflow failure, save diagnostic artifacts only with `--status validation-failed` or `incomplete`; never present them as completed reports. The outer analysis skill reuses the successful receipt and report links; save again only when attachments or content change.

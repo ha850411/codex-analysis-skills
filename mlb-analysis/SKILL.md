@@ -1,36 +1,36 @@
 ---
 name: mlb-analysis
-description: "分析 MLB／美國職棒賽事的賽程、先發投手、打線、牛棚、傷兵、天氣、球場、模型機率、盤口價值與賽後校準。用於 probable pitchers、前五局、獨贏、讓分、大小分、球員盤與今日決策；不要用於其他棒球聯盟、遊戲或一般規則問題。預設繁體中文與台灣時間。"
+description: "Analyze MLB/美國職棒 schedules, starting pitchers, lineups, bullpens, injuries, weather, parks, model probabilities, market value and 「賽後校準」. Use for probable pitchers, 「前五局」「獨贏」「讓分」「大小分」「球員盤」「今日決策」. Exclude other baseball leagues, games and general rules questions. Default to Traditional Chinese and Taiwan time."
 ---
 
-# MLB 賽事分析
+# MLB Match Analysis
 
-預設繁體中文、台灣時間（Asia/Taipei）。優先沿用公開資料 baseline 與分階段模擬；前五局和全場分開結算。
+Respond in Traditional Chinese (Taiwan). Use Taiwan time (Asia/Taipei). Prefer the existing public-data baseline and staged simulation; settle first-five-inning and full-game markets separately.
 
-## 執行契約
+## Execution contract
 
-先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責時間、快照、機率、評估與輸出；本技能負責 先發投手、打線、牛棚工作量、場地與天氣、前五局與全場。
+Read `../shared/analysis-core.md` first, and `../shared/forecast/contract.md` when generating new probabilities. The shared layer handles time, snapshots, probabilities, evaluation and output; this skill handles starting pitchers, lineups, bullpen workload, venue and weather, first five innings and full games.
 
-- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
-- 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
-- 先分辨先發能力、預期工作量與接手牛棚，再看打線及得分環境；相同投手的 ERA、FIP、xERA 不重複加分。缺完整投影時沿用公開 baseline，保留未建模的打線／牛棚影響。
-- 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
-- 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
-- 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
-- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport mlb`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
-- MLB 詳細建模與現有模擬：讀 `references/modeling-framework.md`，保留原公開 baseline 的版本與禁投注狀態。
+- Confirm the requested event and Taiwan date. For daily requests, inventory the entire target set; do not select only easy matches.
+- Read `references/source-priority.md` to verify changing facts. Save event identity, source content, publication and verification times; never fill gaps from model memory.
+- Before modeling in `full` or `daily-summary`, read the applicable sections of `references/domain-analysis.md`. For new probabilities, also read `../shared/prediction-methodology.md`, verify evidence against actual inputs, and check counterevidence. Domain reasoning must not directly overwrite computed results.
+- Separate starter ability, expected workload and the bullpen taking over before assessing lineups and scoring conditions. Do not double-count a pitcher's ERA, FIP and xERA. Without full projections, retain the public baseline and disclose unmodeled lineup/bullpen effects.
+- New calculations: `python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`. See the shared contract for inputs and examples. Label baseline, experimental, and production models separately.
+- Build the primary score distribution first; derive the winner, modal score, and other markets from it. If the predicted winner and modal score favor different sides, explain both; do not manually change scores.
+- Create a complete new snapshot when official information changes. Before publication, validate and save it, then render the report from the same data.
+- After completing or updating a report, automatically classify and archive it under `../shared/report-storage.md` using shared `report_archive.py save --sport mlb` with the actual task mode and date. Gemini and Codex use the same workflow; preserve output templates, original paths, and historical versions.
+- For detailed MLB modeling and existing simulations, read `references/modeling-framework.md`; preserve the original public baseline version and no-betting status.
 
-## 模式與輸出
+## Modes and output
 
-- 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
-- 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
-- 聊天提供結論、最多三項依據、主要風險、完整報告連結及唯一置底窄表；詳情保存在完整報告。
-- 模型信心度是證據品質評分，與勝率分開。未知時顯示 N/A 與原因。
-- 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。無可追溯價格或未校準基準不給正注碼。
-- 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
-- Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。
+- Default to quick for a single follow-up. New probabilities still require validation and snapshots; shorten only the prose.
+- Default to full for one match and daily-summary for a full day. Read `references/output-template.md`.
+- In chat, provide the conclusion, up to three supporting points, main risk, full-report link, and exactly one narrow table at the bottom. Keep details in the full report.
+- Model confidence measures evidence quality, separately from win probability. Show N/A with a reason when unknown.
+- Introduce market data only after probabilities are locked; read `../shared/markets/collection-contract.md`. Assign no positive stake without traceable prices or when using an uncalibrated baseline.
+- Activate `../prediction-pipeline/SKILL.md` only when the user explicitly requests agy or 「模型互審」. Do not start extra models for ordinary analysis.
+- Export to Notion under `../shared/notion/skill-instructions.md` and existing authorization.
 
-## 賽後與改善
+## Postmortem and improvement
 
-先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
+First read `../shared/postmortem-improvement.md` and `references/postmortem-calibration.md`. Prioritize winner accuracy, then scores; report probability quality and coverage separately. Never reconstruct a supposed original prediction without its original snapshot. Register new factors as candidate; keep them experiment-only without paired out-of-sample evidence of improvement. Lower confidence or stakes do not demonstrate improved accuracy.

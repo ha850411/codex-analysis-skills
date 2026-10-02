@@ -1,49 +1,49 @@
 ---
 name: cs-analysis
-description: "分析 Counter-Strike 2／CS:GO 電競賽事，明確選出看好勝方，以精簡表格提供比分、逐圖、總圖數與盤口預測。適用 CS2、HLTV 對戰、BO1／BO3／BO5、veto 更新、即時比分與經濟滾球、整日賽事及賽後校準；不適用遊戲安裝、設定或一般玩法。預設繁體中文與台灣時間。"
+description: "Analyze Counter-Strike 2/CS:GO esports, choose a winner, and give compact score, per-map, total-map and market predictions. Use for CS2, HLTV matchups, BO1/BO3/BO5, veto updates, 「即時比分」「經濟滾球」「整日賽事」「賽後校準」. Exclude installation, settings and general gameplay. Default to Traditional Chinese and Taiwan time."
 ---
 
-# Counter-Strike 賽事分析
+# Counter-Strike Match Analysis
 
-預設繁體中文、台灣時間（Asia/Taipei）。BO1／BO3／BO5；CS:GO 歷史資料與 CS2 分開。
+Respond in Traditional Chinese (Taiwan). Use Taiwan time (Asia/Taipei). Support BO1/BO3/BO5; separate historical CS:GO data from CS2.
 
-## 結論原則
+## Conclusion principles
 
-- 第一行直接回答「**我看好 {隊名} 贏。**」，緊接勝率與看好方的代表比分。預設選同一主分布中系列勝率較高的一方；接近均勢仍選較高方，只補「小幅優勢」，不以「雙方都有機會」「等 veto 再說」代替答案。
-- 勝率完全相同時，用已查證的本場對位作定性取捨，標明「模型同率，定性選 X」，不改百分比。無法量化但仍有可比較證據時，給定性勝方並標「勝率未量化」；連選邊依據也沒有時才明列無法判定及缺口，不任意選隊或捏造 50%。
-- 看好方代表比分取該隊獲勝結果中機率最高者；與全分布比分眾數不同時，另用一行列出真正眾數與機率，不把代表比分稱為全場最可能結果。計算規則見 `references/prediction-data.md`。
-- 「看好誰贏」與「是否下注」分開。缺價、0u、基準／實驗狀態不取代勝方判斷；明確選邊不表示保證獲勝，也不提高原始勝率。
-- 預設結果多、說明少：數據用表格；優勢理由最多三點、每點一句，直接連結可比數據與本場地圖／角色。只留一個最重要翻轉條件，完整研究與稽核存附件。使用者要求深入時才展開推理。
+- Start with 「**我看好 {隊名} 贏。**」, immediately followed by win probability and that team's representative score. Default to the higher series win probability in the same primary distribution. Even near parity, choose the higher side and add 「小幅優勢」; do not substitute 「雙方都有機會」 or 「等 veto 再說」 for an answer.
+- For exactly equal probabilities, choose qualitatively using verified matchups, label 「模型同率，定性選 X」, and keep percentages unchanged. If quantification is unavailable but comparable evidence exists, name a qualitative winner and label 「勝率未量化」. Only when there is no basis to choose, state that the winner cannot be determined and list gaps; never choose arbitrarily or invent 50%.
+- The favored team's representative score is its most probable winning outcome. If it differs from the overall modal score, list the actual mode and probability on a separate line; do not call the representative score the most likely overall outcome. See `references/prediction-data.md` for calculations.
+- Separate 「看好誰贏」 from 「是否下注」. Missing prices, 0u, and baseline/experimental status do not replace winner assessment. Choosing a side neither guarantees a win nor increases the original probability.
+- Default to detailed results with brief explanation: tabulate data; give at most three one-sentence reasons tying comparable evidence to this match's maps/roles. Retain only the most important reversal condition; attach full research and audits. Expand reasoning only when the user requests depth.
 
-## 執行契約
+## Execution contract
 
-先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責時間、快照、機率與評估；本技能負責逐圖資料、陣容與角色、當前地圖池、veto、選邊及 LAN／Online。呈現採本技能的精簡結果模板。
+Read `../shared/analysis-core.md` first, and `../shared/forecast/contract.md` when generating new probabilities. The shared layer handles time, snapshots, probabilities and evaluation; this skill handles per-map data, rosters/roles, the current map pool, veto, side selection and LAN/Online. Use this skill's compact results template.
 
-- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
-- 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；veto／陣容更新追問也須讀相關段落，不能因為是 quick 就省略補查。新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
-- 核對同陣容、同圖與對手強度後再比較攻守、首殺轉化及經濟局；區分選圖偏差與可重複弱點，veto 推測不能當成已公布結果。
-- 使用共用 CS v2 模型時，依 `references/domain-analysis.md` 第4.1節執行 `scripts/audit_model.py`；核對實際評級更新、逐圖對手校正、資料期間與 BO 適用性，再解讀結果。稽核及消融是診斷，不會自動改變機率或升版。
-- 滾球先依 `references/domain-analysis.md` 第7節核對即時比分、隊伍方向、換邊、當前規則及可用經濟狀態；用能接受該狀態的模型重建分布。共用賽前 predict 不支援回合經濟，不得僅改時間與快照名稱冒充 live。快照仍用 `live-m{X}-r{Y}`、`live-post-m{X}` 或 `live-halftime`；`data_cutoff` 為已確認回合時間，依共用契約區分 `reconstructed_after_start` 與特定局前瞻，不偽裝整場賽前 prospective。
-- 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
-- 先建比分主分布，再依 `references/prediction-data.md` 執行 `scripts/summarize_forecast.py`，導出勝方、比分、預期圖數／圖差與逐圖條件機率。不另估一套展示數字，不由系列勝率反推回合比分。
-- 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
-- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport cs`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
+- Confirm the requested event and Taiwan date. For daily requests, inventory the entire target set; do not select only easy matches.
+- Read `references/source-priority.md` to verify changing facts. Save event identity, source content, publication and verification times; never fill gaps from model memory.
+- Before modeling in `full` or `daily-summary`, read applicable sections of `references/domain-analysis.md`. Also read relevant sections for veto/roster follow-ups; quick mode does not waive research. For new probabilities, read `../shared/prediction-methodology.md`, verify evidence against actual inputs, and check counterevidence. Domain reasoning must not directly overwrite computed results.
+- Verify roster, map and opponent-strength comparability before comparing attack/defense, opening-kill conversion and economy rounds. Distinguish map-selection bias from repeatable weaknesses; never present a projected veto as official.
+- When using the shared CS v2 model, run `scripts/audit_model.py` under section 4.1 of `references/domain-analysis.md`. Check actual rating updates, per-map opponent adjustments, data periods and BO applicability before interpreting results. Audits and ablations are diagnostic; they do not automatically change probabilities or promote versions.
+- For live betting, verify the live score, team orientation, side switches, current rules and available economy state under section 7 of `references/domain-analysis.md`; rebuild the distribution with a model that accepts that state. Shared prematch predict does not support round economy: changing timestamps and snapshot names does not make it live. Keep snapshot names `live-m{X}-r{Y}`, `live-post-m{X}` or `live-halftime`; set `data_cutoff` to the confirmed round time. Under the shared contract, distinguish `reconstructed_after_start` from prospective forecasts for a specific map; never present either as a prospective prematch forecast for the whole series.
+- New calculations: `python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`. See the shared contract for inputs and examples. Label baseline, experimental, and production models separately.
+- Build the primary score distribution first, then run `scripts/summarize_forecast.py` under `references/prediction-data.md` to derive the winner, scores, expected map count/difference and conditional per-map probabilities. Do not estimate separate display values or infer round scores from series win probability.
+- Create a complete new snapshot when official information changes. Before publication, validate and save it, then render the report from the same data.
+- After completing or updating a report, automatically classify and archive it under `../shared/report-storage.md` using shared `report_archive.py save --sport cs` with the actual task mode and date. Gemini and Codex use the same workflow; preserve output templates, original paths, and historical versions.
 
-## 模式與輸出
+## Modes and output
 
-- 讀 `references/output-template.md` 的適用模式。單場賽前用 full：結論、數據、逐圖短表、最多三點理由；「完整分析」保留所有適用數據，「深入／詳細／展開原因」才增加說明。聊天直接交付結果，不以附件取代答案。
-- 單一機率追問用 quick，回答該事件的機率、組成、公允價格與關鍵限制；承接使用者正在問的市場。收到 veto／名單等新資訊時用更新格式，列出受影響的逐圖與結果前後差異，不能只重貼舊結論。
-- 整日請求用 daily-summary，涵蓋完整目標集合；滾球用 live，優先交付已確認局勢、條件機率、與上一快照的變化及失效條件。精簡依據不等於省略必要數字或未知狀態。新機率仍須驗證、保存快照。
-- 單場不再重複置底五欄總結；daily-summary 直接用一張賽事預測總表搭配逐場短卡。這是 CS 專用呈現規則，其他運動維持原模板。
-- 每場必列「預測信心度（證據品質）x/100」，與勝率分開；沿用 canonical forecast 的評分，不把它當作勝方命中率。未知時顯示 N/A 與原因；重大資料限制集中一行，不逐段重複。
-- full 與 daily-summary 的聊天正文均須列每張預測地圖的雙方勝率，以實際隊名分欄；BO1／BO3／BO5 分別涵蓋 1／3／5 個可能圖序。整日分析不能只在附件提供逐圖機率。註明正式／推測 veto，後續圖勝率以「該圖開打時」為條件，並另列開打機率；缺少可計算資料明列缺口，不用歷史勝率代替。
-- 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。無可追溯價格或未校準基準不給正注碼。
-- 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
-- Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。
+- Read the applicable mode in `references/output-template.md`. For a single prematch forecast use full: conclusion, data, compact per-map table, and at most three reasons. 「完整分析」 retains all applicable data; only 「深入／詳細／展開原因」 expands explanations. Deliver results directly in chat; attachments must not replace the answer.
+- Use quick for a single probability follow-up: answer its probability, composition, fair price and key limitations, continuing the market the user is asking about. For new veto/roster information, use the update format and show affected maps and before/after results; do not merely repeat the old conclusion.
+- Use daily-summary for the full daily target set. Use live for in-play requests, prioritizing the confirmed state, conditional probabilities, changes from the previous snapshot and invalidation conditions. Brief explanations must still include required numbers and unknowns. Validate new probabilities and save snapshots.
+- Do not repeat a five-column bottom summary for a single match. In daily-summary, use one match-prediction overview table plus short per-match cards. This presentation rule is CS-specific; other sports retain their templates.
+- Every match must show 「預測信心度（證據品質）x/100」 separately from win probability. Retain the canonical forecast's score; it is not winner accuracy. Show N/A with a reason when unknown. Consolidate major data limitations into one line instead of repeating them.
+- Both full and daily-summary chat bodies must show both teams' win probabilities for every forecast map, with actual team names as columns. Cover 1/3/5 possible map slots for BO1/BO3/BO5. Daily per-map probabilities must not appear only in attachments. Label official/projected veto; condition later-map win probabilities on 「該圖開打時」 and separately show the probability of reaching the map. State gaps when computation is unsupported; do not substitute historical win rates.
+- Introduce market data only after probabilities are locked; read `../shared/markets/collection-contract.md`. Assign no positive stake without traceable prices or when using an uncalibrated baseline.
+- Activate `../prediction-pipeline/SKILL.md` only when the user explicitly requests agy or 「模型互審」. Do not start extra models for ordinary analysis.
+- Export to Notion under `../shared/notion/skill-instructions.md` and existing authorization.
 
-## 賽後與改善
+## Postmortem and improvement
 
-先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
+First read `../shared/postmortem-improvement.md` and `references/postmortem-calibration.md`. Prioritize winner accuracy, then scores; report probability quality and coverage separately. Never reconstruct a supposed original prediction without its original snapshot. Register new factors as candidate; keep them experiment-only without paired out-of-sample evidence of improvement. Lower confidence or stakes do not demonstrate improved accuracy.
 
-先盤點當日已發布報告並按賽事去重；pre-veto、post-veto、live 與開賽後重建分帳。跨日誤差帳本、evaluated records 與 `factor-registry.json` 保存在 `.automation-state/cs/history/`，每次檢討讀取同版本／同快照歷史，不能把同場更新算成另一場命中。
+Inventory that day's published reports and deduplicate by event. Keep separate ledgers for pre-veto, post-veto, live and reconstruction after start. Store the cross-day error ledger, evaluated records and `factor-registry.json` in `.automation-state/cs/history/`. Each review must read history for the same version/snapshot; an update to the same match is not another successful prediction.

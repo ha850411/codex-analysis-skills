@@ -19,7 +19,7 @@ from shared.forecast.cli import write
 
 VERSION = "lol-analyst-scenarios-v1"
 CONDITIONAL_VERSION = "lol-analyst-scenarios-v2"
-KINDS = {"match_detail", "lineup", "patch", "schedule", "context"}
+KINDS = {"match_detail", "lineup", "patch", "schedule", "context", "solo_queue"}
 
 
 def nonempty(value, label):
@@ -389,14 +389,46 @@ def audit(payload):
         forecasts=reports, warnings=warnings)
 
 
+def build_paired(payload, history, *, now=None):
+    """Create the original judgment and its fixed shadow before any market input.
+
+    Kept separate from build/replay so old snapshots retain their exact hashes.
+    The public CLI does not expose the injectable offline-test clock.
+    """
+    from paired_strength import pair
+    result = build(payload)
+    return result, pair(result, history, now=now)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "validate", "audit"))
+    parser.add_argument("command", choices=("build", "build-paired", "validate", "audit"))
     parser.add_argument("input", type=Path)
     parser.add_argument("--output")
+    parser.add_argument("--history", type=Path)
+    parser.add_argument("--pair-output-dir", type=Path)
     args = parser.parse_args()
     try:
         payload = json.loads(args.input.read_text(encoding="utf8"))
+        if args.command == "build-paired":
+            if not args.output or not args.history or not args.pair_output_dir:
+                raise ValueError("build-paired requires --output, --history and --pair-output-dir")
+            result, outputs = build_paired(payload, json.loads(args.history.read_text(encoding="utf8")))
+            artifacts = {Path(args.output).resolve(): result}
+            for name, value in outputs.items():
+                path = (args.pair_output_dir/name).resolve()
+                if path in artifacts and digest(artifacts[path]) != digest(value):
+                    raise ValueError("main forecast output collides with a different pair artifact")
+                artifacts[path] = value
+            # Prepare and check the whole pair before writing the main forecast.
+            for path, value in artifacts.items():
+                if path.exists() and digest(json.loads(path.read_text(encoding="utf8"))) != digest(value):
+                    raise ValueError(f"artifact already exists with different content: {path}")
+            for path, value in artifacts.items():
+                write(str(path), value)
+            return
+        if args.history or args.pair_output_dir:
+            raise ValueError("pairing options require build-paired")
         result = {"build": build, "validate": replay, "audit": audit}[args.command](payload)
         if args.output:
             write(args.output, result)

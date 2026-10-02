@@ -30,6 +30,10 @@
    - 搭配官方賽後數據、逐局 BP 與事件時間線確認局間選角變化和關鍵物件；資料不能支持的操作或團戰細節不作事實描述。
    - 可用 RFT.GG、Oracle's Elixir、Games of Legends、OP.GG Esports 等數據站補足每局時間、擊殺、選角與近期戰績，但不得取代主要來源。
 
+## 選手公開排位
+
+依 `solo-queue-indicators.md` 查核帳號身分、實際伺服器、逐局時間與版本。帳號索引可由 [TrackingThePros](https://www.trackingthepros.com/players)／[LOLPros](https://lolpros.gg/) 尋找，再交叉選手或隊伍公開資訊；對局使用可取得的 Riot API、OP.GG 或其他可追溯逐局資料。來源可讀性與帳號歸屬須當次確認，搜尋摘要只作索引。公開排位標為 `kind=solo_queue`，不能當成正式賽 `match_detail`，也不能把多個聚合站的同一對局算成多份獨立證據。
+
 ## 衝突處理
 
 - 如果陣容或先發資料衝突，採用時間較新且更接近當場的官方公告；若只有社群 wiki，列出差異並降低信心度。

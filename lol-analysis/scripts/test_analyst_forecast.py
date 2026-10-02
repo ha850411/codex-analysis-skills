@@ -44,6 +44,54 @@ def fixture(best_of=3):
 
 
 class AnalystTests(unittest.TestCase):
+    def test_solo_queue_evidence_is_replayable_without_an_automatic_probability_bonus(self):
+        p = fixture()
+        original = module.build(p)
+        p["event"]["evidence"].append(dict(p["event"]["evidence"][0],
+            id="solo", kind="solo_queue", claim="Synthetic public ranked champion practice"))
+        p["judgment"]["scenarios"][0]["evidence_ids"].append("solo")
+        p["judgment"]["scenarios"][1]["counterevidence_ids"].append("solo")
+        result = module.build(p)
+        self.assertEqual(result["score_distribution"], original["score_distribution"])
+        self.assertEqual(result["confidence"], original["confidence"])
+        self.assertEqual(result["generation_input"], p)
+        self.assertTrue(module.replay(result)["replay_passed"])
+        self.assertFalse(result["recommendation_eligible"])
+
+    def test_solo_queue_cannot_replace_official_match_or_dependence_evidence(self):
+        for replace in ("all_match_evidence", "one_team", "dependence"):
+            p = fixture()
+            if replace == "all_match_evidence":
+                for evidence in p["event"]["evidence"]:
+                    evidence["kind"] = "solo_queue"
+            else:
+                p["event"]["evidence"].append(dict(p["event"]["evidence"][0],
+                    id="solo", kind="solo_queue"))
+                if replace == "one_team":
+                    for evidence in p["event"]["evidence"]:
+                        if evidence["kind"] == "match_detail":
+                            evidence["teams"] = [p["event"]["participants"][0]]
+                    p["judgment"]["scenarios"][0]["evidence_ids"].append("solo")
+                else:
+                    scenario = p["judgment"]["scenarios"][0]
+                    rates = scenario.pop("game_probabilities")
+                    scenario.update(conditional_probabilities=module.game_tree(3, rates),
+                        dependence_reason="Synthetic ranked streak; no official match evidence",
+                        dependence_evidence_ids=["solo"])
+            with self.subTest(replace=replace), self.assertRaises(ValueError):
+                module.build(p)
+
+    def test_solo_queue_evidence_keeps_cutoff_and_lock_requirements(self):
+        for field, value in (("available_at", "2020-03-02T00:00:00Z"),
+                             ("retrieved_at", "2020-03-01T10:06:00+08:00")):
+            p = fixture()
+            ranked = dict(p["event"]["evidence"][0], id="solo", kind="solo_queue")
+            ranked[field] = value
+            p["event"]["evidence"].append(ranked)
+            p["judgment"]["scenarios"][0]["evidence_ids"].append("solo")
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                module.build(p)
+
     def test_repeated_risk_wording_never_penalizes_quality_or_probabilities(self):
         p = fixture(5)
         p["judgment"]["scenarios"][0]["weight"] = .7

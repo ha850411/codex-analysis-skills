@@ -1,36 +1,41 @@
 ---
 name: valorant-analysis
-description: "分析 Valorant／特戰英豪電競賽事的賽程、陣容、版本、地圖池、veto、特務池、系列賽機率、盤口價值與賽後校準。用於 VCT、Masters、Champions、Challengers、Game Changers、BO3／BO5、至少一圖與今日決策；不要用於遊戲安裝、設定、一般玩法或非賽事問題。預設繁體中文與台灣時間。"
+description: "Analyze Valorant/特戰英豪 esports schedules, rosters, patches, map pools, veto, agent pools, series probabilities, market value and 「賽後校準」. Use for VCT, Masters, Champions, Challengers, Game Changers, BO3/BO5, 「至少一圖」「今日決策」. Exclude installation, settings, general gameplay and non-esports questions. Default to Traditional Chinese and Taiwan time."
 ---
 
-# Valorant 賽事分析
+# Valorant Match Analysis
 
-預設繁體中文、台灣時間（Asia/Taipei）。保留六人名單的逐圖輪換；零樣本或常 ban 不等於實力差。
+Respond in Traditional Chinese (Taiwan). Use Taiwan time (Asia/Taipei). Preserve map-specific rotations within six-player rosters; zero samples or frequent bans do not imply weakness.
 
-## 執行契約
+## Execution contract
 
-先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責時間、快照、機率、評估與輸出；本技能負責 當前賽事地圖池、逐圖名單、特務池、veto、pick owner 與選邊。
+Read `../shared/analysis-core.md` first, and `../shared/forecast/contract.md` when generating new probabilities. The shared layer handles time, snapshots, probabilities, evaluation and output; this skill handles the current event map pool, per-map rosters, agent pools, veto, pick owner and side selection.
 
-- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。
-- 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- `full`、`daily-summary` 在建模前讀 `references/domain-analysis.md` 的適用部分；新機率同時讀 `../shared/prediction-methodology.md`，完成證據到實際輸入的核對與反證檢查。領域推理不能直接覆寫計算結果。
-- 聯合檢查逐圖五人、角色、特務組合與 veto 路徑；未展示或常 ban 的地圖保留未知性。先檢查樣本可比性與對手反制，不能為了避免全部預測2-1而改比分。
-- 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
-- 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
-- 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
-- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport valorant`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
-- 舊快照：依 `references/forecast-snapshot.md` 重播，保留原 ID；新 v2 快照使用共用 record。
+- Confirm the requested event and Taiwan date. For daily requests, inventory the entire target set; do not select only easy matches.
+- Read `references/source-priority.md` to verify changing facts. Save event identity, source content, publication and verification times; never fill gaps from model memory.
+- Before modeling in `full` or `daily-summary`, read the applicable sections of `references/domain-analysis.md`. For new probabilities, also read `../shared/prediction-methodology.md`, verify evidence against actual inputs, and check counterevidence. Domain reasoning must not directly overwrite computed results.
+- Jointly check each map's five players, roles, agent composition and veto path. Keep unplayed or frequently banned maps uncertain. Check sample comparability and opponent counters first; never change scores just to avoid predicting 2-1 for every match.
+- Infer veto choices from observed ban/pick opportunities under `references/domain-analysis.md` §4.1. Track primary weighted paths separately from sensitivity paths; map win rates alone do not establish pick preference.
+- Before publication, run `audit-model-use` under `references/forecast-engine.md` on the selected series snapshot. Tie numerical claims to primary fitted inputs; keep unintegrated tactical reasoning conditional. Save the audit and the loaded skill/reference hashes beside the snapshot without changing its schema.
+- Published calculations retain the existing shared `forecast/cli.py train|predict|validate|record|derive|evaluate|render` entry until paired evidence supports a model switch. For trials and shadow comparisons, read `references/forecast-engine.md` and use `python3 valorant-analysis/scripts/valorant_forecast.py train|predict|validate|record|render|evaluate|compare|walk-forward`. This v3 entry is experiment-only: it connects timestamped map/roster inputs and legal veto paths to the primary distribution, and renders the existing template. When timestamped inputs are available, save v3 beside the existing primary as a shadow forecast; keep the published report on its selected primary snapshot. Missing veto evidence must retain the explicit unresolved fallback. Never describe implementation tests or development replays as improved accuracy.
+- Use shared `forecast/cli.py validate|record|derive|evaluate` for canonical v2 interoperability. Before recording v3, also run its own `validate --model ... --event ...` for full input/model replay. The shared validator alone does not verify map marginals or fitted-feature use. Model, event and forecast artifacts remain create-only; new evidence requires a new snapshot.
+- Build the primary score distribution first; derive the winner, modal score, and other markets from it. If the predicted winner and modal score favor different sides, explain both; do not manually change scores.
+- Create a complete new snapshot when official information changes. Before publication, validate and save it, then render the report from the same data.
+- After completing or updating a report, automatically classify and archive it under `../shared/report-storage.md` using shared `report_archive.py save --sport valorant` with the actual task mode and date. Gemini and Codex use the same workflow; preserve output templates, original paths, and historical versions.
+- Replay legacy snapshots under `references/forecast-snapshot.md`, preserving their original IDs. Use shared record for new v2 snapshots.
 
-## 模式與輸出
+## Modes and output
 
-- 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
-- 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
-- 聊天提供結論、最多三項依據、主要風險、完整報告連結及唯一置底窄表；詳情保存在完整報告。
-- 模型信心度是證據品質評分，與勝率分開。未知時顯示 N/A 與原因。
-- 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。無可追溯價格或未校準基準不給正注碼。
-- 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
-- Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。
+- Default to quick for a single follow-up. New probabilities still require validation and snapshots; shorten only the prose. A prediction update must retain the required numerical fields for the affected match.
+- Default to full for one match and daily-summary for a full day. Read and strictly follow `references/output-template.md` for every prediction output, including quick updates.
+- In both chat and the full report, use the mandatory per-match format: winner, both teams' win probabilities and fair odds, complete series score distribution, applicable map handicaps and totals, expected maps, evidence confidence, and both teams' forecast win probabilities for every map in the current event pool. Daily summaries must repeat this format for every match; never move required numbers solely into an attachment.
+- Show per-map probabilities under explicit veto, roster and side assumptions, conditional on that map being played. Distinguish these from historical win rates and map appearance probabilities. Preserve every map row; use N/A with a specific reason for unavailable estimates or excluded maps, never invented percentages.
+- Follow the numerical blocks with up to three supporting points, the main risk, model status, sources and the full-report link, then exactly one five-column summary table at the bottom. Check every required field against the template before delivery; a generic renderer's output alone does not establish format compliance.
+- Model confidence measures evidence quality, separately from win probability. Show N/A with a reason when unknown.
+- Introduce market data only after probabilities are locked; read `../shared/markets/collection-contract.md`. Assign no positive stake without traceable prices or when using an uncalibrated baseline.
+- Activate `../prediction-pipeline/SKILL.md` only when the user explicitly requests agy or 「模型互審」. Do not start extra models for ordinary analysis.
+- Export to Notion under `../shared/notion/skill-instructions.md` and existing authorization.
 
-## 賽後與改善
+## Postmortem and improvement
 
-先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
+First read `../shared/postmortem-improvement.md` and `references/postmortem-calibration.md`. Prioritize winner accuracy, then scores; report probability quality and coverage separately. Never reconstruct a supposed original prediction without its original snapshot. Register new factors as candidate; keep them experiment-only without paired out-of-sample evidence of improvement. Lower confidence or stakes do not demonstrate improved accuracy.

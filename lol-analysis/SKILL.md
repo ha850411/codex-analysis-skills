@@ -1,55 +1,56 @@
 ---
 name: lol-analysis
-description: "分析 League of Legends／英雄聯盟電競賽事的賽程、名單、版本、BP、系列賽機率、獨贏／地圖讓分／總局數等盤口價值與賽後校準。用於 LCK、LPL、LCP、LEC、LCS、國際賽、BO3／BO5、至少一局與今日決策；不要用於遊戲安裝、一般玩法、單排或非賽事問題。預設繁體中文與台灣時間。"
+description: "Analyze League of Legends/英雄聯盟 esports schedules, rosters, patches, BP, series probabilities, 「獨贏」「地圖讓分」「總局數」 market value and 「賽後校準」. Use for LCK, LPL, LCP, LEC, LCS, 「國際賽」, BO3/BO5, 「至少一局」「今日決策」. Exclude installation, general gameplay, solo queue and non-esports questions. Default to Traditional Chinese and Taiwan time."
 ---
 
-# LoL 賽事分析
+# LoL Match Analysis
 
-預設繁體中文、台灣時間（Asia/Taipei）。保留 established 名單分類；新公告建立新快照，不能只改摘要。
+Respond in Traditional Chinese (Taiwan). Use Taiwan time (Asia/Taipei). Preserve the established roster classification; new announcements require a new snapshot, not just an edited summary.
 
-預設採非影片分析：不搜尋、下載、播放 VOD／精華，也不擷取影片影格或逐字稿；使用 BP、逐局數據、經濟／物件時間線及可追溯文字資料。沒有觀看 VOD 不構成資料缺口，不扣信心、不降級、不要求補看。僅使用者之後明確要求影片工作時才另行處理，並據實說明可核實的內容。
+Default to non-video analysis: do not search, download or play VODs/highlights, or extract video frames/transcripts. Use BP, per-game statistics, economy/objective timelines and traceable text sources. Not watching VODs is not a data gap: do not reduce confidence, downgrade, or require viewing. Handle video separately only if the user later explicitly requests it, stating truthfully what can be verified.
 
-## 本使用者的分析與注碼偏好
+## This user's analysis and staking preferences
 
-每次分析先讀 `references/user-decision-preferences.md`。這是使用者明確要求的 LoL 個人偏好：近期可比內容優先、缺口具體說明、每場提供方向與相對配置，注碼以總資金百分比表示；本使用者每日最高動用資金上限為 100%，嚴禁只給予 1% 象徵性微額配置，必須依照每場優勢與信心度進行實質階梯式總資金百分比配置。涉及輸出、配置與未校準即一律 0u 的舊規則時，以此偏好為準；不改寫模型的實際校準狀態或資格欄位。
+Read `references/user-decision-preferences.md` before every analysis. These are this user's explicit LoL preferences: prioritize recent comparable evidence, specify gaps, give a direction and relative allocation for every match, and express stakes as percentages of total bankroll. This user's daily deployment cap is 100%; do not give only a token 1% allocation. Provide meaningful tiered percentages based on each match's edge and confidence. These preferences override older output/allocation rules and blanket 0u rules for uncalibrated models; do not alter the model's actual calibration status or eligibility fields.
 
-## 執行契約
+## Execution contract
 
-先讀 `../shared/analysis-core.md`；產生新機率再讀 `../shared/forecast/contract.md`。共用層負責計算、快照與評估；本技能負責判斷兩隊怎麼贏、哪些近期機制可重複，以及哪些證據足以改變預測。計算成功不等於分析完成。
+Read `../shared/analysis-core.md` first, and `../shared/forecast/contract.md` when generating new probabilities. The shared layer handles calculations, snapshots and evaluation; this skill assesses how each team wins, which recent mechanisms are repeatable, and what evidence justifies changing a forecast. Successful computation does not mean analysis is complete.
 
-- 先確認指定賽事與台灣日期；整日請求盤點完整目標集合，不能只挑易預測場次。賽程主動查 LoL Fandom／Leaguepedia，搭配官方與其他獨立來源；Riot 漏列、TBD 或無法讀取時，依 source-priority 的多來源路徑繼續，不把官方頁完整返回當成唯一通行條件。
-- 讀 `references/source-priority.md` 查核易變事實。保存事件身分、來源內容、發布與查核時間；缺口不得用模型記憶補齊。
-- LCK CL／二級聯賽、已知換人或重寫既有報告時，讀 `references/roster-baseline-audit.md`；核對歷史陣容可比性、模型實際輸入與重寫前後的證據差異。
-- 每次新預測先讀 `references/forecast-fallback.md` 選路：查找適用既有模型 → 完成領域證據 → 選擇正式模型、已實作挑戰版或分析者情境估計；比分基準是資料不足時的最後降級。不能因缺一項 BP／局內資料就自動結束研究。每場保留明確數值方向、勝率、比分眾數與機率、數字證據品質；接近均勢或敏感時直說，不把數值最大者包裝成有實質優勢的主推。
-- 新情境預測或系統性檢討讀 `references/systematic-validation.md`：接續既有跨日帳本與候選版本，分開研究程序、實際入模假設與已驗證數值因子。檢討規則已存在卻未改善時，追查是否執行、是否改變輸入、是否有同批前瞻對照，不再疊加同義規則。
-- `full`、`daily-summary` 都讀 `references/domain-analysis.md`；使用者要求深入時，先完成其證據補查與對位分析，日報不降低逐場深度。領域判斷可透過 `references/analyst-scenarios.md` 成為具名、可重播的實驗情境，不能手改已鎖定分布，也不能冒充擬合參數或已校準模型。
-- 近期再戰、雙方實戰資料新鮮度不對稱，或以「多套 BP 可重複」支撐方向時，讀 `references/mechanism-transfer.md`；核對機制成立條件、對手阻斷能力及權重理由，不能只靠情境已涵蓋雙方或數值重播通過結案。
-- 新計算入口：`python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`，輸入契約與範例見共用契約。基準、實驗與正式模型分開標示。
-- 新機率同時依 `../shared/prediction-methodology.md` 核對來源、機制與實際輸入；沿用本技能的 fallback、分析者情境、非影片研究與個人偏好，不把共用原則誤當停做 LoL 分析的理由。
-- LoL 分析者情境入口：`python3 lol-analysis/scripts/analyst_forecast.py build|validate|audit`。保留獨立比分基準；發布前以 `audit` 檢查權重／單局率／局間依賴敏感度、情境是否涵蓋有證據的反向優勢，多場一併查鏡像參數。BO5 大3.5須核對兩種橫掃的條件路徑與固定率75%上限，正文標明仍受限制的基準；有證據才使用完整 W/L 條件樹，不為避免重複72%硬調數值。附件只作診斷，不改主分布；解讀依 `references/analyst-scenarios.md`。
-- 先建比分主分布，再導出勝方、比分眾數與其他市場。勝方與比分眾數方向不同時分別解釋，不手改比分。
-- 正式資訊改變後新增完整快照；發布前先驗證、保存，再從相同數據渲染報告。
-- 報告完成或更新後，依 `../shared/report-storage.md` 自動分類歸檔：使用共用 `report_archive.py save --sport lol`，模式與日期取當次實際任務。Gemini／Codex 使用相同流程，保留輸出模板、原始路徑與歷史版本。
-- 舊 LoL 自動流程：保留 `references/forecast-evidence-gates.md`、`references/recommendation-gates.md` 及既有驗證器；共用 v2 不冒充 v7 evidence。同一快照跨格式匯出須保持數字相同；基準與實驗是不同快照，允許結果不同並說明原因。
+- Confirm the requested event and Taiwan date. For daily requests, inventory the entire target set; do not select only easy matches. Proactively check schedules on LoL Fandom/Leaguepedia alongside official and other independent sources. If Riot omits events, shows TBD or is unreadable, continue through source-priority's multiple-source route; a complete official-page response is not the only way to proceed.
+- Read `references/source-priority.md` to verify changing facts. Save event identity, source content, publication and verification times; never fill gaps from model memory.
+- For LCK CL/tier-two leagues, known substitutions or report rewrites, read `references/roster-baseline-audit.md`; verify historical-roster comparability, actual model inputs, and evidence differences before/after rewriting.
+- Before each new forecast, read `references/forecast-fallback.md` to select a route: find an applicable existing model → complete domain evidence → choose a production model, implemented challenger or analyst scenario estimate. The score baseline is the last fallback for insufficient data. One missing BP/in-game item must not end research. For every match, retain an explicit numerical direction, win probability, modal score and its probability, and numerical evidence quality. State near parity or sensitivity; do not portray the numerical maximum as a strong primary pick without a substantive edge.
+- For new scenario forecasts or systematic reviews, read `references/systematic-validation.md`. Continue existing cross-day ledgers and candidate versions; distinguish research procedures, assumptions actually entered into the model, and validated numerical factors. If existing review rules have not improved results, check execution, input changes and prospective comparisons on the same cohort instead of adding synonymous rules. For modelable pre-draft BO3/BO5, follow `references/strength-experiment.md` and actually save the fixed numerical candidate paired with the original primary forecast before collecting prices. Check the latest adjudication; shadow-only must not replace the primary model.
+- Read `references/domain-analysis.md` for both `full` and `daily-summary`. When depth is requested, complete its additional evidence checks and matchup analysis; daily reports must retain per-match depth. Domain judgments may become named, replayable experimental scenarios under `references/analyst-scenarios.md`; never manually edit locked distributions or present scenarios as fitted parameters or calibrated models.
+- For new prematch forecasts, follow `references/solo-queue-indicators.md` to check both teams' starters' recent public ranked play on their actual servers and verified accounts. Prioritize patch-relevant champion preparation, then comparable individual performance. Save samples/gaps and whether they affected judgment. This also applies to new quick forecasts; pure explanations of existing snapshots may reuse prior research. Research indicators are enabled, but numerical increments await validation; never convert ranked win rates directly into series win probabilities.
+- For recent rematches, asymmetric freshness of match evidence, or a direction supported by 「多套 BP 可重複」, read `references/mechanism-transfer.md`. Check mechanism prerequisites, the opponent's ability to disrupt them, and weighting rationale. Scenarios covering both sides or successful numerical replay alone do not complete the review.
+- New calculations: `python3 shared/forecast/cli.py train|predict|validate|record|derive|evaluate|render`. See the shared contract for inputs and examples. Label baseline, experimental, and production models separately.
+- For new probabilities, also verify sources, mechanisms and actual inputs under `../shared/prediction-methodology.md`. Retain this skill's fallback, analyst scenarios, non-video research and personal preferences; shared principles are not grounds to stop LoL analysis.
+- LoL analyst scenarios: `python3 lol-analysis/scripts/analyst_forecast.py build|validate|audit`. Preserve an independent score baseline. Before publication, use `audit` to check sensitivity to weights, per-game rates and inter-game dependence, and whether scenarios cover evidenced advantages for the opposite side; check mirrored parameters across multiple matches. For BO5 「大3.5」, verify both sweep paths and the 75% fixed-rate ceiling; label the still-limited baseline in the report body. Use a full W/L conditional tree only with evidence; never force values to avoid repeated 72% estimates. Attachments are diagnostic and do not change the primary distribution; interpret them under `references/analyst-scenarios.md`.
+- Build the primary score distribution first; derive the winner, modal score, and other markets from it. If the predicted winner and modal score favor different sides, explain both; do not manually change scores.
+- Create a complete new snapshot when official information changes. Before publication, validate and save it, then render the report from the same data.
+- After completing or updating a report, automatically classify and archive it under `../shared/report-storage.md` using shared `report_archive.py save --sport lol` with the actual task mode and date. Gemini and Codex use the same workflow; preserve output templates, original paths, and historical versions.
+- For legacy LoL automation, retain `references/forecast-evidence-gates.md`, `references/recommendation-gates.md` and existing validators; shared v2 must not pose as v7 evidence. Exports of the same snapshot must have identical numbers across formats. Baseline and experimental forecasts are separate snapshots; differing results are allowed with explanation.
 
-## 模式與輸出
+## Modes and output
 
-- 單一追問預設 quick；新機率仍須驗證與快照，只壓縮文字。
-- 單場預設 full；整日預設 daily-summary。讀 `references/output-template.md`。
-- 輸出採「結果詳盡、分析精簡」：聊天依序直出雙方勝負機率（A vs B）、兩邊各贏一場／兩邊都贏一場以上（BO3 >2.5、BO5 >3.5 及 >4.5）機率、單隊至少一局、完整系列比分與價格決策；分析理由、名單影響與重要缺口整合為一段二至三句，依序交代支持判斷、主要反證與翻轉條件，格式見 `references/output-template.md`。深入請求增加研究深度，不自動拉長正文；逐局證據與查核細節留附件。
-- 「分析完成度」「機率來源／校準狀態」「投注資格」分欄保存；聊天用短標籤標示機率來源／校準與資格，影響方向、玩法或配置的缺口融入分析短段，其餘完成度與查核記錄放附件。0u 不免除分析交付，不能重複「未校準」代替分析。完整交付標準見 `references/output-template.md`。
-- 模型信心度是證據品質評分，與勝率分開。每場按五項證據獨立評分；資料缺失是低分的依據，不等於無法評分。依 `references/forecast-fallback.md` 的信心更新規則保存逐項理由、已解決與仍存在的缺口；研究次數、風險條數與剛發生的失誤不自動扣分。只有符合降級契約的真正未建模場次才顯示 N/A 與具體原因。
-- 市場資料在機率鎖定後才接入；讀 `../shared/markets/collection-contract.md`。執行盤口收集前必須優先確認並讀取 repo 根目錄之 `.env`（含 `ODDS_API_KEY` 等環境變數），嚴禁在未檢查或未載入 `.env` 前逕行判定無金鑰或宣告缺價。無可追溯價格不提供該玩法的可執行注碼；未校準模型的資格與使用者主觀預算配置依 `references/user-decision-preferences.md` 分開處理。
-- 情境模型的 BO3／BO5 獨贏價格決策，鎖定後執行 `python3 lol-analysis/scripts/audit_decision.py <forecast.json> <quote.json> --output <decision-audit.json>`。同時檢查報價與自行提出的進場底價；格式見 `references/systematic-validation.md`。單參數敏感度不是安全下界，診斷端點不替代主機率、不自動改方向或注碼。
-- 使用者明確要求 agy／模型互審才啟動 `../prediction-pipeline/SKILL.md`；一般分析不額外啟動其他模型。
-- Notion 匯出按 `../shared/notion/skill-instructions.md` 與現有授權執行。
+- Default to quick for a single follow-up. New probabilities still require validation and snapshots; shorten only the prose.
+- Default to full for one match and daily-summary for a full day. Read `references/output-template.md`.
+- Use 「結果詳盡、分析精簡」: deliver in chat, in order, both teams' win/loss probabilities (A vs B), 「兩邊各贏一場／兩邊都贏一場以上」 probabilities (BO3 >2.5; BO5 >3.5 and >4.5), 「單隊至少一局」, all series scores and price decisions. Combine reasoning, roster impact and material gaps into one paragraph of two to three sentences, covering supporting judgment, main counterevidence and reversal conditions in that order; see `references/output-template.md`. Requests for depth increase research, not automatically body length; attach per-game evidence and verification details.
+- Save 「分析完成度」「機率來源／校準狀態」「投注資格」 in separate fields. In chat, use short source/calibration and eligibility labels; integrate gaps affecting direction, market or allocation into the brief analysis paragraph. Attach other completeness and verification records. 0u does not waive analysis delivery; repeating 「未校準」 cannot replace analysis. See `references/output-template.md` for full delivery requirements.
+- Model confidence measures evidence quality, separately from win probability. Score five evidence dimensions independently for each match; missing data supports a lower score, not inability to score. Under the confidence-update rules in `references/forecast-fallback.md`, save reasons for each dimension and resolved/remaining gaps. Research count, number of risks and recent mistakes do not automatically lower scores. Show N/A with a specific reason only for genuinely unmodeled matches meeting the downgrade contract.
+- Introduce market data only after probabilities are locked; read `../shared/markets/collection-contract.md`. Before collecting odds, first check and read the repository-root `.env`, including `ODDS_API_KEY` and other environment variables. Never declare missing keys or prices without first checking/loading `.env`. Without a traceable price, give no executable stake for that market. Handle uncalibrated-model eligibility separately from the user's subjective budget allocation under `references/user-decision-preferences.md`.
+- For BO3/BO5 scenario-model moneyline price decisions, after locking run `python3 lol-analysis/scripts/audit_decision.py <forecast.json> <quote.json> --output <decision-audit.json>`. Check both quoted prices and self-proposed minimum entry prices; see `references/systematic-validation.md` for the format. Single-parameter sensitivity is not a safe lower bound. Diagnostic endpoints neither replace primary probabilities nor automatically change direction or stakes.
+- Activate `../prediction-pipeline/SKILL.md` only when the user explicitly requests agy or 「模型互審」. Do not start extra models for ordinary analysis.
+- Export to Notion under `../shared/notion/skill-instructions.md` and existing authorization.
 
-## 賽後與改善
+## Postmortem and improvement
 
-先讀 `../shared/postmortem-improvement.md` 和 `references/postmortem-calibration.md`。先核對原快照、manifest 與發布證據，再以每事件最後一份可證明已發布的賽前快照計分；改寫報告不得冒充原推薦。以勝方命中優先、比分次之，另報機率品質與覆蓋率；缺原始快照不得反造原預測。新增因子先作 candidate；沒有配對樣本外改善證據時保留 experiment-only，不以降低信心或注碼宣稱命中改善。
+First read `../shared/postmortem-improvement.md` and `references/postmortem-calibration.md`. Verify original snapshots, manifests and publication evidence; score each event's last provably published prematch snapshot. Rewritten reports must not pose as original recommendations. Prioritize winner accuracy, then scores; report probability quality and coverage separately. Never reconstruct a supposed original prediction without its original snapshot. Register new factors as candidate; keep them experiment-only without paired out-of-sample evidence of improvement. Lower confidence or stakes do not demonstrate improved accuracy.
 
-找歷史失誤共通點時，同時列出相同觸發條件的命中與未命中案例；依模型／賽區／賽制分組，區分機制未蒐集、已蒐集未入模、已入模但權重待驗證及合理變異。不能只數失敗案例便宣稱某因子無效。
+When finding common patterns in historical errors, list both hits and misses with the same trigger conditions. Group by model/region/format and distinguish uncollected mechanisms, collected but unmodeled mechanisms, modeled mechanisms with unvalidated weights, and reasonable variance. Do not declare a factor ineffective by counting failures alone.
 
-系統性檢討另外交付完整事件母體、舊修正的落實稽核、原情境對原比分基準的配對差值，以及獨立的價格決策帳本。被看過的結果列開發集；沒有賽前鎖定的 challenger，就直說「尚無改善實驗」，不能把新增文件、audit 通過或原模型間比較寫成新 skill 命中改善。
+Systematic reviews must also deliver the complete event population, an implementation audit of previous corrections, paired differences between original scenarios and original score baselines, and a separate price-decision ledger. Already-viewed outcomes belong to the development set. Label prose-only plans 「尚未實作」; numerical replay without new prematch pairs is 「已實作、前瞻樣本0」. Fixed candidates must report the whole batch and regressing cohorts. New documents, passed audits or correct predictions only for singled-out matches do not establish improved accuracy.
 
-終場尚未核實時先交付原快照與流程稽核，結果指標留空並保存待補項；不把網站 Live／0:0 占位符當終場，也不把單場低機率結果直接判為校準失敗。各版 schema 的信心與模型規則分開套用。
+If final results remain unverified, deliver original snapshots and the process audit first; leave outcome metrics blank and save pending items. Do not treat website Live/0:0 placeholders as final scores or one low-probability outcome as proof of calibration failure. Apply each schema version's confidence and model rules separately.

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "factors": [
+    {
+      "factor_id": "opponent-adjusted-map-strength",
+      "name": "對手調整的隊伍與逐圖強度",
+      "kind": "predictive_factor",
+      "status": "candidate",
+      "used_for_prediction": false,
+      "mechanism": "共同擬合對戰雙方強度及收縮後逐圖效果，避免直接比較不同對手下的原始地圖勝率。",
+      "pre_match_observable": "截止前已完成且結果可知的正式系列／具名地圖；同場總訓練權重只計一次。",
+      "evidence": ["forecast-engine.md"],
+      "decision_reason": "v3 隔離實驗，尚無配對樣本外改善證據。",
+      "revisit_triggers": []
+    },
+    {
+      "factor_id": "patch-agent-regime-map-pooling",
+      "name": "Patch 與特務配置的地圖樣本分組",
+      "kind": "predictive_factor",
+      "status": "candidate",
+      "used_for_prediction": false,
+      "mechanism": "以正則化的分組效果表達版本與特務配置差異，缺樣本時回到隊伍及地圖效果。",
+      "pre_match_observable": "截止前有來源的 map、Patch、逐圖五人與 player→agent；目標場次使用賽前具名假設。",
+      "evidence": ["forecast-engine.md"],
+      "decision_reason": "沿用已登錄候選；不因本次實作升為 active。",
+      "revisit_triggers": []
+    },
+    {
+      "factor_id": "roster-era-strength-transfer",
+      "name": "逐圖五人組合的收縮效果",
+      "kind": "predictive_factor",
+      "status": "candidate",
+      "used_for_prediction": false,
+      "mechanism": "區分同隊不同五人，保留六人名單逐圖輪替；未見組合回到隊伍基準，不套換人扣分。",
+      "pre_match_observable": "歷史實際五人與本場逐圖五人／有來源且有權重的替代組合。",
+      "evidence": ["forecast-engine.md"],
+      "decision_reason": "v3 隔離實驗；不是完整選手能力轉移或 IGL 效果模型。",
+      "revisit_triggers": []
+    },
+    {
+      "factor_id": "availability-conditioned-veto-selection",
+      "name": "依可選機會估計合法禁選路徑",
+      "kind": "predictive_factor",
+      "status": "candidate",
+      "used_for_prediction": false,
+      "mechanism": "對相同圖池及賽制，以真正可選的次數估計行動偏好；完整枚舉合法路徑並整合主分布。",
+      "pre_match_observable": "截止前完整 veto 的 actor、action、available_before、map 及適用比賽規則。",
+      "evidence": ["forecast-engine.md"],
+      "decision_reason": "沿用既有候選；先後手推估、平滑與條件獨立假設仍待驗證。",
+      "revisit_triggers": []
+    },
+    {
+      "factor_id": "map-start-side-effect",
+      "name": "具來源的開局攻守方效果",
+      "kind": "predictive_factor",
+      "status": "candidate",
+      "used_for_prediction": false,
+      "mechanism": "擬合各圖開局攻守方的收縮效果；未知選邊時不代入虛構攻守狀態。",
+      "pre_match_observable": "逐圖實際開局方與本場已確認或具來源情境中的開局攻守方；不是半場總得分倒推。",
+      "evidence": ["forecast-engine.md"],
+      "decision_reason": "僅實驗；目前封存範例沒有可靠開局方，不能宣稱已使用。",
+      "revisit_triggers": []
+    }
+  ]
+}
